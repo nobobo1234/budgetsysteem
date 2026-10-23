@@ -389,7 +389,7 @@ Gekozen: voorstel A. Fraunces voor koppen en het hoofdgetal, Inter voor de inter
 
 ## Telemetrie en monitoring
 
-Alleen een securitylog is niet genoeg: je wilt ook weten of de app werkt, of de backups lopen, of hij snel blijft en hoe goed Haiku leest. Alles blijft op je eigen server, zonder trackers of analytics van derden.
+Alleen een securitylog is niet genoeg: je wilt ook weten of de app werkt, of de backups lopen, of hij snel blijft en hoe goed Haiku leest. Alles blijft op je eigen server, zonder trackers of analytics van derden. In welke fase welk onderdeel komt, staat bij Fasering.
 
 | Wat | Waarom | Hoe |
 | --- | --- | --- |
@@ -485,13 +485,13 @@ De repo blijft privé. Publiek maken zou CodeQL, secret scanning en deploy-goedk
 
 Vaste lasten komen vroeg, omdat je na de import handmatig werkt: zonder verwachte posten ontbreken huur en abonnementen in je budget.
 
-1. **Fundament.** Repo met CI-pipeline, testopzet en CLAUDE.md met de AI-afspraken, designsysteem (typografie, kleuren, animatiebasis), Docker-opzet achter je bestaande nginx, passkey-login, datamodel, SNS-import met ontdubbelen, categorieregels, transactielijst met zoeken, snelinvoer, budget met tempo, startscherm, backups.
+1. **Fundament.** Repo met CI-pipeline, testopzet en CLAUDE.md met de AI-afspraken, designsysteem (typografie, kleuren, animatiebasis), Docker-opzet achter je bestaande nginx, passkey-login, datamodel, SNS-import met ontdubbelen, categorieregels, transactielijst met zoeken, snelinvoer, budget met tempo, startscherm, backups. Telemetrie: `errors`-tabel via `handleError` in een aparte telemetrie-database (90 dagen), leeftijd van de laatste backup, schijfruimte en container-restarts in de health check, en een externe beschikbaarheidscheck.
    - Klaar als: je historie staat erin, je kunt vanaf je telefoon een uitgave invoeren en je ziet wat er nog vrij is.
-2. **Vaste lasten en Te krijgen.** Herkenning, verwachte posten, signalen, voorschieten en ontvangen, saldocheck, pushmeldingen.
+2. **Vaste lasten en Te krijgen.** Herkenning, verwachte posten, signalen, voorschieten en ontvangen, saldocheck, pushmeldingen. Telemetrie: pushmeldingen bij een nieuw soort fout, een te oude backup en meer dan 80% schijfgebruik, de statuspagina achter de login, en INP en LCP via web-vitals.
    - Klaar als: een maand lang alles bijhouden zonder dat er een vaste last ontbreekt.
-3. **Bonnetjes.** Eerst het testplan op je eigen bonnen, dan de verwerking, de review-inbox, de koppellijst en de opdracht voor het deelmenu.
+3. **Bonnetjes.** Eerst het testplan op je eigen bonnen, dan de verwerking, de review-inbox, de koppellijst en de opdracht voor het deelmenu. Telemetrie: per Haiku-aanroep tokens, kosten, duur, uitkomst en of je velden achteraf corrigeerde.
    - Klaar als: de test het doel haalt, of we bewust kiezen voor altijd reviewen.
-4. **Analyses.** Grafieken, trends, verwachting einde maand, jaaroverzicht, tags.
+4. **Analyses.** Grafieken, trends, verwachting einde maand, jaaroverzicht, tags. Telemetrie: je eigen gebruik (dagen met invoer, tijd van openen tot opslaan).
 5. **AI en extra's.** Maandsamenvatting, vraagveld, MCP-server, garantie-herinneringen.
 
 Het testplan voor de bonnetjes kan parallel met fase 1: je verzamelt de bonnen toch al.
