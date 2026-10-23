@@ -16,3 +16,18 @@ secrets/
 
 # OS
 .DS_Store
+
+# Build en tooling
+node_modules/
+.svelte-kit/
+build/
+test-results/
+playwright-report/
+coverage/
+
+# Lokale database (dev)
+data/
+*.db
+*.db-shm
+*.db-wal
+.e2e/

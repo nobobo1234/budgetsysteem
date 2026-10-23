@@ -1,0 +1,20 @@
+# Alles wat niet in het image hoort; vooral nooit bankdata of geheimen
+history/
+.env
+.env.*
+*.pem
+*.key
+secrets/
+data/
+.e2e/
+*.db
+*.db-shm
+*.db-wal
+node_modules/
+build/
+.svelte-kit/
+test-results/
+playwright-report/
+.git/
+.github/
+.claude/

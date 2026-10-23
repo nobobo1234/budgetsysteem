@@ -1,0 +1,9 @@
+# Supply-chain-instellingen, zie CLAUDE.md en https://pnpm.io/supply-chain-security
+minimumReleaseAge: 10080
+blockExoticSubdeps: true
+trustPolicy: no-downgrade
+strictDepBuilds: true
+allowBuilds:
+  better-sqlite3: true
+  # esbuild controleert in zijn postinstall alleen de platform-binary; die komt al via optionalDependencies
+  esbuild: false
