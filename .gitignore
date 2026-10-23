@@ -1,0 +1,18 @@
+# Transactions history files
+history/ 
+
+# Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+
+# Local Claude Code overrides
+.claude/settings.local.json
+
+# OS
+.DS_Store
