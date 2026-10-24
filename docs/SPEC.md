@@ -154,7 +154,10 @@ Bedragen staan altijd als hele centen (integer) in euro; een vreemde valuta is e
 | budgets | maand, categorie, limiet\_cent |
 | receipts | bestand, ruwe AI-uitvoer, gecontroleerde velden, zekerheid per veld, transactie |
 | recurring | tegenpartij, interval, verwachte dag, mediaan + min/max bedrag, soort (vast / wisselend), volgende datum |
-| owed | persoon, bedrag\_cent, richting (te krijgen / te betalen), bron-transactie, status, betaald-via-transactie |
+| owed | persoon (verwijzing naar people), bedrag\_cent, richting (te krijgen / te betalen), bron-transactie, aandeel + maand (optioneel, samen uniek), status (open / deels / betaald / kwijtgescholden) |
+| owed\_payments | transactie, persoon, post (leeg = tegoed), bedrag\_cent — vervangt betaald-via-transactie, zodat één betaling meerdere posten dekt en andersom |
+| people | naam, actief; IBANs in `people_ibans` (persoon, iban), elke IBAN bij hooguit één persoon en nooit een eigen rekening |
+| recurring\_shares | vaste last, persoon, soort (vast / percentage), bedrag\_cent of basispunten, verwachte ontvangstdag, vanaf maand, tot maand (optioneel) |
 | sessions, passkeys | apparaat, laatst gebruikt, ingetrokken |
 | jobs, audit\_log | achtergrondtaken; wijzigingen met ongedaan maken |
 
@@ -320,10 +323,55 @@ Een vaste last is een aanbieder die met een vast ritme rond dezelfde dag afschri
 Alleen jouw deel van een voorgeschoten betaling telt mee in je budget; de rest staat als openstaande post per persoon tot de Tikkie binnen is.
 
 - **Voorschieten.** Bij een uitgave tik je "voorgeschoten" en kies je per persoon een bedrag, of "gelijk verdelen over 3". Jouw deel blijft in de categorie; de rest gaat naar Te krijgen.
+  - **Gelijk verdelen.** Het aantal is altijd inclusief jou: `voor 3` is jij plus twee anderen, `met sanne en tim` ook. Jouw deel is het totaal gedeeld door het aantal, naar beneden afgerond op hele centen. De rest gaat gelijk over de anderen, en de restcenten één voor één naar de anderen in de volgorde waarin je ze noemt. €10 voor 3 met Sanne en Tim: jij €3,33, Sanne €3,34, Tim €3,33. Samen altijd precies het totaal.
+  - **Bedrag per persoon.** Je vult de bedragen van de anderen in; jouw deel is wat overblijft. Samen meer dan het totaal wordt geweigerd; jouw deel mag nul zijn, niet negatief.
 - **Overzicht.** Totaal openstaand, per persoon, en hoe lang het al openstaat. Optioneel een Tikkie-link of notitie bij de post.
 - **Ontvangen.** Bij binnenkomend geld (`+15 tikkie sanne`) stelt de koppellijst de openstaande posten voor, gesorteerd op bedrag en naam. Een gedeeltelijke betaling laat de rest open.
 - **Andersom.** Dezelfde opzet werkt voor "nog te betalen", als jij iemand nog geld schuldig bent.
 - **Herinnering.** Na 14 dagen open komt de post in de review-inbox; later ook als pushmelding.
+
+## Gedeelde vaste lasten
+
+Een vaste last die je voor het hele huis betaalt, zoals de wifi, krijgt een aandeel per huisgenoot. Hun maandelijkse overboekingen worden daaraan gekoppeld, zodat je per persoon ziet wat er binnen is en wat nog mist. Het bouwt op Vaste lasten en Nog te krijgen: elk maandaandeel is een gewone openstaande post.
+
+**Instellen**
+
+- **Personen.** Een persoon heeft een naam en nul of meer tegen-IBANs. Nog te krijgen gebruikt dezelfde personen, dus `+20 sanne` en de wifi van Sanne komen op één plek uit.
+- **Aandeel.** Per gedeelde vaste last en per persoon: een vast bedrag in centen (standaard, want een periodieke overboeking is ook een vast bedrag) of een percentage voor wisselende lasten zoals energie. Een percentage staat als hele basispunten (2500 = 25%); het aandeel wordt naar beneden afgerond op hele centen en de restcent is van jou. Elk aandeel heeft een verwachte ontvangstdag, een startmaand en optioneel een eindmaand. Aandelen samen mogen niet meer zijn dan het bedrag van de last.
+- **Voorstel uit de historie.** Een inkomende overboeking die volgens de regels van Vaste lasten maandelijks terugkomt van dezelfde IBAN, met een bedrag tussen 10% en 90% van een actieve vaste last, wordt een voorstel ("Krijg je van S. elke maand €20 voor Ziggo?"). Er wordt niets toegevoegd zonder je bevestiging. De herkenning van vaste lasten zelf kijkt alleen naar uitgaande bedragen.
+- **Terugwerkend.** Ligt de startmaand in het verleden, dan maakt de app de posten vanaf die maand aan en koppelt hij de overboekingen uit de historie één keer met dezelfde regels als hieronder.
+
+**Elke maand**
+
+- Zodra de verwachte post van de gedeelde last verschijnt, krijgt elke persoon met een actief aandeel een openstaande post voor die maand. Bij een percentage wordt de post herberekend als je het echte bedrag bevestigt.
+- Omdat je na de import zelf invoert, zie je de overboekingen van huisgenoten niet vanzelf. Op de verwachte ontvangstdag staat de post daarom klaar om met één tik als ontvangen te bevestigen; dat boekt een inkomende transactie in de categorie Terugbetaling.
+- Bij een import of handmatige invoer koppelt de app automatisch als de tegen-IBAN bij precies één persoon hoort en het bedrag gelijk is aan wat die persoon openstaat. Dat staat in het audit-log en is met één tik ongedaan te maken. Anders stelt de koppellijst de openstaande posten voor; een bekende IBAN van de persoon telt daar als volle score op naam. Koppel je een betaling van een onbekende IBAN, dan vraagt de app of die bij de persoon hoort.
+- Een betaling wordt verdeeld over de openstaande posten van die persoon, oudste eerst. Wat overblijft is tegoed en gaat automatisch naar de volgende post. Zo telt een overboeking op de 28e voor de wifi van de 1e gewoon voor die volgende maand.
+
+**Budget: netto.** De afschrijving staat bruto in de transactielijst en de saldocheck, zoals bij de bank. In het budget telt alleen jouw deel: de transactie krijgt splits, met jouw deel in de categorie van de vaste last en de aandelen in Terugbetaling (buiten budget). Dat is dezelfde regel als bij voorschieten, en je budget schommelt zo niet mee met wanneer huisgenoten betalen. Omdat de inkomende overboekingen ook in Terugbetaling staan, is het saldo van die categorie precies wat er nog openstaat. Bruto tot het geld binnen is zou een late overboeking als overschrijding tonen en de maand erna als meevaller. Het overzicht van vaste lasten toont beide: "Ziggo €60, jouw deel €20".
+
+**Overzicht Terugbetalingen**
+
+- Bovenaan de totale achterstand (vervallen en niet volledig betaald) en het tegoed.
+- Per persoon de laatste zes maanden als vakjes: binnen, deels, open, te laat of kwijtgescholden, met tekst of icoon en niet alleen met kleur. Daarnaast verwacht tegenover ontvangen over die periode en de achterstand in euro.
+- Per gedeelde last het bruto bedrag, de aandelen en jouw deel.
+- Tik op een maand voor de gekoppelde betalingen, om een koppeling aan te passen of om kwijt te schelden. De app stuurt huisgenoten zelf niets; herinneren doe je zelf, eventueel met een Tikkie-link bij de post.
+
+**Randgevallen**
+
+| Geval | Wat de app doet |
+| --- | --- |
+| Te laat | Niet volledig binnen 7 dagen na de verwachte ontvangstdag: status "te laat", naar de review-inbox en optioneel een pushmelding met een eigen schakelaar |
+| Ander bedrag | Minder: de post wordt "deels" en de rest blijft open. Meer: het verschil wordt tegoed |
+| Dubbel betaald | De tweede betaling wordt tegoed en de review-inbox meldt het eenmalig; je laat het staan of maakt er een post "te betalen" van |
+| Bedrag van de last verandert | Het prijsverhogingssignaal vraagt ook of de aandelen mee moeten, met een voorstel per persoon en een ingangsmaand. Een vast aandeel verandert nooit vanzelf, net als de overboeking van je huisgenoot; een percentage volgt automatisch, en past de overboeking dan niet meer, dan wordt de post "deels" |
+| Huisgenoot vertrekt | Eindmaand op het aandeel: geen nieuwe posten, openstaande blijven tot ze betaald of kwijtgescholden zijn. Een latere overboeking wordt tegoed en komt in de review-inbox. Vanaf die maand stijgt jouw deel, tot je een nieuw aandeel toevoegt |
+| Kwijtschelden | Het deel gaat in de oorspronkelijke maand alsnog naar de categorie van de vaste last; staat in het audit-log en is ongedaan te maken |
+| Last gemist of opgezegd | Zonder afschrijving geen posten; een overboeking die toch binnenkomt wordt tegoed |
+
+**Privacy.** IBANs van huisgenoten zijn persoonsgegevens van anderen: nooit in logs of naar AI, en niet in de views voor het vraagveld en de MCP-server, waar alleen de naam staat. Op het vergrendelscherm staan ook hier standaard geen namen of bedragen. Test-fixtures gebruiken alleen test-IBANs.
+
+**Tests.** Unit: verdeling in centen met afronding, toewijzing oudste eerst met tegoed, status per maand, voorstellen uit de historie. Integratie: een import koppelt een overboeking automatisch en ontdubbelt tegen een al met één tik bevestigde ontvangst.
 
 ## Analyses
 
@@ -489,6 +537,7 @@ Vaste lasten komen vroeg, omdat je na de import handmatig werkt: zonder verwacht
    - Klaar als: je historie staat erin, je kunt vanaf je telefoon een uitgave invoeren en je ziet wat er nog vrij is.
 2. **Vaste lasten en Te krijgen.** Herkenning, verwachte posten, signalen, voorschieten en ontvangen, saldocheck, pushmeldingen. Telemetrie: pushmeldingen bij een nieuw soort fout, een te oude backup en meer dan 80% schijfgebruik, de statuspagina achter de login, en INP en LCP via web-vitals. CI: Lighthouse CI in de PR-pipeline als performance-budget (eerste JS-bundel onder 100 kB gzip, INP), op de loginpagina en op het startscherm met een testsessie; tot dan bewaakt een e2e-test de bundelgrootte.
    - Klaar als: een maand lang alles bijhouden zonder dat er een vaste last ontbreekt.
+   - Daarna, als laatste blok van deze fase: **gedeelde vaste lasten** (personen, aandelen, terugbetalingen koppelen en het overzicht). Het bouwt direct op vaste lasten en Te krijgen, en levert elke maand iets op; het hoort niet in het klaar-criterium hierboven, zodat dat niet wacht. Tot dan telt de wifi bruto mee. Klaar als: twee maanden lang per huisgenoot klopt wat er binnen is, met alleen bevestigen als handwerk.
 3. **Bonnetjes.** Eerst het testplan op je eigen bonnen, dan de verwerking, de review-inbox, de koppellijst en de opdracht voor het deelmenu. Telemetrie: per Haiku-aanroep tokens, kosten, duur, uitkomst en of je velden achteraf corrigeerde.
    - Klaar als: de test het doel haalt, of we bewust kiezen voor altijd reviewen.
 4. **Analyses.** Grafieken, trends, verwachting einde maand, jaaroverzicht, tags. Telemetrie: je eigen gebruik (dagen met invoer, tijd van openen tot opslaan).
