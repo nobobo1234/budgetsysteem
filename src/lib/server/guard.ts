@@ -8,6 +8,20 @@ export function isPublicRoute(routeId: string | null): boolean {
 	return routeId !== null && (routeId === PUBLIC_GROUP || routeId.startsWith(`${PUBLIC_GROUP}/`));
 }
 
+/**
+ * IP-adres van de client, voor rate limiting. In productie zet nginx altijd `X-Real-IP`
+ * (ADDRESS_HEADER). Ontbreekt die header, dan komt het verzoek niet via nginx maar van de
+ * VPS zelf (de app luistert alleen op 127.0.0.1), zoals de health check. adapter-node gooit
+ * dan een fout; die verzoeken delen hier één vaste sleutel.
+ */
+export function clientAddress(event: { getClientAddress(): string }): string {
+	try {
+		return event.getClientAddress();
+	} catch {
+		return 'direct';
+	}
+}
+
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
 export function isSafeMethod(method: string): boolean {

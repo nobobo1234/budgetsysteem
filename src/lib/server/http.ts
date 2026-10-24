@@ -2,6 +2,7 @@ import { error, type RequestEvent } from '@sveltejs/kit';
 import { securityEvent } from './audit.ts';
 import { hasRecentReauth } from './auth/session.ts';
 import { db } from './db/index.ts';
+import { clientAddress } from './guard.ts';
 import { authLimiter } from './ratelimit.ts';
 
 const MAX_JSON_BYTES = 64 * 1024;
@@ -28,7 +29,7 @@ export function json(data: unknown, status = 200): Response {
 
 /** Rate limit voor inloggen, herstelcode en setup, per IP. */
 export function limitAuth(event: RequestEvent): void {
-	if (!authLimiter.hit(event.getClientAddress())) {
+	if (!authLimiter.hit(clientAddress(event))) {
 		securityEvent(db(), 'rate_limit');
 		error(429, 'Te veel pogingen. Probeer het over een kwartier opnieuw.');
 	}
