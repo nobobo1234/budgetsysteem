@@ -5,7 +5,7 @@ import { normalizeCounterparty, normalizeIban, normalize } from '#lib/text.ts';
 import { recordChange } from '#lib/server/audit.ts';
 import { db } from '#lib/server/db/index.ts';
 import { categories, rules } from '#lib/server/db/schema.ts';
-import { applyRulesToUncategorized } from '#lib/server/import/importer.ts';
+import { applyRules } from '#lib/server/import/importer.ts';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = () => ({
@@ -68,7 +68,7 @@ export const actions: Actions = {
 			.returning()
 			.get();
 		recordChange(db(), 'regel', 'rules', rule.id, null, rule);
-		return { applied: applyRulesToUncategorized(db()) };
+		return { applied: applyRules(db()) };
 	},
 	deleteRule: async ({ request }) => {
 		const id = idSchema.safeParse(Object.fromEntries(await request.formData()));
@@ -77,6 +77,7 @@ export const actions: Actions = {
 		if (!before) return fail(404, { message: 'Niet gevonden.' });
 		db().delete(rules).where(eq(rules.id, id.data.id)).run();
 		recordChange(db(), 'verwijderd', 'rules', id.data.id, before, null);
-		return { ok: true };
+		// Transacties van deze regel krijgen de categorie van een andere regel, of geen
+		return { ok: true, applied: applyRules(db()) };
 	}
 };

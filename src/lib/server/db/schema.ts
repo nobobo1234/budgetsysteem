@@ -61,6 +61,10 @@ export const transactions = sqliteTable(
 		counterIban: text('counter_iban'),
 		description: text('description').notNull().default(''),
 		categoryId: text('category_id').references(() => categories.id, { onDelete: 'set null' }),
+		// Wie de categorie koos. Regels mogen een categorie van een regel overschrijven en
+		// terugzetten, maar blijven af van een handmatige keuze en van eigen overboekingen.
+		categorySource: text('category_source', { enum: ['handmatig', 'regel', 'intern'] }),
+		categoryRuleId: text('category_rule_id').references(() => rules.id, { onDelete: 'set null' }),
 		accountId: text('account_id')
 			.notNull()
 			.references(() => accounts.id),

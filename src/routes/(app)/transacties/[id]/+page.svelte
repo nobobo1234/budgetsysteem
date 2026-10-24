@@ -14,6 +14,21 @@
 		verwacht: 'Verwacht'
 	};
 
+	const ruleText = {
+		tegenpartij: 'Tegenpartij bevat',
+		iban: 'IBAN is',
+		omschrijving: 'Omschrijving bevat'
+	};
+	const categoryHint = $derived(
+		data.rule
+			? `Via regel: ${ruleText[data.rule.field]} “${data.rule.pattern}”`
+			: tx.categorySource === 'handmatig'
+				? 'Zelf gekozen; regels laten deze categorie staan'
+				: tx.categorySource === 'intern'
+					? 'Overboeking tussen je eigen rekeningen'
+					: null
+	);
+
 	let saving = $state(false);
 	let confirmDelete = $state(false);
 
@@ -134,6 +149,7 @@
 					value={tx.categoryId ?? ''}
 					options={categoryOptions}
 				/>
+				{#if categoryHint}<p class="muted hint">{categoryHint}</p>{/if}
 			</div>
 		</div>
 		<label class="field">
@@ -185,6 +201,11 @@
 </div>
 
 <style>
+	.hint {
+		margin: 0;
+		font-size: 0.85rem;
+	}
+
 	.page {
 		max-width: 36rem;
 		display: grid;

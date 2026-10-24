@@ -3,7 +3,7 @@ import { asc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { parseAmount } from '#lib/money.ts';
 import { db } from '#lib/server/db/index.ts';
-import { categories, owed, transactionSplits, transactions } from '#lib/server/db/schema.ts';
+import { categories, owed, rules, transactionSplits, transactions } from '#lib/server/db/schema.ts';
 import { deleteTransaction, updateTransaction, ValidationError } from '#lib/server/transactions.ts';
 import { transactionPatchSchema } from '#lib/server/validation.ts';
 import type { Actions, PageServerLoad } from './$types';
@@ -16,6 +16,14 @@ export const load: PageServerLoad = ({ params }) => {
 	if (!tx) error(404, 'Niet gevonden');
 	return {
 		tx,
+		// De regel die de categorie gaf, zodat je ziet waarom hij er staat
+		rule: tx.categoryRuleId
+			? (db()
+					.select({ field: rules.field, pattern: rules.pattern })
+					.from(rules)
+					.where(eq(rules.id, tx.categoryRuleId))
+					.get() ?? null)
+			: null,
 		splits: db()
 			.select()
 			.from(transactionSplits)

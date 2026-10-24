@@ -60,16 +60,15 @@
 		document.querySelector<HTMLInputElement>('input[name="pattern"]')?.focus();
 	}
 
+	const updated = (n: number) => `${n} ${n === 1 ? 'transactie' : 'transacties'} bijgewerkt`;
+
 	const feedback = $derived(
 		form && 'message' in form && form.message
 			? { text: form.message, error: true }
-			: form && 'applied' in form
-				? {
-						text: `Regel opgeslagen; ${form.applied} ${form.applied === 1 ? 'transactie' : 'transacties'} bijgewerkt.`,
-						error: false
-					}
-				: form && 'ok' in form
-					? { text: 'Regel verwijderd.', error: false }
+			: form && 'ok' in form
+				? { text: `Regel verwijderd; ${updated(form.applied ?? 0)}.`, error: false }
+				: form && 'applied' in form
+					? { text: `Regel opgeslagen; ${updated(form.applied ?? 0)}.`, error: false }
 					: null
 	);
 </script>
@@ -82,8 +81,8 @@
 	<div class="intro">
 		<h1>Regels</h1>
 		<p class="muted">
-			Regels geven transacties automatisch een categorie, ook bestaande transacties zonder
-			categorie.
+			Regels geven transacties automatisch een categorie, ook bestaande. Een categorie die je zelf
+			kiest, blijft staan.
 		</p>
 	</div>
 

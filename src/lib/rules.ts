@@ -24,26 +24,58 @@ export function sortRules<T extends Rule>(rules: T[]): T[] {
 	);
 }
 
-export function ruleMatches(rule: Rule, tx: Matchable): boolean {
-	if (rule.pattern.length === 0) return false;
+interface Normalized {
+	counterparty: string;
+	iban: string | null;
+	description: string;
+}
+
+function normalizeTx(tx: Matchable): Normalized {
+	return {
+		counterparty: normalizeCounterparty(tx.counterparty),
+		iban: tx.counterIban === null ? null : normalizeIban(tx.counterIban),
+		description: normalize(tx.description)
+	};
+}
+
+// Genormaliseerd patroon per regel-object: bij opnieuw toepassen komt elke regel duizenden keren langs
+const patterns = new WeakMap<Rule, string>();
+
+function normalizedPattern(rule: Rule): string {
+	let p = patterns.get(rule);
+	if (p === undefined) {
+		p =
+			rule.field === 'iban'
+				? normalizeIban(rule.pattern)
+				: rule.field === 'tegenpartij'
+					? normalizeCounterparty(rule.pattern)
+					: normalize(rule.pattern);
+		patterns.set(rule, p);
+	}
+	return p;
+}
+
+function matches(rule: Rule, tx: Normalized): boolean {
+	const p = normalizedPattern(rule);
+	if (p.length === 0) return false;
 	switch (rule.field) {
 		case 'iban':
-			return (
-				tx.counterIban !== null && normalizeIban(tx.counterIban) === normalizeIban(rule.pattern)
-			);
-		case 'tegenpartij': {
-			const p = normalizeCounterparty(rule.pattern);
-			return p.length > 0 && normalizeCounterparty(tx.counterparty).includes(p);
-		}
-		case 'omschrijving': {
-			const p = normalize(rule.pattern);
-			return p.length > 0 && normalize(tx.description).includes(p);
-		}
+			return tx.iban === p;
+		case 'tegenpartij':
+			return tx.counterparty.includes(p);
+		case 'omschrijving':
+			return tx.description.includes(p);
 	}
+}
+
+export function ruleMatches(rule: Rule, tx: Matchable): boolean {
+	return matches(rule, normalizeTx(tx));
 }
 
 /** Eerste passende regel, of `null`. Verwacht regels die al met `sortRules` gesorteerd zijn. */
 export function matchRule<T extends Rule>(sorted: T[], tx: Matchable): T | null {
-	for (const rule of sorted) if (ruleMatches(rule, tx)) return rule;
+	// De transactie één keer normaliseren: bij opnieuw toepassen gaat dit over de hele historie
+	const normalized = normalizeTx(tx);
+	for (const rule of sorted) if (matches(rule, normalized)) return rule;
 	return null;
 }
