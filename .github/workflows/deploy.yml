@@ -1,9 +1,13 @@
 name: Deploy
 
-# Elke merge naar main staat binnen een paar minuten live, zonder langlevend geheim voor de VPS
+# Elke merge naar main staat binnen een paar minuten live, zonder langlevend geheim voor de VPS.
+# Alleen docs gewijzigd: geen nieuw image, dus niets uit te rollen.
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
 
 permissions: {}
 
