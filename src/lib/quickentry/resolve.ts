@@ -1,6 +1,8 @@
+import { rankMatches, type MatchLabel } from '../match.ts';
+import { splitEqually } from '../owed.ts';
 import { matchRule, type Rule } from '../rules.ts';
 import { normalize, normalizeCounterparty } from '../text.ts';
-import { splitPeople, splitShare, type ParsedEntry } from './parser.ts';
+import { splitPeople, type ParsedEntry } from './parser.ts';
 
 export interface CategoryRef {
 	id: string;
@@ -20,6 +22,25 @@ export interface ResolveContext {
 	rules: readonly Rule[];
 	/** Bekende tegenpartijen, de vaakst gebruikte eerst */
 	knownCounterparties: readonly string[];
+	/** Bekende personen, voor delen en ontvangen */
+	people?: readonly { id: string; name: string }[];
+	/** Open posten voor de koppellijst bij ontvangen of terugbetalen */
+	openPosts?: readonly OpenPostRef[];
+}
+
+export interface OpenPostRef {
+	id: string;
+	personId: string;
+	personName: string;
+	direction: 'te_krijgen' | 'te_betalen';
+	outstandingCents: number;
+	description: string;
+	date: string;
+}
+
+export interface PostCandidate extends OpenPostRef {
+	score: number;
+	label: MatchLabel;
 }
 
 export interface Draft {
@@ -30,10 +51,17 @@ export interface Draft {
 	counterparty: string;
 	categoryId: string | null;
 	accountId: string | null;
+	description: string;
 	/** Jouw deel in centen als er gedeeld wordt; anders gelijk aan het totaal */
 	myShareCents: number | null;
+	/** De anderen met naam, zoals ze in de app heten als ze bekend zijn */
 	sharedWith: string[];
+	/** Per ander het bedrag (positief), in dezelfde volgorde; namenloze anderen achteraan */
+	otherShares: number[];
 	people: number;
+	/** Koppellijst bij binnenkomend geld (te krijgen) of een terugbetaling (te betalen) */
+	candidates: PostCandidate[];
+	preselect: string | null;
 	/** Wat nog ingevuld moet worden voordat de post compleet is */
 	missing: ('bedrag' | 'eurobedrag' | 'rekening')[];
 }
@@ -151,12 +179,25 @@ export function keywordCategory(text: string, direction: 'uit' | 'in'): string |
 	return null;
 }
 
+/** Een getypte naam zoals de persoon in de app heet; onbekend blijft hij zoals getypt. */
+export function knownPerson(name: string, people: readonly { name: string }[]): string {
+	const key = normalize(name);
+	return people.find((p) => normalize(p.name) === key)?.name ?? name;
+}
+
 export function resolveEntry(entry: ParsedEntry, ctx: ResolveContext): Draft {
 	const missing: Draft['missing'] = [];
+	const people = ctx.people ?? [];
 
 	const typed = entry.text.trim();
-	const known = typed ? matchCounterparty(typed, ctx.knownCounterparties) : null;
-	const counterparty = known ?? typed;
+	// `+15 tikkie sanne`: de persoon is de tegenpartij, de rest de omschrijving
+	const known = entry.person
+		? null
+		: typed
+			? matchCounterparty(typed, ctx.knownCounterparties)
+			: null;
+	const counterparty = entry.person ?? known ?? typed;
+	const description = entry.person ? typed : '';
 
 	let account: AccountRef | undefined;
 	if (entry.account) {
@@ -179,7 +220,9 @@ export function resolveEntry(entry: ParsedEntry, ctx: ResolveContext): Draft {
 				?.categoryId ?? null;
 	}
 	if (!categoryId) {
-		const keyword = keywordCategory(counterparty || typed, entry.direction);
+		const keyword =
+			keywordCategory(counterparty || typed, entry.direction) ??
+			(entry.person && typed ? keywordCategory(typed, entry.direction) : null);
 		if (keyword) categoryId = ctx.categories.find((c) => c.name === keyword)?.id ?? null;
 	}
 
@@ -196,10 +239,43 @@ export function resolveEntry(entry: ParsedEntry, ctx: ResolveContext): Draft {
 		amountCents = entry.direction === 'uit' ? -entry.amountCents : entry.amountCents;
 	}
 
-	const people = entry.direction === 'uit' ? splitPeople(entry) : 1;
+	const sharing = entry.direction === 'uit' ? splitPeople(entry) : 1;
+	const sharedWith =
+		entry.direction === 'uit' ? entry.splitWith.map((n) => knownPerson(n, people)) : [];
 	let myShareCents: number | null = amountCents;
-	if (amountCents !== null && people > 1) {
-		myShareCents = -splitShare(-amountCents, people).mine;
+	let otherShares: number[] = [];
+	if (amountCents !== null && sharing > 1) {
+		const share = splitEqually(-amountCents, sharing);
+		myShareCents = -share.mine;
+		otherShares = share.others;
+	}
+
+	// Koppellijst: binnenkomend geld tegen posten te krijgen, een uitgave zonder delen tegen
+	// posten te betalen. Alleen kandidaten met enige overeenkomst, zodat salaris geen lijst geeft.
+	let candidates: PostCandidate[] = [];
+	let preselect: string | null = null;
+	if (amountCents !== null && sharing === 1 && ctx.openPosts && ctx.openPosts.length > 0) {
+		const direction = entry.direction === 'in' ? 'te_krijgen' : 'te_betalen';
+		const posts = ctx.openPosts.filter((p) => p.direction === direction);
+		const ranked = rankMatches(
+			{ amountCents: Math.abs(amountCents), date: entry.date, name: `${counterparty} ${typed}` },
+			posts.map((p) => ({ ...p, amountCents: p.outstandingCents, name: p.personName })),
+			{ lower: 'deels' }
+		);
+		candidates = ranked.candidates
+			.filter((c) => c.parts.name > 0.5 || c.parts.amount === 1)
+			.map((c) => ({
+				id: c.target.id,
+				personId: c.target.personId,
+				personName: c.target.personName,
+				direction: c.target.direction,
+				outstandingCents: c.target.outstandingCents,
+				description: c.target.description,
+				date: c.target.date,
+				score: c.score,
+				label: c.label
+			}));
+		preselect = candidates.some((c) => c.id === ranked.preselect) ? ranked.preselect : null;
 	}
 
 	return {
@@ -208,11 +284,15 @@ export function resolveEntry(entry: ParsedEntry, ctx: ResolveContext): Draft {
 		origCurrency,
 		date: entry.date,
 		counterparty,
+		description,
 		categoryId,
 		accountId: account?.id ?? null,
 		myShareCents,
-		sharedWith: entry.direction === 'uit' ? entry.splitWith : [],
-		people,
+		sharedWith,
+		otherShares,
+		people: sharing,
+		candidates,
+		preselect,
 		missing
 	};
 }

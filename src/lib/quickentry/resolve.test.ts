@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { sortRules } from '../rules.ts';
 import { parseQuickEntry } from './parser.ts';
-import { findCategory, matchCounterparty, resolveEntry, type ResolveContext } from './resolve.ts';
+import {
+	findCategory,
+	knownPerson,
+	matchCounterparty,
+	resolveEntry,
+	type OpenPostRef,
+	type ResolveContext
+} from './resolve.ts';
 
 const TODAY = '2026-10-23';
 const cat = (id: string, name: string) => ({ id, name });
@@ -32,6 +39,38 @@ const ctx: ResolveContext = {
 
 const resolve = (input: string) =>
 	resolveEntry(parseQuickEntry(input, TODAY, { accountAliases: ['sns', 'rev'] }), ctx);
+
+const post = (over: Partial<OpenPostRef> & { id: string }): OpenPostRef => ({
+	personId: 'p-sanne',
+	personName: 'Sanne',
+	direction: 'te_krijgen',
+	outstandingCents: 1500,
+	description: 'Etentje',
+	date: '2026-10-20',
+	...over
+});
+
+const withPosts: ResolveContext = {
+	...ctx,
+	people: [
+		{ id: 'p-sanne', name: 'Sanne' },
+		{ id: 'p-tim', name: 'Tim' }
+	],
+	openPosts: [
+		post({ id: 'o-sanne' }),
+		post({ id: 'o-tim', personId: 'p-tim', personName: 'Tim', outstandingCents: 1000 }),
+		post({ id: 'o-tim-ik', personId: 'p-tim', personName: 'Tim', direction: 'te_betalen' })
+	]
+};
+
+const resolveWith = (input: string, date = TODAY) =>
+	resolveEntry(
+		parseQuickEntry(input, date, {
+			accountAliases: ['sns', 'rev'],
+			people: withPosts.people!.map((p) => p.name)
+		}),
+		withPosts
+	);
 
 describe('matchCounterparty', () => {
 	it('koppelt initialen aan een bekende naam', () => {
@@ -105,5 +144,55 @@ describe('resolveEntry', () => {
 
 	it('mist een bedrag', () => {
 		expect(resolve('ah').missing).toContain('bedrag');
+	});
+});
+
+describe('voorschieten in de snelinvoer', () => {
+	it('€10 met sanne en tim: jij 3,33, Sanne 3,34, Tim 3,33', () => {
+		const d = resolveWith('10 lunch met sanne en tim');
+		expect(d.people).toBe(3);
+		expect(d.myShareCents).toBe(-333);
+		expect(d.sharedWith).toEqual(['Sanne', 'Tim']);
+		expect(d.otherShares).toEqual([334, 333]);
+	});
+
+	it('een onbekende naam blijft zoals getypt', () => {
+		expect(resolveWith('10 lunch met eva').sharedWith).toEqual(['eva']);
+		expect(knownPerson('SANNE', withPosts.people!)).toBe('Sanne');
+	});
+
+	it('bij delen geen koppellijst', () => {
+		expect(resolveWith('15 lunch met sanne').candidates).toEqual([]);
+	});
+});
+
+describe('ontvangen in de snelinvoer', () => {
+	it('+15 tikkie sanne: Sanne als tegenpartij, haar post bovenaan', () => {
+		const d = resolveWith('+15 tikkie sanne');
+		expect(d.counterparty).toBe('Sanne');
+		expect(d.description).toBe('tikkie');
+		expect(d.categoryId).toBe('c-terug');
+		expect(d.candidates[0]?.id).toBe('o-sanne');
+		expect(d.candidates[0]?.label).toBe('waarschijnlijk');
+		// Alleen posten te krijgen; de post die jij Tim nog moet staat er niet in
+		expect(d.candidates.map((c) => c.id)).not.toContain('o-tim-ik');
+	});
+
+	it('voorselectie alleen als de bovenste duidelijk voorloopt', () => {
+		// Zelfde dag, zelfde bedrag en de naam: duidelijk Sanne
+		expect(resolveWith('+15 tikkie sanne', '2026-10-20').preselect).toBe('o-sanne');
+		// Alleen het bedrag past bij Tim: hij staat erin, maar je kiest zelf
+		const d = resolveWith('+10 tikkie', '2026-10-20');
+		expect(d.candidates.map((c) => c.id)).toEqual(['o-tim']);
+		expect(d.preselect).toBeNull();
+	});
+
+	it('salaris geeft geen koppellijst', () => {
+		expect(resolveWith('+2500 salaris').candidates).toEqual([]);
+	});
+
+	it('een uitgave aan Tim stelt de post te betalen voor', () => {
+		const d = resolveWith('15 tikkie tim');
+		expect(d.candidates.map((c) => c.id)).toEqual(['o-tim-ik']);
 	});
 });

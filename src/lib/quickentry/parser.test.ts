@@ -1,6 +1,7 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
-import { MAX_INPUT, parseQuickEntry, splitPeople, splitShare } from './parser.ts';
+import { splitEqually } from '../owed.ts';
+import { MAX_INPUT, parseQuickEntry, splitPeople } from './parser.ts';
 
 // Vrijdag 23 oktober 2026
 const TODAY = '2026-10-23';
@@ -175,13 +176,63 @@ describe('delen', () => {
 		expect(r.account).toBe('rev');
 	});
 
-	it('splitPeople en splitShare', () => {
+	it('splitPeople en gelijk verdelen', () => {
 		expect(splitPeople({ splitCount: 3, splitWith: [] })).toBe(3);
 		expect(splitPeople({ splitCount: null, splitWith: ['a', 'b'] })).toBe(3);
 		expect(splitPeople({ splitCount: null, splitWith: [] })).toBe(1);
-		expect(splitShare(4500, 3)).toEqual({ mine: 1500, others: 3000 });
-		expect(splitShare(1000, 3)).toEqual({ mine: 333, others: 667 });
-		expect(splitShare(1000, 1)).toEqual({ mine: 1000, others: 0 });
+		expect(splitEqually(4500, 3)).toEqual({ mine: 1500, others: [1500, 1500] });
+		expect(splitEqually(1000, 3)).toEqual({ mine: 333, others: [334, 333] });
+		expect(splitEqually(1000, 1)).toEqual({ mine: 1000, others: [] });
+	});
+
+	it('voor 4 met sanne: het aantal gaat voor, de rest is nog onbekend', () => {
+		const r = parse('40 pizza voor 4 met sanne');
+		expect(r.splitCount).toBe(4);
+		expect(r.splitWith).toEqual(['sanne']);
+		expect(splitPeople(r)).toBe(4);
+	});
+
+	it('voor 2 met sanne en tim: de namen tellen als het aantal te laag is', () => {
+		const r = parse('30 lunch voor 2 met sanne en tim');
+		expect(splitPeople(r)).toBe(3);
+	});
+});
+
+describe('personen', () => {
+	const people = ['Sanne', 'Tim de Vries', 'Tim Jansen', 'Eva Bakker'];
+	const withPeople = (input: string) => parseQuickEntry(input, TODAY, { ...opts, people });
+
+	it('+15 tikkie sanne herkent Sanne', () => {
+		const r = withPeople('+15 tikkie sanne');
+		expect(r.person).toBe('Sanne');
+		expect(r.text).toBe('tikkie');
+		expect(r.direction).toBe('in');
+		expect(r.spans.find((s) => s.kind === 'persoon')?.text).toBe('sanne');
+	});
+
+	it('een voornaam van één persoon, hoofdletters maken niet uit', () => {
+		expect(withPeople('+20 EVA').person).toBe('Eva Bakker');
+	});
+
+	it('een voornaam van twee personen herkent hij niet', () => {
+		const r = withPeople('+20 tikkie tim');
+		expect(r.person).toBeNull();
+		expect(r.text).toBe('tikkie tim');
+	});
+
+	it('zonder bekende personen blijft het tekst', () => {
+		expect(parse('+15 tikkie sanne').person).toBeNull();
+	});
+
+	it('alleen de eerste persoon; met-namen zijn delen, geen persoon', () => {
+		const r = withPeople('30 lunch met sanne');
+		expect(r.splitWith).toEqual(['sanne']);
+		expect(r.person).toBeNull();
+		expect(withPeople('+30 sanne eva').person).toBe('Sanne');
+	});
+
+	it('__proto__ als naam levert niets op', () => {
+		expect(withPeople('+5 __proto__ constructor').person).toBeNull();
 	});
 });
 
@@ -233,6 +284,9 @@ describe('robuust', () => {
 			'31/2',
 			'rev',
 			'sns',
+			'sanne',
+			'Tim',
+			'tikkie',
 			' ',
 			'\t',
 			'\u200B',
@@ -244,16 +298,19 @@ describe('robuust', () => {
 			fc.array(tricky, { maxLength: 120 }).map((parts) => parts.join(' ')),
 			fc.array(tricky, { maxLength: 200 }).map((parts) => parts.join(''))
 		);
+		const fuzzOpts = { ...opts, people: ['Sanne', 'Tim de Vries', 'Tim Jansen', '__proto__'] };
 		fc.assert(
 			fc.property(input, (s) => {
 				const start = performance.now();
-				const r = parseQuickEntry(s, TODAY, opts);
+				const r = parseQuickEntry(s, TODAY, fuzzOpts);
 				const ms = performance.now() - start;
 				expect(ms).toBeLessThan(5);
 				expect(
 					r.amountCents === null || (Number.isSafeInteger(r.amountCents) && r.amountCents > 0)
 				).toBe(true);
 				expect(r.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+				expect(r.person === null || typeof r.person === 'string').toBe(true);
+				expect(splitPeople(r)).toBeGreaterThanOrEqual(1);
 			}),
 			{ numRuns: 2000 }
 		);

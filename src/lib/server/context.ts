@@ -1,7 +1,8 @@
 import { asc, eq } from 'drizzle-orm';
 import { sortRules } from '../rules.ts';
 import type { DB } from './db/index.ts';
-import { accounts, categories, rules } from './db/schema.ts';
+import { accounts, categories, people, rules } from './db/schema.ts';
+import { matchablePosts } from './owed.ts';
 import { knownCounterparties } from './transactions.ts';
 
 /** Alles wat de snelinvoer in de browser nodig heeft om lokaal te parsen en te koppelen. */
@@ -30,6 +31,14 @@ export function quickEntryContext(db: DB) {
 				.from(rules)
 				.all()
 		),
-		knownCounterparties: knownCounterparties(db)
+		knownCounterparties: knownCounterparties(db),
+		// Alleen naam en ID; IBANs van anderen gaan niet naar de browser
+		people: db
+			.select({ id: people.id, name: people.name })
+			.from(people)
+			.where(eq(people.active, true))
+			.orderBy(asc(people.name))
+			.all(),
+		openPosts: matchablePosts(db)
 	};
 }
