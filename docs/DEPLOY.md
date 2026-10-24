@@ -92,12 +92,14 @@ LITESTREAM_ENDPOINT=
 LITESTREAM_REGION=
 AWS_ACCESS_KEY_ID=
 AWS_SECRET_ACCESS_KEY=
+LITESTREAM_HEARTBEAT_URL=
 EOF
 sudo tee /etc/budget/restic.env >/dev/null <<'EOF'
 RESTIC_REPOSITORY=
 RESTIC_PASSWORD_FILE=/etc/budget/restic-password
 AWS_ACCESS_KEY_ID=
 AWS_SECRET_ACCESS_KEY=
+BACKUP_PING_URL=
 EOF
 sudo sh -c 'chmod 0600 /etc/budget/*.env'
 ```
@@ -110,6 +112,8 @@ sudoedit /etc/budget/restic.env
 ```
 
 `RESTIC_REPOSITORY` heeft de vorm `s3:https://<endpoint>/<bucket>/budget`. Gebruik een andere bucket (of andere sleutels) dan voor Litestream.
+
+De ping-URL's voor de externe checks (`LITESTREAM_HEARTBEAT_URL`, `BACKUP_PING_URL` en `HEALTHCHECK_PING_URL` in `app.env`) vul je in bij Monitoring; leeg laten mag, dan staat die check uit.
 
 ### 6. Restic-wachtwoord en repository
 
@@ -209,6 +213,58 @@ sudo docker ps --filter name=budget
 curl -fsS http://127.0.0.1:3000/healthz
 sudo docker logs budget-litestream --tail 20
 ```
+
+## Monitoring
+
+Telemetrie staat in een aparte database, `/data/telemetry.db` naast de hoofddatabase, en wordt na 90 dagen opgeruimd. Hij wordt niet door Litestream gerepliceerd: verlies is vervelend, niet erg.
+
+- **Fouten.** Elke onverwachte fout komt in de tabel `errors` onder het `errorId` dat je in de app ziet, zonder foutmelding of invoer. Bekijken: `sudo docker exec budget node -e "const D=require('better-sqlite3');console.table(new D('/data/telemetry.db',{readonly:true}).prepare('select at,name,route,method from errors order by at desc limit 20').all())"`.
+- **Health check.** Publiek geeft `/healthz` alleen `ok`. Na inloggen geeft `/api/health` de leeftijd van de laatste Litestream-sync en restic-backup, de schijfruimte van het datavolume, het aantal starts en herstarts (een start van een versie die al eerder draaide) en het aantal fouten.
+
+### Externe checks
+
+Een dienst die alarm slaat als een ping uitblijft, zoals [healthchecks.io](https://healthchecks.io) (gratis tot 20 checks). Maak drie checks:
+
+| Check      | Periode   | Marge      | Waar de URL komt                                           | Wie pingt                                                                         |
+| ---------- | --------- | ---------- | ---------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| App        | 5 minuten | 10 minuten | `HEALTHCHECK_PING_URL` in `/etc/budget/app.env`            | De app, bij het starten en elke 5 minuten, alleen als de database bereikbaar is   |
+| Replicatie | 5 minuten | 10 minuten | `LITESTREAM_HEARTBEAT_URL` in `/etc/budget/litestream.env` | Litestream, alleen na een geslaagde sync (vanaf 0.5.6; het image staat op 0.5.17) |
+| Backup     | 1 dag     | 2 uur      | `BACKUP_PING_URL` in `/etc/budget/restic.env`              | `backup.sh` na een geslaagde backup, en `<url>/fail` als hij misgaat              |
+
+De ping-URL's zijn geheimen: wie ze kent, kan een check groen houden terwijl er iets stuk is. Ze staan alleen in de omgevingsbestanden op de VPS, nooit in de repo. Zet tweestapsverificatie aan op je account bij de dienst.
+
+```bash
+sudoedit /etc/budget/app.env
+sudoedit /etc/budget/litestream.env
+sudoedit /etc/budget/restic.env
+```
+
+Daarna de app en Litestream opnieuw aanmaken, zodat ze de nieuwe omgeving lezen, en één backup draaien om de backup-check te starten (`backup.sh` leest `restic.env` bij elke run):
+
+```bash
+sudo BUDGET_IMAGE="ghcr.io/nobobo1234/budgetsysteem@$(cat /var/lib/budget/current-digest)" docker compose -f /opt/budget/docker-compose.yml up -d --force-recreate app litestream
+sudo systemctl start budget-backup.service
+```
+
+Controleer in het dashboard van de dienst dat alle drie de checks binnen een paar minuten groen worden. Een alternatief voor de app-check is Uptime Kuma op een ander apparaat dat `https://budget.example.nl/healthz` opvraagt; dat ziet alleen niet of Litestream of restic stilvalt.
+
+## Wijzigingen in `deploy/`
+
+De deploy-workflow rolt alleen het image uit. De bestanden uit stap 4 staan als kopie op de VPS en worden niet automatisch bijgewerkt. Verandert een PR iets in `deploy/`, kopieer de bestanden dan na de merge opnieuw, vanaf je laptop:
+
+```bash
+scp deploy/docker-compose.yml deploy/litestream.yml deploy/backup.sh deploy/deploy-budget.sh vps:/tmp/
+```
+
+En op de VPS:
+
+```bash
+sudo install -o root -g root -m 0644 /tmp/docker-compose.yml /tmp/litestream.yml /opt/budget/
+sudo install -o root -g root -m 0755 /tmp/backup.sh /opt/budget/backup.sh
+sudo install -o root -g root -m 0755 /tmp/deploy-budget.sh /usr/local/bin/deploy-budget
+```
+
+Is `litestream.yml` of `docker-compose.yml` veranderd, maak de containers dan opnieuw aan zoals bij Externe checks. `backup.sh` en `deploy-budget` gelden vanaf de volgende run. Een gewijzigde `nginx/finance.conf` installeer je zoals in stap 8.
 
 ## Eerste keer inloggen
 
