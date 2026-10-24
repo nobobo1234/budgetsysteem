@@ -1,16 +1,22 @@
 import { readFileSync } from 'node:fs';
-import { eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { DB } from '../../src/lib/server/db/index.ts';
 import {
 	accounts,
+	auditLog,
 	categories,
 	importBatches,
 	rules,
 	transactions
 } from '../../src/lib/server/db/schema.ts';
 import { parseBankFile } from '../../src/lib/server/import/index.ts';
-import { applyRulesToUncategorized, importRecords } from '../../src/lib/server/import/importer.ts';
+import {
+	applyRulesToUncategorized,
+	fillCardCounterparties,
+	importRecords,
+	uncategorizedGroups
+} from '../../src/lib/server/import/importer.ts';
 import type { ImportRecord } from '../../src/lib/server/import/types.ts';
 import { tempDatabase } from './helpers.ts';
 
@@ -164,5 +170,178 @@ describe('import met ontdubbelen', () => {
 				.map((r) => r.a)
 		);
 		expect(ids.size).toBe(1);
+	});
+});
+
+function categoryId(name: string): string {
+	return db.select().from(categories).where(eq(categories.name, name)).get()!.id;
+}
+
+/** Zoals de import vóór deze reparatie: pinbetalingen zonder tegenpartij. */
+function importWithoutMerchants(name: string) {
+	const { format, records } = parseBankFile(file(name));
+	const old = records.map((r) => (r.description.includes('MCC:') ? { ...r, counterparty: '' } : r));
+	return importRecords(db, old, format);
+}
+
+const snapshot = () =>
+	db
+		.select({
+			id: transactions.id,
+			description: transactions.description,
+			bankReference: transactions.bankReference,
+			dedupeHash: transactions.dedupeHash,
+			amountCents: transactions.amountCents,
+			date: transactions.date
+		})
+		.from(transactions)
+		.orderBy(transactions.id)
+		.all();
+
+describe('pinbetalingen zonder tegenpartij', () => {
+	it('krijgen bij de import de winkel als tegenpartij', () => {
+		const summary = importFixture('camt053-pin.xml');
+		expect(summary.newCount).toBe(7);
+		const names = db
+			.select({ c: transactions.counterparty })
+			.from(transactions)
+			.all()
+			.map((t) => t.c);
+		expect(names).toContain('SUPERMARKT TEST 11');
+		expect(names).toContain('Koffiebar Voorbeeld B.V.');
+		expect(names.filter((n) => n === '')).toHaveLength(1);
+		expect(summary.uncategorized.map((g) => g.pattern)).toContain('supermarkt test');
+	});
+
+	it('stellen een categorie voor op basis van de MCC, zonder te boeken', () => {
+		const summary = importFixture('camt053-pin.xml');
+		const byPattern = new Map(summary.uncategorized.map((g) => [g.pattern, g]));
+		expect(byPattern.get('supermarkt test')).toMatchObject({
+			count: 2,
+			suggestedCategoryId: categoryId('Boodschappen')
+		});
+		expect(byPattern.get('koffiebar voorbeeld b v')?.suggestedCategoryId).toBe(
+			categoryId('Uit eten en bezorgen')
+		);
+		expect(byPattern.get('verhuurder test')?.suggestedCategoryId).toBeNull();
+		// Alleen een voorstel: de transacties zelf blijven zonder categorie
+		const supermarkt = db
+			.select()
+			.from(transactions)
+			.where(eq(transactions.counterparty, 'SUPERMARKT TEST 11'))
+			.all();
+		expect(supermarkt.every((t) => t.categoryId === null)).toBe(true);
+	});
+
+	it('een regel gaat voor op het MCC-voorstel', () => {
+		db.insert(rules)
+			.values({ field: 'tegenpartij', pattern: 'koffiebar', categoryId: categoryId('Uitgaan') })
+			.run();
+		const summary = importFixture('camt053-pin.xml');
+		expect(summary.uncategorized.map((g) => g.pattern)).not.toContain('koffiebar voorbeeld b v');
+		const koffie = db
+			.select()
+			.from(transactions)
+			.where(eq(transactions.counterparty, 'Koffiebar Voorbeeld B.V.'))
+			.get();
+		expect(koffie?.categoryId).toBe(categoryId('Uitgaan'));
+	});
+
+	it('ontdubbelen verandert niet: een oude import zonder winkelnamen blijft dubbel', () => {
+		importWithoutMerchants('camt053-pin.xml');
+		const again = importFixture('camt053-pin.xml');
+		expect(again.newCount).toBe(0);
+		expect(again.duplicateCount).toBe(7);
+	});
+});
+
+describe('reparatie van bestaande pinbetalingen', () => {
+	it('vult de tegenpartij, past regels toe en legt elke wijziging vast', () => {
+		importWithoutMerchants('camt053-pin.xml');
+		db.insert(rules)
+			.values({
+				field: 'tegenpartij',
+				pattern: 'supermarkt test',
+				categoryId: categoryId('Boodschappen')
+			})
+			.run();
+		const before = snapshot();
+
+		expect(fillCardCounterparties(db)).toEqual({ updated: 5, categorized: 2 });
+
+		const supermarkt = db
+			.select()
+			.from(transactions)
+			.where(eq(transactions.counterparty, 'SUPERMARKT TEST 11'))
+			.all();
+		expect(supermarkt).toHaveLength(2);
+		expect(supermarkt.every((t) => t.categoryId === categoryId('Boodschappen'))).toBe(true);
+		// Omschrijving, referentie, hash, bedrag en datum blijven precies gelijk
+		expect(snapshot()).toEqual(before);
+
+		const audit = db
+			.select()
+			.from(auditLog)
+			.where(eq(auditLog.action, 'tegenpartij_uit_pinbetaling'))
+			.all();
+		expect(audit).toHaveLength(5);
+		expect(audit.find((a) => a.entityId === supermarkt[0]!.id)).toMatchObject({
+			kind: 'wijziging',
+			entity: 'transactions',
+			before: { counterparty: '' },
+			after: { counterparty: 'SUPERMARKT TEST 11' }
+		});
+	});
+
+	it('is idempotent', () => {
+		importWithoutMerchants('camt053-pin.xml');
+		expect(fillCardCounterparties(db).updated).toBe(5);
+		const after = db.select().from(transactions).orderBy(transactions.id).all();
+		expect(fillCardCounterparties(db)).toEqual({ updated: 0, categorized: 0 });
+		expect(db.select().from(transactions).orderBy(transactions.id).all()).toEqual(after);
+		expect(
+			db.select().from(auditLog).where(eq(auditLog.action, 'tegenpartij_uit_pinbetaling')).all()
+		).toHaveLength(5);
+		// En een nieuwe import van hetzelfde bestand levert daarna niets dubbel op
+		expect(importFixture('camt053-pin.xml').newCount).toBe(0);
+	});
+
+	it('laat handmatige invoer, ingevulde namen en onbekende omschrijvingen staan', () => {
+		importWithoutMerchants('camt053-pin.xml');
+		const account = db.select().from(accounts).where(eq(accounts.alias, 'sns')).get()!;
+		db.insert(transactions)
+			.values({
+				amountCents: -100,
+				date: '2026-02-06',
+				counterparty: '',
+				description:
+					'BAKKERIJ - 123456 Teststr>Utrecht 06.02.2026 8U05 KV011 PTR00001 MCC:5499 Betaling',
+				accountId: account.id,
+				source: 'handmatig'
+			})
+			.run();
+		fillCardCounterparties(db);
+		const empty = db
+			.select({ source: transactions.source, description: transactions.description })
+			.from(transactions)
+			.where(eq(transactions.counterparty, ''))
+			.all();
+		expect(empty.map((t) => t.source).sort()).toEqual(['handmatig', 'import']);
+		expect(
+			db
+				.select()
+				.from(transactions)
+				.where(
+					and(eq(transactions.counterparty, 'Verhuurder Test'), eq(transactions.source, 'import'))
+				)
+				.all()
+		).toHaveLength(1);
+	});
+
+	it('maakt de groepen in het overzicht weer zichtbaar', () => {
+		importWithoutMerchants('camt053-pin.xml');
+		expect(uncategorizedGroups(db).map((g) => g.pattern)).toEqual(['verhuurder test']);
+		fillCardCounterparties(db);
+		expect(uncategorizedGroups(db).map((g) => g.pattern)).toContain('supermarkt test');
 	});
 });

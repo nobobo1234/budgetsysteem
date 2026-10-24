@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, isNull, like, sql } from 'drizzle-orm';
 import { matchRule, sortRules } from '../../rules.ts';
 import { normalizeCounterparty } from '../../text.ts';
 import { keywordCategory } from '../../quickentry/resolve.ts';
@@ -7,6 +7,7 @@ import { recordChange } from '../audit.ts';
 import type { Conn, DB } from '../db/index.ts';
 import { accounts, categories, importBatches, rules, transactions } from '../db/schema.ts';
 import { INTERNAL_TRANSFER } from '../db/seed.ts';
+import { mccCategory, parseCardPayment } from './card.ts';
 import { ImportError, type ImportRecord } from './types.ts';
 
 export interface UncategorizedGroup {
@@ -188,6 +189,7 @@ export function uncategorizedGroups(db: Conn, limit = 50): UncategorizedGroup[] 
 	const rows = db
 		.select({
 			counterparty: transactions.counterparty,
+			description: transactions.description,
 			amountCents: transactions.amountCents
 		})
 		.from(transactions)
@@ -195,6 +197,8 @@ export function uncategorizedGroups(db: Conn, limit = 50): UncategorizedGroup[] 
 		.all();
 
 	const byName = new Map<string, UncategorizedGroup>();
+	// Per groep hoe vaak elke MCC voorkomt (alleen bij pinbetalingen)
+	const mccs = new Map<string, Map<string, number>>();
 	for (const row of rows) {
 		const pattern = normalizeCounterparty(row.counterparty);
 		if (!pattern) continue;
@@ -208,6 +212,13 @@ export function uncategorizedGroups(db: Conn, limit = 50): UncategorizedGroup[] 
 		group.count++;
 		group.totalCents += row.amountCents;
 		byName.set(pattern, group);
+
+		const mcc = row.description.includes('MCC:') ? parseCardPayment(row.description)?.mcc : null;
+		if (mcc) {
+			const counts = mccs.get(pattern) ?? new Map<string, number>();
+			counts.set(mcc, (counts.get(mcc) ?? 0) + 1);
+			mccs.set(pattern, counts);
+		}
 	}
 
 	const cats = db.select({ id: categories.id, name: categories.name }).from(categories).all();
@@ -215,9 +226,72 @@ export function uncategorizedGroups(db: Conn, limit = 50): UncategorizedGroup[] 
 		.sort((a, b) => b.count - a.count || Math.abs(b.totalCents) - Math.abs(a.totalCents))
 		.slice(0, limit)
 		.map((g) => {
-			const name = keywordCategory(g.pattern, g.totalCents >= 0 ? 'in' : 'uit');
+			// De MCC van de bank eerst, dan trefwoorden in de naam. Alleen een voorstel: er wordt niets
+			// geboekt, en een regel gaat altijd voor (deze transacties hebben juist geen passende regel).
+			const mcc = mostFrequent(mccs.get(g.pattern));
+			const name =
+				(mcc ? mccCategory(mcc) : null) ??
+				keywordCategory(g.pattern, g.totalCents >= 0 ? 'in' : 'uit');
 			return { ...g, suggestedCategoryId: cats.find((c) => c.name === name)?.id ?? null };
 		});
+}
+
+function mostFrequent(counts: Map<string, number> | undefined): string | null {
+	let best: string | null = null;
+	let bestCount = 0;
+	for (const [key, n] of counts ?? []) {
+		if (n > bestCount) {
+			best = key;
+			bestCount = n;
+		}
+	}
+	return best;
+}
+
+/**
+ * Eenmalige reparatie, veilig om bij elke start te draaien: geïmporteerde pinbetalingen zonder
+ * tegenpartij krijgen de winkel uit de omschrijving. De omschrijving, bankreferentie en
+ * ontdubbelhash blijven ongewijzigd. Elke wijziging komt in het audit-log, zodat hij terug te
+ * volgen en ongedaan te maken is. Daarna worden de regels opnieuw toegepast.
+ */
+export function fillCardCounterparties(db: DB): { updated: number; categorized: number } {
+	const updated = db.transaction((tx) => {
+		const open = tx
+			.select({
+				id: transactions.id,
+				counterparty: transactions.counterparty,
+				description: transactions.description
+			})
+			.from(transactions)
+			.where(
+				and(
+					eq(transactions.source, 'import'),
+					sql`trim(${transactions.counterparty}) = ''`,
+					like(transactions.description, '%MCC:%')
+				)
+			)
+			.all();
+		let n = 0;
+		for (const t of open) {
+			const merchant = parseCardPayment(t.description)?.merchant.slice(0, 140);
+			if (!merchant) continue;
+			tx.update(transactions)
+				.set({ counterparty: merchant, updatedAt: new Date().toISOString() })
+				.where(eq(transactions.id, t.id))
+				.run();
+			recordChange(
+				tx,
+				'tegenpartij_uit_pinbetaling',
+				'transactions',
+				t.id,
+				{ counterparty: t.counterparty },
+				{ counterparty: merchant }
+			);
+			n++;
+		}
+		return n;
+	});
+	return { updated, categorized: updated > 0 ? applyRulesToUncategorized(db) : 0 };
 }
 
 /** Past alle regels toe op transacties zonder categorie. Geeft het aantal bijgewerkte terug. */

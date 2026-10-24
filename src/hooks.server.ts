@@ -10,6 +10,7 @@ import {
 	isSafeMethod,
 	unauthorized
 } from '#lib/server/guard.ts';
+import { fillCardCounterparties } from '#lib/server/import/importer.ts';
 import { log } from '#lib/server/log.ts';
 import { requestLimiter } from '#lib/server/ratelimit.ts';
 
@@ -17,6 +18,14 @@ export const init: ServerInit = () => {
 	if (building) return;
 	// Database openen en migraties draaien bij het starten, niet bij het eerste verzoek
 	pruneSessions(db());
+	// Pinbetalingen uit eerdere imports kregen geen tegenpartij; idempotent, dus veilig bij elke start.
+	// Een fout hier rolt terug en houdt de app niet tegen.
+	try {
+		const repaired = fillCardCounterparties(db());
+		if (repaired.updated > 0) log.info(repaired, 'tegenpartijen van pinbetalingen ingevuld');
+	} catch (e) {
+		log.error({ err: { name: e instanceof Error ? e.name : 'Onbekend' } }, 'reparatie mislukt');
+	}
 	log.info('gestart');
 };
 

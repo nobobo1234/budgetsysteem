@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Synthetisch voorbeeld van SNS-pinbetalingen zonder RltdPties, geen echte bankdata.
+     Winkels, plaatsen en terminals zijn verzonnen. Alleen IBANs uit scripts/test-ibans.txt. -->
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.053.001.02">
+  <BkToCstmrStmt>
+    <GrpHdr><MsgId>TEST-PIN-1</MsgId><CreDtTm>2026-02-05T08:00:00</CreDtTm></GrpHdr>
+    <Stmt>
+      <Id>TEST-PIN-STMT-1</Id>
+      <Acct><Id><IBAN>NL12SNSB0123456789</IBAN></Id><Ccy>EUR</Ccy></Acct>
+      <Ntry>
+        <Amt Ccy="EUR">4.35</Amt>
+        <CdtDbtInd>DBIT</CdtDbtInd>
+        <Sts>BOOK</Sts>
+        <BookgDt><Dt>2026-02-02</Dt></BookgDt>
+        <AcctSvcrRef>REF-PIN-0001</AcctSvcrRef>
+        <NtryDtls><TxDtls>
+          <RmtInf><Ustrd>BAKKERIJ - 123456 Teststr&gt;Utrecht 01.02.2026 8U05 KV011 PTR00001 MCC:5499 Apple Pay betaling NLNEDERLAND</Ustrd></RmtInf>
+        </TxDtls></NtryDtls>
+      </Ntry>
+      <Ntry>
+        <Amt Ccy="EUR">6.80</Amt>
+        <CdtDbtInd>DBIT</CdtDbtInd>
+        <Sts>BOOK</Sts>
+        <BookgDt><Dt>2026-02-02</Dt></BookgDt>
+        <AcctSvcrRef>REF-PIN-0002</AcctSvcrRef>
+        <NtryDtls><TxDtls>
+          <RmtInf><Ustrd>Koffiebar Voorbeeld B.V.&gt;Utrecht01.02.2026 14U39 KV011 12345678 MCC:5814 Apple Pay betaling NLNEDERLAND</Ustrd></RmtInf>
+        </TxDtls></NtryDtls>
+      </Ntry>
+      <Ntry>
+        <Amt Ccy="EUR">23.10</Amt>
+        <CdtDbtInd>DBIT</CdtDbtInd>
+        <Sts>BOOK</Sts>
+        <BookgDt><Dt>2026-02-04</Dt></BookgDt>
+        <AddtlNtryInf>SUPERMARKT TEST 11     &gt;TESTDORP 03.02.2026 9U57 KV011 ET000001 MCC:5499 Apple Pay betaling NLNEDERLAND</AddtlNtryInf>
+      </Ntry>
+      <Ntry>
+        <Amt Ccy="EUR">11.95</Amt>
+        <CdtDbtInd>DBIT</CdtDbtInd>
+        <Sts>BOOK</Sts>
+        <BookgDt><Dt>2026-02-05</Dt></BookgDt>
+        <AddtlNtryInf>SUPERMARKT TEST 11     &gt;TESTDORP 04.02.2026 18U02 KV011 ET000001 MCC:5499 Apple Pay betaling NLNEDERLAND</AddtlNtryInf>
+      </Ntry>
+      <Ntry>
+        <Amt Ccy="EUR">19.99</Amt>
+        <CdtDbtInd>DBIT</CdtDbtInd>
+        <Sts>BOOK</Sts>
+        <BookgDt><Dt>2026-02-04</Dt></BookgDt>
+        <AcctSvcrRef>REF-PIN-0005</AcctSvcrRef>
+        <NtryDtls><TxDtls>
+          <RmtInf><Ustrd>WINKEL VOORBEELD FIL0001 &gt;AMERSFOORT03.02.2026 16U36 KV011 0000AA MCC:5411 Apple Pay betaling NLNEDERLAND</Ustrd></RmtInf>
+        </TxDtls></NtryDtls>
+      </Ntry>
+      <Ntry>
+        <Amt Ccy="EUR">2.50</Amt>
+        <CdtDbtInd>DBIT</CdtDbtInd>
+        <Sts>BOOK</Sts>
+        <BookgDt><Dt>2026-02-05</Dt></BookgDt>
+        <AcctSvcrRef>REF-PIN-0006</AcctSvcrRef>
+        <NtryDtls><TxDtls>
+          <RmtInf><Ustrd>Onbekende kassa zonder vaste vorm</Ustrd></RmtInf>
+        </TxDtls></NtryDtls>
+      </Ntry>
+      <Ntry>
+        <Amt Ccy="EUR">750.00</Amt>
+        <CdtDbtInd>DBIT</CdtDbtInd>
+        <Sts>BOOK</Sts>
+        <BookgDt><Dt>2026-02-01</Dt></BookgDt>
+        <AcctSvcrRef>REF-PIN-0007</AcctSvcrRef>
+        <NtryDtls><TxDtls>
+          <RltdPties>
+            <Cdtr><Nm>Verhuurder Test</Nm></Cdtr>
+            <CdtrAcct><Id><IBAN>NL20INGB0001234567</IBAN></Id></CdtrAcct>
+          </RltdPties>
+          <RmtInf><Ustrd>Huur februari</Ustrd></RmtInf>
+        </TxDtls></NtryDtls>
+      </Ntry>
+    </Stmt>
+  </BkToCstmrStmt>
+</Document>
