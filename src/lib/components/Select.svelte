@@ -135,6 +135,11 @@
 
 	async function ontoggle(e: ToggleEvent) {
 		if (e.newState === 'open') {
+			// Vangnet voor een browser die geen beforetoggle stuurt: dan hier alsnog vullen
+			if (!open) {
+				measure();
+				open = true;
+			}
 			await tick();
 			focusInside();
 			scrollToActive();
@@ -503,6 +508,7 @@
 		overflow: hidden;
 		display: none;
 		flex-direction: column;
+		height: auto;
 		max-height: var(--max);
 		opacity: 1;
 		transform: none;
@@ -576,8 +582,11 @@
 		padding: 0;
 	}
 
+	/* Hoogte volgt de inhoud en krimpt pas bij max-height. Geen `flex: 1`: met basis 0% in
+	   een kolom zonder vaste hoogte klapt de lijst in sommige WebKit-versies in tot 0 px */
 	[role='listbox'] {
-		flex: 1;
+		flex: 0 1 auto;
+		min-height: 0;
 		overflow-y: auto;
 		overscroll-behavior: contain;
 		outline: none;

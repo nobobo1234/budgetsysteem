@@ -125,31 +125,44 @@ for (const path of [
 	});
 }
 
-// Regel maken met alleen de eigen selects: veld kiezen, categorie zoeken door te typen
-test('regel toevoegen via de selects op /regels', async ({ page }) => {
-	await page.goto('/regels');
-	await page.getByRole('button', { name: 'Nieuwe regel' }).click();
-	const field = page.getByRole('combobox', { name: 'Veld', exact: true });
-	await field.click();
-	await page.getByRole('option', { name: 'Omschrijving bevat' }).click();
-	await expect(field).toHaveText('Omschrijving bevat');
+// Regel maken met alleen de eigen selects: veld kiezen, categorie zoeken door te typen. Op
+// telefoonformaat is de keuzelijst een sheet, op desktop een uitklaplijst: beide testen.
+for (const [size, viewport] of [
+	['telefoon', null],
+	['desktop', { width: 1280, height: 800 }]
+] as const) {
+	test(`regel toevoegen via de selects op /regels (${size})`, async ({ page }) => {
+		if (viewport) await page.setViewportSize(viewport);
+		await page.goto('/regels');
+		await page.getByRole('button', { name: 'Nieuwe regel' }).click();
+		const field = page.getByRole('combobox', { name: 'Veld', exact: true });
+		await field.click();
+		// De lijst heeft echt hoogte: alle opties staan erin en zijn zichtbaar
+		const listbox = page.getByRole('listbox', { name: 'Veld' });
+		await expect(listbox.getByRole('option')).toHaveCount(3);
+		expect((await listbox.boundingBox())!.height).toBeGreaterThan(3 * 40);
+		await page.getByRole('option', { name: 'Omschrijving bevat' }).click();
+		await expect(field).toHaveText('Omschrijving bevat');
 
-	const pattern = `e2e-${test.info().project.name}`;
-	await page.getByRole('textbox', { name: 'Patroon' }).fill(pattern);
-	const category = page.getByRole('combobox', { name: 'Categorie', exact: true });
-	await category.click();
-	const search = page.getByRole('combobox', { name: 'Zoek in Categorie' });
-	await search.click();
-	await search.pressSequentially('boods');
-	// Tijdens het typen blijven de passende opties zichtbaar
-	await expect(page.getByRole('option', { name: 'Boodschappen', exact: true })).toBeVisible();
-	await page.getByRole('option', { name: 'Boodschappen', exact: true }).click();
-	await expect(category).toHaveText('Boodschappen');
+		const pattern = `e2e-${size}-${test.info().project.name}`;
+		await page.getByRole('textbox', { name: 'Patroon' }).fill(pattern);
+		const category = page.getByRole('combobox', { name: 'Categorie', exact: true });
+		await category.click();
+		const search = page.getByRole('combobox', { name: 'Zoek in Categorie' });
+		await search.click();
+		await search.pressSequentially('boods');
+		// Tijdens het typen blijven de passende opties zichtbaar
+		const option = page.getByRole('option', { name: 'Boodschappen', exact: true });
+		await expect(option).toBeVisible();
+		expect((await option.boundingBox())!.height).toBeGreaterThanOrEqual(40);
+		await option.click();
+		await expect(category).toHaveText('Boodschappen');
 
-	await page.getByRole('button', { name: 'Regel toevoegen' }).click();
-	await expect(page.getByRole('status').filter({ hasText: 'Regel opgeslagen' })).toBeVisible();
-	await expect(page.locator('.rules')).toContainText(pattern);
-});
+		await page.getByRole('button', { name: 'Regel toevoegen' }).click();
+		await expect(page.getByRole('status').filter({ hasText: 'Regel opgeslagen' })).toBeVisible();
+		await expect(page.locator('.rules')).toContainText(pattern);
+	});
+}
 
 // Schermwissel met View Transitions (spec: Beweging): de navigatie komt altijd aan, ook met
 // gedeelde elementen tussen de lijst en de detailpagina
