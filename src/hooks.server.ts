@@ -3,7 +3,13 @@ import { building, dev } from '$app/env';
 import { pruneSessions, sessionCookieName, validateSession } from '#lib/server/auth/session.ts';
 import { config } from '#lib/server/config.ts';
 import { db } from '#lib/server/db/index.ts';
-import { SECURITY_HEADERS, isPublicRoute, isSafeMethod, unauthorized } from '#lib/server/guard.ts';
+import {
+	SECURITY_HEADERS,
+	clientAddress,
+	isPublicRoute,
+	isSafeMethod,
+	unauthorized
+} from '#lib/server/guard.ts';
 import { log } from '#lib/server/log.ts';
 import { requestLimiter } from '#lib/server/ratelimit.ts';
 
@@ -24,7 +30,7 @@ function json(status: number, message: string): Response {
 export const handle: Handle = async ({ event, resolve }) => {
 	const { request } = event;
 
-	if (!requestLimiter.hit(event.getClientAddress())) {
+	if (!requestLimiter.hit(clientAddress(event))) {
 		return json(429, 'Te veel verzoeken');
 	}
 
