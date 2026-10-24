@@ -80,7 +80,7 @@ function layoutFromHeader(header: string[]): Layout | null {
 
 /** Herkent de Revolut-export aan de kolomkoppen op de eerste regel. */
 export function isRevolutCsv(text: string): boolean {
-	const clean = text.startsWith('﻿') ? text.slice(1) : text;
+	const clean = text.startsWith('\uFEFF') ? text.slice(1) : text;
 	const firstLine = clean.slice(0, clean.search(/\r?\n|$/));
 	const header = parseCsv(firstLine, detectDelimiter(firstLine))[0] ?? [];
 	return layoutFromHeader(header) !== null;
@@ -112,7 +112,7 @@ function referenceKey(r: {
 }
 
 function parseRows(text: string): Row[] {
-	const clean = text.startsWith('﻿') ? text.slice(1) : text;
+	const clean = text.startsWith('\uFEFF') ? text.slice(1) : text;
 	const firstLine = clean.slice(0, clean.search(/\r?\n|$/));
 	const rows = parseCsv(clean, detectDelimiter(firstLine));
 	const layout = layoutFromHeader(rows[0] ?? []);
