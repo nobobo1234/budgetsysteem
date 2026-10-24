@@ -117,7 +117,28 @@ for (const path of [
 		}));
 		expect(scroll).toBeLessThanOrEqual(inner);
 	});
+
+	// Spec: Klaar voor UI. Keuzes gaan via de eigen Select, nooit via een native <select>.
+	test(`${path} gebruikt geen native select`, async ({ page }) => {
+		await page.goto(path);
+		await expect(page.locator('select')).toHaveCount(0);
+	});
 }
+
+// Schermwissel met View Transitions (spec: Beweging): de navigatie komt altijd aan, ook met
+// gedeelde elementen tussen de lijst en de detailpagina
+test('van de lijst naar een transactie en terug', async ({ page }) => {
+	await page.goto('/transacties');
+	await page.waitForLoadState('networkidle');
+	const row = page.locator('.days a').first();
+	const name = (await row.locator('[data-tx-name]').textContent())!.trim();
+	await row.click();
+	await expect(page.getByRole('heading', { level: 1 })).toHaveText(name);
+	await page.getByRole('link', { name: 'Transacties' }).first().click();
+	await expect(page.getByRole('heading', { level: 1 })).toHaveText('Transacties');
+	// Na de overgang blijven er geen namen op de rijen achter
+	await expect(page.locator('[data-tx-name][style*="view-transition-name"]')).toHaveCount(0);
+});
 
 // Performance-budget (spec: Design en interactie, Techniek): eerste JS-bundel onder 100 kB gzip.
 // Eén meting is genoeg, dus alleen in Chromium.

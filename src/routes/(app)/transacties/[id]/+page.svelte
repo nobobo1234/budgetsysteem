@@ -48,14 +48,16 @@
 	</a>
 
 	<header>
-		<h1>{tx.counterparty || 'Zonder naam'}</h1>
+		<h1><span data-tx-name={tx.id}>{tx.counterparty || 'Zonder naam'}</span></h1>
 		<p class={['amount', 'num', tx.amountCents > 0 && 'in']}>
-			{#if tx.amountCents === 0 && tx.origCurrency && tx.origAmountCents !== null}
-				{tx.origCurrency}
-				{centsToInput(tx.origAmountCents)}
-			{:else}
-				{formatCents(tx.amountCents, { sign: true })}
-			{/if}
+			<span data-tx-amount={tx.id}>
+				{#if tx.amountCents === 0 && tx.origCurrency && tx.origAmountCents !== null}
+					{tx.origCurrency}
+					{centsToInput(tx.origAmountCents)}
+				{:else}
+					{formatCents(tx.amountCents, { sign: true })}
+				{/if}
+			</span>
 		</p>
 		<p class="muted">
 			{sourceText[tx.source]} · {formatShortDate(tx.date)}
@@ -209,6 +211,12 @@
 	header {
 		display: grid;
 		gap: 6px;
+	}
+
+	/* Eén doorlopend vlak, zodat de overgang vanuit de lijst niet afbreekt op een lange naam */
+	[data-tx-name],
+	[data-tx-amount] {
+		display: inline-block;
 	}
 
 	.amount {

@@ -4,6 +4,8 @@
 	import { centsToInput, formatCents } from '#lib/money.ts';
 
 	interface Item {
+		/** Alleen nodig voor de overgang naar de detailpagina */
+		id?: string;
 		amountCents: number;
 		date: string;
 		counterparty: string;
@@ -33,7 +35,9 @@
 
 <svelte:element this={href ? 'a' : 'div'} {href} class={['item', href && 'link']}>
 	<div class="main">
-		<span class="who">{tx.counterparty || 'Zonder naam'}</span>
+		<span class="who" data-tx-name={href ? tx.id : undefined}
+			>{tx.counterparty || 'Zonder naam'}</span
+		>
 		<span class="meta">
 			<span class={['dot', !color && 'none']} style:--dot={color} aria-hidden="true"></span>
 			<span class={['cat', !tx.categoryName && 'uncat']}>{tx.categoryName ?? 'Geen categorie'}</span
@@ -51,7 +55,10 @@
 			<span class="badge review">Te controleren</span>
 		{/if}
 	</div>
-	<div class={['amount', 'num', tx.amountCents > 0 && 'in']}>
+	<div
+		class={['amount', 'num', tx.amountCents > 0 && 'in']}
+		data-tx-amount={href ? tx.id : undefined}
+	>
 		{#if tx.amountCents === 0 && orig}
 			<span>{orig}</span>
 			<span class="orig">eurobedrag nog invullen</span>

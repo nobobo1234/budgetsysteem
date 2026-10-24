@@ -91,6 +91,7 @@
 	}
 
 	main {
+		view-transition-name: page;
 		width: 100%;
 		max-width: 64rem;
 		margin: 0 auto;
@@ -107,6 +108,7 @@
 
 	/* Mobiel eerst: de navigatie onderin, binnen bereik van je duim */
 	nav {
+		view-transition-name: nav;
 		position: fixed;
 		inset: auto 0 0 0;
 		z-index: 10;

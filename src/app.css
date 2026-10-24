@@ -268,9 +268,75 @@ textarea {
 	}
 }
 
-/* Schermovergangen via View Transitions (onNavigate) */
+/* Schermovergangen via View Transitions (onNavigate, spec: Beweging). De tabbalk (nav) en de
+   inhoud (page) zijn aparte lagen: de tabbalk blijft staan, de inhoud schuift in de richting
+   van de navigatie. Gedeelde elementen (klasse tx) schuiven van de rij naar de kop. */
 ::view-transition-old(root),
 ::view-transition-new(root) {
 	animation-duration: 180ms;
 	animation-timing-function: var(--ease-out);
+}
+
+::view-transition-old(nav),
+::view-transition-new(nav) {
+	animation-duration: 120ms;
+}
+
+/* De laag zelf springt meteen naar de nieuwe maat; alleen de inhoud beweegt */
+::view-transition-group(page) {
+	animation: none;
+}
+
+::view-transition-old(page) {
+	animation: 140ms var(--ease-out) both vt-out-left;
+}
+
+::view-transition-new(page) {
+	animation: 260ms var(--ease-out) 40ms both vt-in-right;
+}
+
+:root[data-nav='back']::view-transition-old(page) {
+	animation-name: vt-out-right;
+}
+
+:root[data-nav='back']::view-transition-new(page) {
+	animation-name: vt-in-left;
+}
+
+[data-tx-name],
+[data-tx-amount] {
+	view-transition-class: tx;
+}
+
+::view-transition-group(*.tx) {
+	animation-duration: 320ms;
+	animation-timing-function: var(--ease-out);
+}
+
+@keyframes vt-out-left {
+	to {
+		opacity: 0;
+		transform: translateX(-24px);
+	}
+}
+
+@keyframes vt-out-right {
+	to {
+		opacity: 0;
+		transform: translateX(24px);
+	}
+}
+
+@keyframes vt-in-right {
+	from {
+		opacity: 0;
+		transform: translateX(32px);
+	}
+}
+
+@keyframes vt-in-left {
+	from {
+		opacity: 0;
+		transform: translateX(-32px);
+	}
 }
