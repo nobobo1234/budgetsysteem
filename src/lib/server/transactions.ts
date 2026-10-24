@@ -195,7 +195,7 @@ function likePattern(q: string): string {
 	return `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 }
 
-export function listTransactions(db: DB, filter: ListFilter = {}) {
+function filterWhere(filter: ListFilter): SQL | undefined {
 	const where: SQL[] = [];
 	const q = filter.q?.trim().slice(0, 100);
 	if (q) {
@@ -217,7 +217,10 @@ export function listTransactions(db: DB, filter: ListFilter = {}) {
 	if (filter.categoryId === 'geen') where.push(isNull(transactions.categoryId));
 	else if (filter.categoryId) where.push(eq(transactions.categoryId, filter.categoryId));
 	if (filter.status) where.push(eq(transactions.status, filter.status));
+	return and(...where);
+}
 
+export function listTransactions(db: DB, filter: ListFilter = {}) {
 	return db
 		.select({
 			id: transactions.id,
@@ -227,6 +230,7 @@ export function listTransactions(db: DB, filter: ListFilter = {}) {
 			description: transactions.description,
 			categoryId: transactions.categoryId,
 			categoryName: categories.name,
+			categoryGroup: categories.group,
 			accountAlias: accounts.alias,
 			source: transactions.source,
 			status: transactions.status,
@@ -237,7 +241,7 @@ export function listTransactions(db: DB, filter: ListFilter = {}) {
 		.from(transactions)
 		.leftJoin(categories, eq(categories.id, transactions.categoryId))
 		.innerJoin(accounts, eq(accounts.id, transactions.accountId))
-		.where(and(...where))
+		.where(filterWhere(filter))
 		.orderBy(desc(transactions.date), desc(transactions.createdAt))
 		.limit(Math.min(filter.limit ?? 50, 200))
 		.offset(Math.max(0, filter.offset ?? 0))
@@ -245,6 +249,30 @@ export function listTransactions(db: DB, filter: ListFilter = {}) {
 }
 
 export type TransactionRow = ReturnType<typeof listTransactions>[number];
+
+/** Aantal en totalen voor alles wat het filter vindt, over alle pagina's heen. */
+export function summarizeTransactions(db: DB, filter: Omit<ListFilter, 'limit' | 'offset'> = {}) {
+	const row = db
+		.select({
+			count: sql<number>`count(*)`,
+			inCents: sql<number>`coalesce(sum(case when ${transactions.amountCents} > 0 then ${transactions.amountCents} end), 0)`,
+			outCents: sql<number>`coalesce(sum(case when ${transactions.amountCents} < 0 then ${transactions.amountCents} end), 0)`
+		})
+		.from(transactions)
+		.where(filterWhere(filter))
+		.get();
+	return { count: row?.count ?? 0, inCents: row?.inCents ?? 0, outCents: row?.outCents ?? 0 };
+}
+
+/** Maanden (`YYYY-MM`) waarin transacties staan, de nieuwste eerst. */
+export function transactionMonths(db: DB): string[] {
+	return db
+		.selectDistinct({ month: sql<string>`substr(${transactions.date}, 1, 7)` })
+		.from(transactions)
+		.orderBy(desc(sql`substr(${transactions.date}, 1, 7)`))
+		.all()
+		.map((r) => r.month);
+}
 
 /** Bekende tegenpartijen, de vaakst gebruikte eerst. Voor het koppelen van snelinvoer. */
 export function knownCounterparties(db: DB, limit = 300): string[] {

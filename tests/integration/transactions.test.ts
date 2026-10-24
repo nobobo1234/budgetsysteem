@@ -14,6 +14,8 @@ import {
 	createTransaction,
 	deleteTransaction,
 	listTransactions,
+	summarizeTransactions,
+	transactionMonths,
 	updateTransaction,
 	ValidationError
 } from '../../src/lib/server/transactions.ts';
@@ -138,6 +140,32 @@ describe('handmatige transacties', () => {
 		expect(listTransactions(db, { q: 'lekker' })).toHaveLength(1);
 		expect(listTransactions(db, { q: "'; DROP TABLE transactions; --" })).toHaveLength(0);
 		expect(db.select().from(transactions).all()).toHaveLength(2);
+	});
+
+	it('vat het hele filter samen, los van de pagina, met in en uit apart', () => {
+		createTransaction(db, input({ amountCents: -1250 }), TODAY);
+		createTransaction(db, input({ amountCents: -750, categoryId: null }), TODAY);
+		createTransaction(db, input({ amountCents: 5000, date: '2026-09-30' }), TODAY);
+		expect(summarizeTransactions(db)).toEqual({ count: 3, inCents: 5000, outCents: -2000 });
+		expect(summarizeTransactions(db, { month: '2026-10' })).toEqual({
+			count: 2,
+			inCents: 0,
+			outCents: -2000
+		});
+		expect(summarizeTransactions(db, { categoryId: 'geen' }).count).toBe(1);
+		expect(listTransactions(db, { limit: 1 })).toHaveLength(1);
+		expect(summarizeTransactions(db, { q: 'bestaat niet' })).toEqual({
+			count: 0,
+			inCents: 0,
+			outCents: 0
+		});
+	});
+
+	it('geeft de maanden met transacties, de nieuwste eerst, zonder dubbele', () => {
+		createTransaction(db, input({ date: '2026-09-02' }), TODAY);
+		createTransaction(db, input({ date: '2026-10-20' }), TODAY);
+		createTransaction(db, input({ date: '2026-10-01' }), TODAY);
+		expect(transactionMonths(db)).toEqual(['2026-10', '2026-09']);
 	});
 });
 

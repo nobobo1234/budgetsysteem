@@ -23,7 +23,7 @@ export const load: PageServerLoad = () => ({
 	// Pinbetalingen uit een import van vóór de herkenning van winkelnamen
 	repairable: countCardCounterpartyRepairs(db()),
 	categories: db()
-		.select({ id: categories.id, name: categories.name })
+		.select({ id: categories.id, name: categories.name, group: categories.group })
 		.from(categories)
 		.where(eq(categories.archived, false))
 		.orderBy(asc(categories.sortOrder))

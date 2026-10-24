@@ -13,8 +13,7 @@
 
 	const lines = $derived(data.overview.lines.filter((l) => l.limitCents > 0 || l.spentCents > 0));
 	const hasBudget = $derived(data.overview.totalLimitCents > 0);
-	const categoryName = (id: string | null) =>
-		data.context.categories.find((c) => c.id === id)?.name ?? null;
+	const category = (id: string | null) => data.context.categories.find((c) => c.id === id);
 	const accountAlias = (id: string) => data.context.accounts.find((a) => a.id === id)?.alias ?? '';
 
 	// Optimistisch: wat in de wachtrij staat verschijnt meteen bovenaan
@@ -68,7 +67,8 @@
 							amountCents: item.payload.amountCents,
 							date: item.payload.date,
 							counterparty: item.payload.counterparty,
-							categoryName: categoryName(item.payload.categoryId),
+							categoryName: category(item.payload.categoryId)?.name ?? null,
+							categoryGroup: category(item.payload.categoryId)?.group ?? null,
 							accountAlias: accountAlias(item.payload.accountId),
 							status: item.payload.amountCents === 0 ? 'te_controleren' : 'bevestigd',
 							origAmountCents: item.payload.origAmountCents,

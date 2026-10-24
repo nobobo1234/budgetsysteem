@@ -8,6 +8,7 @@ const closed = [
 	['GET', '/budget'],
 	['GET', '/import'],
 	['GET', '/categorieen'],
+	['GET', '/regels'],
 	['GET', '/instellingen'],
 	['GET', '/__data.json'],
 	['GET', '/bestaat-niet'],

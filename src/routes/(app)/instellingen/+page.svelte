@@ -183,7 +183,8 @@
 
 	<section>
 		<h2>Overig</h2>
-		<a href="/categorieen">Categorieën en regels</a>
+		<a href="/categorieen">Categorieën</a>
+		<a href="/regels">Regels</a>
 		<form method="POST" action="?/logout">
 			<button class="button secondary">Uitloggen</button>
 		</form>
@@ -207,10 +208,16 @@
 	ul {
 		list-style: none;
 		margin: 0;
-		padding: 0;
+		padding: 0 16px;
 		display: grid;
-		gap: 12px;
 		width: 100%;
+		border-radius: var(--radius);
+		background: var(--surface);
+		box-shadow: var(--shadow);
+	}
+
+	ul:empty {
+		display: none;
 	}
 
 	li {
@@ -219,10 +226,26 @@
 		align-items: center;
 		gap: 12px;
 		flex-wrap: wrap;
+		padding: 12px 0;
+	}
+
+	li + li {
+		border-top: 1px solid var(--line);
 	}
 
 	li div {
 		display: grid;
+		min-width: 0;
+	}
+
+	li .muted {
+		font-size: 0.9rem;
+	}
+
+	li .button {
+		min-height: 40px;
+		padding: 0 14px;
+		font-size: 0.92rem;
 	}
 
 	.notice {

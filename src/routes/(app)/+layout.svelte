@@ -6,12 +6,25 @@
 
 	let { children } = $props();
 
+	// Eenvoudige lijn-iconen (24×24), zodat je de tabs ook herkent zonder te lezen
 	const links = [
-		{ href: '/', label: 'Overzicht' },
-		{ href: '/transacties', label: 'Transacties' },
-		{ href: '/budget', label: 'Budget' },
-		{ href: '/import', label: 'Import' },
-		{ href: '/instellingen', label: 'Meer' }
+		{ href: '/', label: 'Overzicht', icon: 'M4 10.5L12 4l8 6.5V20h-5v-6H9v6H4z' },
+		{
+			href: '/transacties',
+			label: 'Transacties',
+			icon: 'M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01'
+		},
+		{
+			href: '/budget',
+			label: 'Budget',
+			icon: 'M12 3a9 9 0 1 0 9 9h-9z M15 3.5A9 9 0 0 1 20.5 9H15z'
+		},
+		{ href: '/import', label: 'Import', icon: 'M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5M4 15v5h16v-5' },
+		{
+			href: '/instellingen',
+			label: 'Meer',
+			icon: 'M5 12h.01M12 12h.01M19 12h.01'
+		}
 	] as const;
 
 	const active = (href: string) =>
@@ -52,7 +65,19 @@
 
 	<nav aria-label="Hoofdmenu">
 		{#each links as link (link.href)}
-			<a href={link.href} aria-current={active(link.href) ? 'page' : undefined}>{link.label}</a>
+			<a href={link.href} aria-current={active(link.href) ? 'page' : undefined}>
+				<svg viewBox="0 0 24 24" aria-hidden="true">
+					<path
+						d={link.icon}
+						fill="none"
+						stroke="currentColor"
+						stroke-width={link.href === '/instellingen' ? 3 : 1.7}
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					/>
+				</svg>
+				<span>{link.label}</span>
+			</a>
 		{/each}
 	</nav>
 </div>
@@ -97,19 +122,30 @@
 	nav a {
 		display: grid;
 		place-items: center;
-		min-height: var(--tap);
+		align-content: center;
+		gap: 2px;
+		min-height: 52px;
 		border-radius: var(--radius-sm);
-		padding: 0 2px;
+		padding: 4px 2px;
 		color: var(--muted);
 		text-decoration: none;
-		font-size: 0.78rem;
+		font-size: 0.74rem;
 		font-weight: 550;
 		white-space: nowrap;
+		transition: transform 160ms var(--ease-spring);
+	}
+
+	nav a:active {
+		transform: scale(0.94);
+	}
+
+	nav svg {
+		width: 22px;
+		height: 22px;
 	}
 
 	nav a[aria-current='page'] {
-		color: var(--text);
-		background: var(--surface-2);
+		color: var(--accent-strong);
 	}
 
 	@container (min-width: 900px) {
@@ -126,8 +162,21 @@
 		}
 
 		nav a {
+			display: flex;
+			gap: 8px;
+			min-height: var(--tap);
 			padding: 0 16px;
 			font-size: 0.95rem;
+		}
+
+		nav svg {
+			width: 18px;
+			height: 18px;
+		}
+
+		nav a[aria-current='page'] {
+			color: var(--text);
+			background: var(--surface-2);
 		}
 
 		main {

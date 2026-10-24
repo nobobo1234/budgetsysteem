@@ -17,9 +17,15 @@
 	<div class="head">
 		<h1>Budget {formatMonth(o.month)}</h1>
 		<nav class="months" aria-label="Maand">
-			<a href="?maand={data.previous}">Vorige</a>
-			{#if !data.isCurrent}<a href="/budget">Deze maand</a>{/if}
-			<a href="?maand={data.next}">Volgende</a>
+			<a class="step" href="?maand={data.previous}">
+				<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M12.5 4.5L7 10l5.5 5.5" /></svg>
+				Vorige
+			</a>
+			{#if !data.isCurrent}<a class="step" href="/budget">Deze maand</a>{/if}
+			<a class="step" href="?maand={data.next}">
+				Volgende
+				<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7.5 4.5L13 10l-5.5 5.5" /></svg>
+			</a>
 		</nav>
 	</div>
 
@@ -78,8 +84,9 @@
 						>
 							<input type="hidden" name="month" value={o.month} />
 							<input type="hidden" name="categoryId" value={line.categoryId} />
-							<label>
+							<label class="money">
 								<span class="visually-hidden">Limiet {line.name}</span>
+								<span class="prefix" aria-hidden="true">€</span>
 								<input
 									name="limit"
 									inputmode="decimal"
@@ -117,13 +124,64 @@
 
 	.months {
 		display: flex;
-		gap: 16px;
 	}
 
-	.months a {
-		min-height: var(--tap);
+	.months {
+		gap: 8px;
+		flex-wrap: wrap;
+	}
+
+	.step {
 		display: inline-flex;
 		align-items: center;
+		gap: 4px;
+		min-height: 40px;
+		padding: 0 14px;
+		border-radius: 999px;
+		background: var(--surface-2);
+		color: var(--text);
+		font-weight: 550;
+		text-decoration: none;
+		transition: transform 160ms var(--ease-spring);
+	}
+
+	.step:active {
+		transform: scale(0.96);
+	}
+
+	.step svg {
+		width: 18px;
+		height: 18px;
+		fill: none;
+		stroke: currentColor;
+		stroke-width: 1.8;
+		stroke-linecap: round;
+		stroke-linejoin: round;
+	}
+
+	.step:first-child {
+		padding-left: 8px;
+	}
+
+	.step:last-child {
+		padding-right: 8px;
+	}
+
+	.money {
+		position: relative;
+	}
+
+	.prefix {
+		position: absolute;
+		left: 12px;
+		top: 50%;
+		translate: 0 -50%;
+		color: var(--muted);
+		pointer-events: none;
+	}
+
+	form input[name='limit'] {
+		padding-left: 28px;
 	}
 
 	.totals {

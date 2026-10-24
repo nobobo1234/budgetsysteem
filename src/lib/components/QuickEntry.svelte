@@ -1,17 +1,25 @@
 <script lang="ts">
 	import { SvelteSet } from 'svelte/reactivity';
+	import Select from '#lib/components/Select.svelte';
+	import { groupColor } from '#lib/categoryColor.ts';
 	import { formatShortDate, toIsoDate } from '#lib/dates.ts';
 	import { centsToInput, formatCents, parseAmount } from '#lib/money.ts';
 	import { enqueue, type QueuedTransaction } from '#lib/offline/queue.ts';
 	import { MAX_INPUT, parseQuickEntry, type SpanKind } from '#lib/quickentry/parser.ts';
-	import { resolveEntry, type ResolveContext } from '#lib/quickentry/resolve.ts';
+	import {
+		resolveEntry,
+		type AccountRef,
+		type CategoryRef,
+		type ResolveContext
+	} from '#lib/quickentry/resolve.ts';
 
 	let {
 		context,
 		onsaved
 	}: {
-		context: ResolveContext & {
-			accounts: (ResolveContext['accounts'][number] & { name: string })[];
+		context: Omit<ResolveContext, 'accounts' | 'categories'> & {
+			accounts: readonly (AccountRef & { name: string })[];
+			categories: readonly (CategoryRef & { group?: string })[];
 		};
 		onsaved: (item: QueuedTransaction) => void;
 	} = $props();
@@ -49,6 +57,17 @@
 		if (pos < value.length) out.push({ start: pos, text: value.slice(pos), kind: null });
 		return out;
 	});
+
+	const categoryOptions = $derived([
+		{ value: '', label: 'Geen categorie', dot: null },
+		...context.categories.map((c) => ({
+			value: c.id,
+			label: c.name,
+			group: c.group,
+			dot: groupColor(c.group)
+		}))
+	]);
+	const accountOptions = $derived(context.accounts.map((a) => ({ value: a.id, label: a.name })));
 
 	const spanOf = (kind: SpanKind) => parsed.spans.find((s) => s.kind === kind);
 	const canSave = $derived(parsed.amountCents !== null && accountId !== null && !saving);
@@ -171,27 +190,25 @@
 		{/if}
 
 		{#if parsed.amountCents !== null || parsed.category}
-			<label class="chip categorie">
-				<span class="visually-hidden">Categorie</span>
-				<select
+			<span class="chip categorie">
+				<Select
+					variant="chip"
+					label="Categorie"
 					value={categoryId ?? ''}
-					onchange={(e) => (categoryOverride = e.currentTarget.value || null)}
-				>
-					<option value="">Geen categorie</option>
-					{#each context.categories as c (c.id)}
-						<option value={c.id}>{c.name}</option>
-					{/each}
-				</select>
-			</label>
+					options={categoryOptions}
+					onchange={(v) => (categoryOverride = v || null)}
+				/>
+			</span>
 
-			<label class="chip rekening">
-				<span class="visually-hidden">Rekening</span>
-				<select value={accountId ?? ''} onchange={(e) => (accountOverride = e.currentTarget.value)}>
-					{#each context.accounts as a (a.id)}
-						<option value={a.id}>{a.name}</option>
-					{/each}
-				</select>
-			</label>
+			<span class="chip rekening">
+				<Select
+					variant="chip"
+					label="Rekening"
+					value={accountId ?? ''}
+					options={accountOptions}
+					onchange={(v) => (accountOverride = v)}
+				/>
+			</span>
 		{/if}
 
 		{#if parsed.dateExplicit}
@@ -336,14 +353,6 @@
 	button.chip {
 		padding-right: 12px;
 		cursor: pointer;
-	}
-
-	.chip select {
-		min-height: var(--tap);
-		border: 0;
-		background: transparent;
-		padding: 0 8px 0 0;
-		font-size: 0.95rem;
 	}
 
 	.x {
