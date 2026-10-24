@@ -2,6 +2,7 @@ import { XMLParser, XMLValidator } from 'fast-xml-parser';
 import { isIsoDate } from '../../dates.ts';
 import { parseDecimal } from '../../money.ts';
 import { normalizeIban } from '../../text.ts';
+import { counterpartyOrMerchant } from './card.ts';
 import { ImportError, MAX_IMPORT_BYTES, type ImportRecord } from './types.ts';
 
 // CAMT.053 (ISO 20022 bankafschrift), versies 001.02 tot en met 001.08.
@@ -151,14 +152,16 @@ export function parseCamt053(xml: string): ImportRecord[] {
 				const description = ustrd || str(path(tx, 'AddtlTxInf')) || entryInfo;
 				const ref = str(path(tx, 'Refs', 'AcctSvcrRef')) || entryRef;
 				const counterIban = normalizeIban(str(partyAccount));
+				const text = description.slice(0, 500);
 
 				records.push({
 					accountIban,
 					date: day,
 					amountCents: debit ? -partAmount.cents : partAmount.cents,
-					counterparty: partyName(party).slice(0, 140),
+					// Pinbetalingen hebben geen RltdPties; de winkel staat dan in de omschrijving
+					counterparty: counterpartyOrMerchant(partyName(party), text).slice(0, 140),
 					counterIban: counterIban || null,
-					description: description.slice(0, 500),
+					description: text,
 					bankReference: ref ? `${accountIban}:${ref}${splitDetails ? `#${index + 1}` : ''}` : null
 				});
 			});

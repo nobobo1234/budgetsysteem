@@ -8,6 +8,8 @@ import { categories, importBatches, rules } from '#lib/server/db/schema.ts';
 import { ImportError, parseBankFile } from '#lib/server/import/index.ts';
 import {
 	applyRulesToUncategorized,
+	countCardCounterpartyRepairs,
+	fillCardCounterparties,
 	importRecords,
 	uncategorizedGroups
 } from '#lib/server/import/importer.ts';
@@ -18,6 +20,8 @@ import type { Actions, PageServerLoad } from './$types';
 export const load: PageServerLoad = () => ({
 	batches: db().select().from(importBatches).orderBy(desc(importBatches.createdAt)).limit(5).all(),
 	uncategorized: uncategorizedGroups(db()),
+	// Pinbetalingen uit een import van vóór de herkenning van winkelnamen
+	repairable: countCardCounterpartyRepairs(db()),
 	categories: db()
 		.select({ id: categories.id, name: categories.name })
 		.from(categories)
@@ -48,6 +52,11 @@ export const actions: Actions = {
 			if (e instanceof ImportError) return fail(400, { message: e.message });
 			throw e;
 		}
+	},
+	repair: () => {
+		const repaired = fillCardCounterparties(db());
+		log.info(repaired, 'tegenpartijen van pinbetalingen ingevuld');
+		return { repaired };
 	},
 	rule: async ({ request }) => {
 		const parsed = ruleSchema.safeParse(Object.fromEntries(await request.formData()));
