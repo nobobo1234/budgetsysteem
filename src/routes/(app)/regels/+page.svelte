@@ -54,6 +54,8 @@
 
 	async function openForm() {
 		adding = true;
+		// Op een telefoon niet meteen het toetsenbord openen: dat bedekt de keuzelijsten
+		if (!matchMedia('(pointer: fine)').matches) return;
 		await tick();
 		document.querySelector<HTMLInputElement>('input[name="pattern"]')?.focus();
 	}

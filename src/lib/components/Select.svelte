@@ -17,6 +17,7 @@
 	// bereik van je duim. Lange lijsten krijgen een zoekveld. Het formulier krijgt de waarde
 	// via een verborgen invoerveld, dus `required` en gewone formulieren werken gewoon.
 	import { tick } from 'svelte';
+	import { keyboardInset } from '#lib/viewport.ts';
 
 	let {
 		options,
@@ -57,6 +58,8 @@
 
 	let open = $state(false);
 	let sheet = $state(false);
+	// Ruimte boven het schermtoetsenbord, zodat de sheet niet achter het toetsenbord valt
+	let lift = $state({ bottom: 0, room: 0 });
 	let query = $state('');
 	let active = $state(-1);
 	let place = $state<{ top?: number; bottom?: number; left: number; width: number; max: number }>({
@@ -83,6 +86,22 @@
 			else out.push({ group: option.group, items: [{ option, index }] });
 		});
 		return out;
+	});
+
+	// Zolang de sheet open is: meebewegen met het toetsenbord (visualViewport). Een effect,
+	// omdat dit een abonnement op iets buiten Svelte is.
+	$effect(() => {
+		const vv = window.visualViewport;
+		if (!open || !sheet || !vv) return;
+		const fit = () => (lift = keyboardInset(innerHeight, vv));
+		fit();
+		vv.addEventListener('resize', fit);
+		vv.addEventListener('scroll', fit);
+		return () => {
+			vv.removeEventListener('resize', fit);
+			vv.removeEventListener('scroll', fit);
+			lift = { bottom: 0, room: 0 };
+		};
 	});
 
 	function measure() {
@@ -290,7 +309,12 @@
 		popover="auto"
 		class={['popup', sheet && 'sheet']}
 		style:top={sheet || place.top === undefined ? undefined : `${place.top}px`}
-		style:bottom={sheet || place.bottom === undefined ? undefined : `${place.bottom}px`}
+		style:bottom={sheet
+			? `${lift.bottom}px`
+			: place.bottom === undefined
+				? undefined
+				: `${place.bottom}px`}
+		style:--room={sheet && lift.room ? `${lift.room - 16}px` : undefined}
 		style:left={sheet ? undefined : `${place.left}px`}
 		style:width={sheet ? undefined : `${place.width}px`}
 		style:--max="{place.max}px"
@@ -509,7 +533,8 @@
 	.popup.sheet {
 		inset: auto 0 0 0;
 		width: 100%;
-		max-height: min(75dvh, 34rem);
+		/* --room: hoogte boven het schermtoetsenbord, als dat open is */
+		max-height: min(75dvh, 34rem, var(--room, 100dvh));
 		padding: 8px 8px calc(12px + env(safe-area-inset-bottom));
 		border-radius: 20px 20px 0 0;
 		border-bottom: 0;
