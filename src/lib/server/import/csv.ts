@@ -40,7 +40,7 @@ export function parseCsv(text: string, delimiter: string): string[][] {
 	return rows;
 }
 
-function detectDelimiter(firstLine: string): string {
+export function detectDelimiter(firstLine: string): string {
 	let commas = 0;
 	let semicolons = 0;
 	let quoted = false;

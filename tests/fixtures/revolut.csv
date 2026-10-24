@@ -1,0 +1,20 @@
+Type,Product,Startdatum,Datum voltooid,Beschrijving,Bedrag,Kosten,Valuta,Status,Saldo
+Geld toevoegen,Betaalrekening,2026-01-30 10:00:00,2026-01-30 10:00:05,Opwaardering via Apple Pay,500.00,0.00,EUR,VOLTOOID,500.00
+Wisselen,Betaalrekening,2026-02-01 09:00:00,2026-02-01 09:00:00,Gewisseld naar SEK,-200.00,0.00,EUR,VOLTOOID,300.00
+Wisselen,Betaalrekening,2026-02-01 09:00:00,2026-02-01 09:00:00,Gewisseld van EUR,2300.00,0.00,SEK,VOLTOOID,2300.00
+Kaartbetaling,Betaalrekening,2026-02-03 12:00:00,2026-02-04 08:00:00,ICA Maxi,-460.00,0.00,SEK,VOLTOOID,1840.00
+Kaartbetaling,Betaalrekening,2026-02-05 15:30:00,2026-02-06 07:00:00,"Pressbyrån, Centralen",-23.00,0.00,SEK,VOLTOOID,1817.00
+Kaartbetaling,Betaalrekening,2026-02-06 18:00:00,2026-02-06 18:05:00,SJ,-100.00,0.00,SEK,ONGEDAAN GEMAAKT,
+Wisselen,Betaalrekening,2026-02-07 11:00:00,2026-02-07 11:00:00,Gewisseld naar SEK,-100.00,0.00,EUR,VOLTOOID,200.00
+Wisselen,Betaalrekening,2026-02-07 11:00:00,2026-02-07 11:00:00,Gewisseld van EUR,1150.00,10.00,SEK,VOLTOOID,2957.00
+Kaartterugbetaling,Betaalrekening,2026-02-08 09:00:00,2026-02-08 09:00:00,ICA Maxi,46.00,0.00,SEK,VOLTOOID,3003.00
+Overschrijving,Betaalrekening,2026-03-01 20:00:00,2026-03-01 20:00:01,Naar Anna,-300.00,5.00,SEK,VOLTOOID,2698.00
+Wisselen,Betaalrekening,2026-07-01 10:00:00,2026-07-01 10:00:00,Gewisseld naar EUR,-2698.00,0.00,SEK,VOLTOOID,0.00
+Wisselen,Betaalrekening,2026-07-01 10:00:00,2026-07-01 10:00:00,Gewisseld van SEK,230.00,0.00,EUR,VOLTOOID,430.00
+Kaartbetaling,Betaalrekening,2026-07-02 14:00:00,2026-07-02 18:00:00,Amazon,-20.00,0.50,EUR,VOLTOOID,409.50
+In rekening brengen,Betaalrekening,2026-07-03 00:00:00,2026-07-03 00:00:00,Premium-abonnement,0.00,7.99,EUR,VOLTOOID,401.51
+Kaartbetaling,Betaalrekening,2026-07-04 08:00:00,2026-07-04 08:00:10,Spotify,-10.99,0.00,EUR,VOLTOOID,390.52
+Kaartbetaling,Betaalrekening,2026-07-04 08:00:00,2026-07-04 08:00:10,Spotify,-10.99,0.00,EUR,VOLTOOID,379.53
+Kaartbetaling,Betaalrekening,2026-07-05 09:00:00,2026-07-05 09:15:00,Kaneelbulle,-4.00,0.00,EUR,VOLTOOID,372.53
+Kaartbetaling,Betaalrekening,2026-07-05 09:00:00,2026-07-05 09:15:00,Koffie,-3.00,0.00,EUR,VOLTOOID,376.53
+Kaartbetaling,Betaalrekening,2026-07-06 12:00:00,,Albert Heijn,-12.00,0.00,EUR,IN BEHANDELING,

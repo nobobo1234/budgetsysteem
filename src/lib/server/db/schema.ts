@@ -42,7 +42,7 @@ export const categories = sqliteTable('categories', {
 
 export const importBatches = sqliteTable('import_batches', {
 	id: id(),
-	format: text('format', { enum: ['camt053', 'csv'] }).notNull(),
+	format: text('format', { enum: ['camt053', 'csv', 'revolut'] }).notNull(),
 	newCount: integer('new_count').notNull(),
 	duplicateCount: integer('duplicate_count').notNull(),
 	periodStart: text('period_start'),

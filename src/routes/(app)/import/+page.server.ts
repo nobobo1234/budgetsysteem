@@ -1,6 +1,7 @@
 import { fail } from '@sveltejs/kit';
 import { asc, desc, eq } from 'drizzle-orm';
 import { z } from 'zod';
+import { isIsoDate } from '#lib/dates.ts';
 import { normalizeCounterparty } from '#lib/text.ts';
 import { recordChange } from '#lib/server/audit.ts';
 import { db } from '#lib/server/db/index.ts';
@@ -30,6 +31,9 @@ export const load: PageServerLoad = () => ({
 		.all()
 });
 
+/** Leeg betekent: alles importeren */
+const fromSchema = z.union([z.literal(''), z.string().refine(isIsoDate)]);
+
 const ruleSchema = z.object({
 	pattern: z.string().trim().min(2).max(100),
 	categoryId: z.uuid()
@@ -43,9 +47,11 @@ export const actions: Actions = {
 			return fail(400, { message: 'Kies een bestand.' });
 		if (file.size > MAX_IMPORT_BYTES)
 			return fail(413, { message: 'Het bestand is groter dan 20 MB.' });
+		const from = fromSchema.safeParse(form.get('from') ?? '');
+		if (!from.success) return fail(400, { message: 'Ongeldige begindatum.' });
 		try {
 			const { format, records } = parseBankFile(new Uint8Array(await file.arrayBuffer()));
-			const summary = importRecords(db(), records, format);
+			const summary = importRecords(db(), records, format, { from: from.data || undefined });
 			log.info({ format, new: summary.newCount, duplicates: summary.duplicateCount }, 'import');
 			return { summary };
 		} catch (e) {

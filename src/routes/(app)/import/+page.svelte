@@ -50,8 +50,9 @@
 	<div class="intro">
 		<h1>Importeren</h1>
 		<p class="muted">
-			Download in Mijn SNS je transacties als CAMT.053 (of CSV) en kies het bestand hier. Dezelfde
-			export twee keer importeren levert niets dubbel op.
+			Download in Mijn SNS je transacties als CAMT.053 (of CSV), of in Revolut een CSV-afschrift in
+			het Nederlands met alle valuta, en kies het bestand hier. Dezelfde export twee keer importeren
+			levert niets dubbel op.
 		</p>
 	</div>
 
@@ -114,8 +115,18 @@
 				<span class="muted num">{kb(file.size)} · tik om een ander bestand te kiezen</span>
 			{:else}
 				<span class="title">Kies een bankbestand</span>
-				<span class="muted">Of sleep het hierheen. CAMT.053 (.xml) of CSV, tot 20 MB.</span>
+				<span class="muted"
+					>Of sleep het hierheen. CAMT.053 (.xml) of CSV van SNS of Revolut, tot 20 MB.</span
+				>
 			{/if}
+		</label>
+		<label class="field">
+			<span>Importeren vanaf <span class="muted">(optioneel)</span></span>
+			<input type="date" name="from" />
+			<span class="muted hint"
+				>Het hele bestand wordt gelezen, maar alleen boekingen vanaf deze datum komen erin. Handig
+				bij een Revolut-export vanaf het begin, voor de juiste wisselkoersen.</span
+			>
 		</label>
 		<button class="button" disabled={uploading}
 			>{uploading ? 'Bezig met importeren…' : 'Importeren'}</button
@@ -137,6 +148,12 @@
 					<dt>Al bekend</dt>
 					<dd class="num">{summary.duplicateCount}</dd>
 				</div>
+				{#if summary.earlierCount > 0}
+					<div>
+						<dt>Van vóór de begindatum</dt>
+						<dd class="num">{summary.earlierCount}</dd>
+					</div>
+				{/if}
 				{#if summary.periodStart && summary.periodEnd}
 					<div class="period">
 						<dt>Periode</dt>
@@ -226,7 +243,7 @@
 						<div>
 							<strong>{fullDate(b.createdAt.slice(0, 10))}</strong>
 							<span class="muted">
-								{b.format === 'camt053' ? 'CAMT.053' : 'CSV'}
+								{b.format === 'camt053' ? 'CAMT.053' : b.format === 'revolut' ? 'Revolut' : 'CSV'}
 								{#if b.periodStart && b.periodEnd}
 									· {fullDate(b.periodStart)} tot {fullDate(b.periodEnd)}{/if}
 							</span>
@@ -257,6 +274,21 @@
 	.upload {
 		display: grid;
 		gap: 12px;
+	}
+
+	.field {
+		display: grid;
+		gap: 6px;
+		justify-items: start;
+	}
+
+	.field > span:first-child {
+		font-weight: 550;
+		font-size: 0.95rem;
+	}
+
+	.hint {
+		font-size: 0.88rem;
 	}
 
 	.repair {
