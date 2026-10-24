@@ -1,0 +1,89 @@
+name: TS 7-check
+
+# Maandelijks: kan TypeScript 7 erin, en krijgt 6.x nog patches? Dependabot negeert de majors
+# van typescript; deze check meldt via een issue wanneer de upgrade kan of nodig wordt.
+on:
+  schedule:
+    - cron: '0 6 1 * *'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  # Probeert de upgrade echt. Draait nieuwe third-party code, dus zonder schrijfrechten.
+  # Geen pnpm-cache: deze job wijzigt de dependencies en mag de cache van CI niet vullen.
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    outputs:
+      ready: ${{ steps.upgrade.outputs.ready }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - run: pnpm install --frozen-lockfile
+      # eslint los in plaats van `pnpm lint`: pnpm herschrijft package.json, en Prettier
+      # hoort niet over de TS-versie te beslissen
+      - name: Upgrade proberen
+        id: upgrade
+        run: | # zizmor: ignore[adhoc-packages]
+          ok=true
+          # Buiten de lockfile installeren is hier het doel; minimumReleaseAge geldt nog steeds
+          pnpm add -D 'typescript@^7' typescript-eslint@latest svelte-check@latest || ok=false
+          if $ok \
+            && pnpm exec eslint . \
+            && pnpm check \
+            && pnpm build \
+            && pnpm test:unit; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  report:
+    needs: probe
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      READY: ${{ needs.probe.outputs.ready }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Issue als de upgrade kan
+        if: env.READY == 'true'
+        run: |
+          titel='TypeScript 7-upgrade kan'
+          open=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "in:title \"$titel\"" --json number --jq length)
+          if [ "$open" = 0 ]; then
+            gh issue create -R "$GITHUB_REPOSITORY" --title "$titel" --body "Met TypeScript 7 en de nieuwste typescript-eslint en svelte-check slagen eslint, \`pnpm check\`, de build en de unit-tests ($RUN_URL).
+
+          Volgende stap: de upgrade als eigen PR, en de ignore-regel voor majors van \`typescript\` uit \`.github/dependabot.yml\` halen."
+          fi
+      - name: Issue als TypeScript 6.x stilvalt
+        run: |
+          laatste=$(gh release list -R microsoft/TypeScript --limit 100 --exclude-drafts --exclude-pre-releases \
+            --json tagName,publishedAt \
+            --jq '[.[] | select(.tagName | test("^v6\\.[0-9]+\\.[0-9]+$"))] | max_by(.publishedAt) // empty | "\(.tagName) \(.publishedAt)"')
+          if [ -z "$laatste" ]; then
+            echo "::warning::Geen 6.x-release gevonden in microsoft/TypeScript"
+            exit 0
+          fi
+          versie=${laatste% *}
+          datum=${laatste#* }
+          dagen=$(( ($(date +%s) - $(date -d "$datum" +%s)) / 86400 ))
+          echo "Laatste 6.x-release: $versie, $dagen dagen geleden"
+          titel='TypeScript 6.x krijgt geen patches meer'
+          open=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "in:title \"$titel\"" --json number --jq length)
+          if [ "$dagen" -gt 180 ] && [ "$open" = 0 ]; then
+            gh issue create -R "$GITHUB_REPOSITORY" --title "$titel" --body "De laatste 6.x-release ($versie) is $dagen dagen oud ($RUN_URL). Security-fixes voor 6.x zijn daarmee niet meer zeker.
+
+          Kan TS 7 nog niet (zie de stap \"Upgrade proberen\" in de run), kijk dan wat de upgrade blokkeert."
+          fi
