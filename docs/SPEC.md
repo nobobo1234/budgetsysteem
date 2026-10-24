@@ -20,7 +20,7 @@ Alle keuzes liggen vast; wat nog aangeleverd moet worden staat bij Open punten.
 | Gebruikers | Alleen jij |
 | Bank | SNS, eenmalige import van de historie (CAMT.053), daarna zelf aanvullen |
 | Revolut | Eigen rekening in de app; opwaarderen vanuit SNS telt als interne overboeking, niet als uitgave |
-| Valuta | Alles in euro; bij dollar via Revolut optioneel het oorspronkelijke bedrag erbij |
+| Valuta | Alles in euro; bij vreemde valuta het oorspronkelijke bedrag erbij. Een Revolut-import rekent om tegen je eigen wisselkoers |
 | Budget | Simpele limiet per categorie per maand; vaste lasten die niet elke maand komen worden per maand gereserveerd |
 | Categorieën | Startlijst door Claude bepaald, zelf aan te passen (zie Datamodel) |
 | Toegang | Publiek via finance.mijndomein.nl achter je bestaande nginx, met passkeys en sessies van 30 dagen per apparaat; SSH alleen via Tailscale |
@@ -181,13 +181,29 @@ De historie komt binnen via één CAMT.053-export van SNS; daarna blijft importe
 
 - Ontdubbelen op de bankreferentie; zonder referentie op een hash van datum, bedrag, tegen-IBAN en omschrijving. Dezelfde export twee keer uploaden levert dus niets dubbel op.
 - Na de import een overzicht: aantal nieuw, aantal al bekend, periode, en welke tegenpartijen nog geen categorie hebben.
+- Optioneel een begindatum: het hele bestand wordt gelezen (en bij Revolut voor de wisselkoersen gebruikt), maar alleen boekingen vanaf die datum worden geïmporteerd. Zo kun je een Revolut-export vanaf het begin gebruiken zonder de oudere historie in de app te krijgen.
 - De categorieregels worden meteen uit de historie voorgesteld: per tegenpartij één klik om een regel te maken.
 - Een latere import wordt tegen je handmatige invoer gehouden via de koppellijst (zie Bonnetjes en koppelen), zodat niets dubbel telt.
 - Terugboekingen (`RvslInd`) en het end-to-end-kenmerk worden meegelezen, zodat een storno aan de oorspronkelijke boeking gekoppeld kan worden (zie Terugboekingen en retouren).
 
-**Revolut.** Opwaarderingen vanuit SNS naar Revolut worden herkend als interne overboeking en tellen niet mee als uitgave. De echte uitgaven staan bij Revolut; zonder Revolut-export ontbreken die in de historie. Revolut kan afschriften exporteren; het formaat controleer ik als je er één hebt.
+**Revolut.** Opwaarderingen vanuit SNS naar Revolut worden herkend als interne overboeking en tellen niet mee als uitgave. De echte uitgaven staan bij Revolut, en die komen binnen via het CSV-afschrift van Revolut: in het Nederlands, alle valuta in één bestand. De import herkent het bestand aan de kolommen `Type, Product, Startdatum, Datum voltooid, Beschrijving, Bedrag, Kosten, Valuta, Status, Saldo`.
 
-**Valuta.** Je voert het eurobedrag in dat Revolut afschreef; het dollarbedrag is optioneel. Snelinvoer herkent `$20` als dollar en vraagt dan om het eurobedrag, of laat het later invullen (status "te controleren").
+- Alleen `VOLTOOID` telt. `ONGEDAAN GEMAAKT` en `IN BEHANDELING` worden overgeslagen; een lopende boeking komt met een latere export alsnog binnen.
+- `Kaartbetaling`, `Kaartterugbetaling`, `Overschrijving` en `In rekening brengen` zijn gewone boekingen. `Geld toevoegen` is een interne overboeking. `Wisselen` wordt niet geboekt (zie Valuta).
+- Het bedrag is `Bedrag − Kosten`, zodat transactie- en wisselkosten meetellen. De datum is de startdatum: wanneer je betaalde.
+- Per valuta moet gelden: vorig saldo + Bedrag − Kosten = Saldo. Klopt dat niet, of staat er een onbekend type, onbekende status of ander product dan `Betaalrekening` in, dan wordt het hele bestand geweigerd.
+- De export heeft geen transactie-ID. De referentie is een hash van startdatum (op de seconde), type, valuta, bedrag en omschrijving, met een volgnummer voor identieke boekingen. Overlappende exports leveren zo niets dubbel op.
+- De export noemt geen IBAN; de boekingen komen op de Revolut-rekening in de app. Zijn er meerdere, dan weigert de import.
+
+**Valuta.** Bij handmatige invoer voer je het eurobedrag in dat Revolut afschreef; het dollarbedrag is optioneel. Snelinvoer herkent `$20` als dollar en vraagt dan om het eurobedrag, of laat het later invullen (status "te controleren").
+
+Bij een Revolut-import rekent de app vreemde valuta (zoals kronen tijdens het halfjaar in Zweden) om tegen de koers die je zelf betaalde, zonder externe koersbron:
+
+- Elke wissel is een paar boekingen met dezelfde startdatum. De euro's die eraf gingen, wisselkosten inbegrepen, worden de kostprijs van de kronen die erbij kwamen. Wissel je meerdere valuta in dezelfde seconde naar één valuta (alles terug naar euro), dan telt die groep als geheel. Gaan wissels in dezelfde seconde naar verschillende valuta, dan is niet te zien wat bij wat hoort en wordt het bestand geweigerd.
+- Per valuta houdt de import een potje bij met de hoeveelheid en de kostprijs. Een betaling of terugbetaling krijgt de gemiddelde kostprijs als eurobedrag; het oorspronkelijke bedrag gaat in `orig_bedrag_cent` en `orig_valuta`.
+- Wissels zelf zijn geen uitgave en worden niet geboekt. Wissel je terug naar euro, dan wordt alleen het verschil met de kostprijs geboekt, als `Koersverschil`.
+- Begint de export pas na de wissel waarmee je een valuta kocht, dan krijgt dat beginsaldo de koers van de eerste wissel in het bestand en staan de betalingen eruit op "te controleren". Is er voor een valuta helemaal geen wissel, dan wordt het bestand geweigerd. Exporteer daarom vanaf het begin, eventueel met een begindatum voor de import.
+- Zo is de som van de eurobedragen gelijk aan wat er netto naar Revolut ging, min wat er nog op staat.
 
 ## Dagelijks gebruik
 
@@ -719,7 +735,7 @@ Voor fase 1 zijn alleen de repo en de SNS-export nodig; die lever je aan in Clau
 - [x] Stack: SvelteKit + SQLite, met GSAP voor animaties.
 - [ ] GitHub-repo koppelen in Claude Code.
 - [ ] SNS-export (CAMT.053) aanleveren in Claude Code. Een geanonimiseerde kopie wordt de test-fixture; de echte blijft buiten git.
-- [ ] Revolut-historie: wel of niet een export importeren. Zonder ontbreken je Revolut-uitgaven van voor de start.
+- [x] Revolut-historie: importeren via het CSV-afschrift, met omrekening tegen de eigen wisselkoers (zie Import).
 - [ ] Bonnetjes verzamelen voor het testplan (25 tot 30).
 - [x] Display-font en accentkleur: Fraunces en Inter met smaragd.
 

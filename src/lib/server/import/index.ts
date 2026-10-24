@@ -1,10 +1,11 @@
 import { parseCamt053 } from './camt.ts';
 import { parseSnsCsv } from './csv.ts';
-import { ImportError, MAX_IMPORT_BYTES, type ImportRecord } from './types.ts';
+import { isRevolutCsv, parseRevolutCsv } from './revolut.ts';
+import { ImportError, MAX_IMPORT_BYTES, type ImportFormat, type ImportRecord } from './types.ts';
 
-/** Herkent CAMT.053 (XML) of de SNS-CSV aan de inhoud, niet aan de bestandsnaam. */
+/** Herkent CAMT.053 (XML), de SNS-CSV of de Revolut-CSV aan de inhoud, niet aan de bestandsnaam. */
 export function parseBankFile(bytes: Uint8Array): {
-	format: 'camt053' | 'csv';
+	format: ImportFormat;
 	records: ImportRecord[];
 } {
 	if (bytes.byteLength > MAX_IMPORT_BYTES)
@@ -14,6 +15,7 @@ export function parseBankFile(bytes: Uint8Array): {
 	if (text.trimStart().startsWith('<')) return { format: 'camt053', records: parseCamt053(text) };
 	// Oudere CSV-exports zijn soms Windows-1252 in plaats van UTF-8
 	if (text.includes('�')) text = new TextDecoder('windows-1252').decode(bytes);
+	if (isRevolutCsv(text)) return { format: 'revolut', records: parseRevolutCsv(text) };
 	return { format: 'csv', records: parseSnsCsv(text) };
 }
 

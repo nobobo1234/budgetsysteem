@@ -15,7 +15,7 @@ import {
 } from '../db/schema.ts';
 import { INTERNAL_TRANSFER } from '../db/seed.ts';
 import { mccCategory, parseCardPayment } from './card.ts';
-import { ImportError, type ImportRecord } from './types.ts';
+import { ImportError, type ImportFormat, type ImportRecord } from './types.ts';
 
 export interface UncategorizedGroup {
 	/** Voorstel voor het regelpatroon: de genormaliseerde tegenpartij */
@@ -31,6 +31,8 @@ export interface ImportSummary {
 	batchId: string;
 	newCount: number;
 	duplicateCount: number;
+	/** Boekingen van vóór de gekozen begindatum, niet geïmporteerd */
+	earlierCount: number;
 	periodStart: string | null;
 	periodEnd: string | null;
 	uncategorized: UncategorizedGroup[];
@@ -46,6 +48,35 @@ function dedupeHash(r: ImportRecord, occurrence: number): string {
 			)
 		)
 		.digest('hex');
+}
+
+function accountKey(r: ImportRecord): string {
+	return r.accountKind ?? r.accountIban;
+}
+
+/** De Revolut-rekening; de export noemt geen IBAN, dus er mag er maar één zijn. */
+function revolutAccount(tx: Conn): string {
+	const found = tx.select().from(accounts).where(eq(accounts.kind, 'revolut')).all();
+	if (found.length > 1) {
+		throw new ImportError(
+			'Er zijn meerdere Revolut-rekeningen; de export zegt niet bij welke hij hoort.'
+		);
+	}
+	if (found[0]) return found[0].id;
+	const taken = new Set(
+		tx
+			.select({ alias: accounts.alias })
+			.from(accounts)
+			.all()
+			.map((a) => a.alias)
+	);
+	let alias = 'rev';
+	for (let n = 2; taken.has(alias); n++) alias = `rev${n}`;
+	return tx
+		.insert(accounts)
+		.values({ name: 'Revolut', kind: 'revolut', alias })
+		.returning({ id: accounts.id })
+		.get().id;
 }
 
 /** Een bankreferentie die in hetzelfde bestand bij verschillende boekingen hoort, is niet uniek. */
@@ -66,19 +97,29 @@ function unreliableReferences(records: ImportRecord[]): Set<string> {
  * Importeert boekingen als één database-transactie: bij een fout rolt alles terug.
  * Ontdubbelt op bankreferentie, en zonder (betrouwbare) referentie op een hash van
  * rekening, datum, bedrag, tegen-IBAN, omschrijving en het hoeveelste exemplaar in het bestand.
+ * Met `from` worden alleen boekingen vanaf die datum geïmporteerd; de parser heeft het hele
+ * bestand dan al gelezen, zodat bijvoorbeeld de wisselkoersen van Revolut kloppen.
  */
 export function importRecords(
 	db: DB,
-	records: ImportRecord[],
-	format: 'camt053' | 'csv'
+	all: ImportRecord[],
+	format: ImportFormat,
+	{ from }: { from?: string } = {}
 ): ImportSummary {
-	if (records.length === 0) throw new ImportError('Het bestand bevat geen boekingen.');
-	if (records.length > MAX_RECORDS) throw new ImportError('Te veel boekingen in één bestand.');
+	if (all.length === 0) throw new ImportError('Het bestand bevat geen boekingen.');
+	if (all.length > MAX_RECORDS) throw new ImportError('Te veel boekingen in één bestand.');
+	const records = from ? all.filter((r) => r.date >= from) : all;
+	if (records.length === 0)
+		throw new ImportError('Het bestand bevat geen boekingen vanaf deze datum.');
+	const earlierCount = all.length - records.length;
 
 	return db.transaction((tx) => {
 		// Eigen rekeningen bij de IBANs uit het bestand zoeken of aanmaken
 		const accountIds = new Map<string, string>();
-		for (const iban of new Set(records.map((r) => r.accountIban))) {
+		if (records.some((r) => r.accountKind === 'revolut')) {
+			accountIds.set('revolut', revolutAccount(tx));
+		}
+		for (const iban of new Set(records.filter((r) => !r.accountKind).map((r) => r.accountIban))) {
 			let account = tx.select().from(accounts).where(eq(accounts.iban, iban)).get();
 			if (!account) {
 				const unassigned = tx
@@ -144,7 +185,8 @@ export function importRecords(
 				hash = dedupeHash(r, nth);
 			}
 
-			const internal = r.counterIban !== null && ownIbans.has(r.counterIban);
+			const internal =
+				r.internal === true || (r.counterIban !== null && ownIbans.has(r.counterIban));
 			const rule = internal ? null : matchRule(sortedRules, r);
 			const categoryId = internal ? internalId : (rule?.categoryId ?? null);
 
@@ -159,11 +201,14 @@ export function importRecords(
 					categoryId,
 					categorySource: rule ? 'regel' : internal && categoryId ? 'intern' : null,
 					categoryRuleId: rule?.id ?? null,
-					accountId: accountIds.get(r.accountIban)!,
+					accountId: accountIds.get(accountKey(r))!,
 					source: 'import',
 					bankReference: reference,
 					dedupeHash: hash,
-					importBatchId: batch.id
+					importBatchId: batch.id,
+					origAmountCents: r.origAmountCents ?? null,
+					origCurrency: r.origCurrency ?? null,
+					...(r.needsReview && { status: 'te_controleren' as const })
 				})
 				.onConflictDoNothing()
 				.run();
@@ -185,6 +230,7 @@ export function importRecords(
 			batchId: batch.id,
 			newCount,
 			duplicateCount,
+			earlierCount,
 			periodStart,
 			periodEnd,
 			uncategorized: uncategorizedGroups(tx)

@@ -368,3 +368,106 @@ describe('reparatie van bestaande pinbetalingen', () => {
 		expect(uncategorizedGroups(db).map((g) => g.pattern)).toContain('supermarkt test');
 	});
 });
+
+describe('Revolut-import', () => {
+	const revolut = () => db.select().from(accounts).where(eq(accounts.kind, 'revolut')).all();
+	const tx = (description: string) =>
+		db.select().from(transactions).where(eq(transactions.description, description)).all();
+
+	it('importeert op de bestaande Revolut-rekening en ontdubbelt bij opnieuw importeren', () => {
+		const summary = importFixture('revolut.csv');
+		expect(summary.newCount).toBe(12);
+		expect(summary.periodStart).toBe('2026-01-30');
+		expect(summary.periodEnd).toBe('2026-07-05');
+		expect(revolut()).toHaveLength(1);
+		const all = db.select().from(transactions).all();
+		expect(new Set(all.map((t) => t.accountId))).toEqual(new Set([revolut()[0]!.id]));
+		expect(db.select().from(importBatches).get()?.format).toBe('revolut');
+
+		const again = importFixture('revolut.csv');
+		expect(again.newCount).toBe(0);
+		expect(again.duplicateCount).toBe(12);
+		expect(db.select().from(transactions).all()).toHaveLength(12);
+	});
+
+	it('bewaart het bedrag in kronen naast het eurobedrag', () => {
+		importFixture('revolut.csv');
+		expect(tx('ICA Maxi')[0]).toMatchObject({
+			amountCents: -4000,
+			origAmountCents: -46000,
+			origCurrency: 'SEK',
+			status: 'bevestigd'
+		});
+	});
+
+	it('opwaarderen is intern, het koersverschil niet', () => {
+		importFixture('revolut.csv');
+		const internal = db
+			.select()
+			.from(categories)
+			.where(eq(categories.name, 'Interne overboeking'))
+			.get();
+		expect(tx('Opwaardering via Apple Pay')[0]).toMatchObject({
+			categoryId: internal?.id,
+			categorySource: 'intern'
+		});
+		expect(tx('Koersverschil bij wisselen SEK naar EUR')[0]).toMatchObject({
+			amountCents: -540,
+			categoryId: null
+		});
+	});
+
+	it('een geschat eurobedrag krijgt de status te controleren', () => {
+		const csv =
+			'Type,Product,Startdatum,Datum voltooid,Beschrijving,Bedrag,Kosten,Valuta,Status,Saldo\n' +
+			'Kaartbetaling,Betaalrekening,2026-02-01 10:00:00,2026-02-01 10:00:00,ICA,-10.00,0.00,SEK,VOLTOOID,90.00\n' +
+			'Wisselen,Betaalrekening,2026-02-02 10:00:00,2026-02-02 10:00:00,Naar SEK,-10.00,0.00,EUR,VOLTOOID,0.00\n' +
+			'Wisselen,Betaalrekening,2026-02-02 10:00:00,2026-02-02 10:00:00,Van EUR,100.00,0.00,SEK,VOLTOOID,190.00\n';
+		const { format, records } = parseBankFile(new TextEncoder().encode(csv));
+		importRecords(db, records, format);
+		expect(tx('ICA')[0]).toMatchObject({ amountCents: -100, status: 'te_controleren' });
+	});
+
+	it('maakt een Revolut-rekening aan als die er niet is', () => {
+		db.delete(accounts).where(eq(accounts.kind, 'revolut')).run();
+		importFixture('revolut.csv');
+		expect(revolut()).toMatchObject([{ name: 'Revolut', alias: 'rev', iban: null }]);
+	});
+
+	it('importeert met een begindatum alleen boekingen vanaf die datum', () => {
+		const { format, records } = parseBankFile(file('revolut.csv'));
+		const summary = importRecords(db, records, format, { from: '2026-07-01' });
+		expect(summary).toMatchObject({ newCount: 7, earlierCount: 5, periodStart: '2026-07-01' });
+		// Het koersverschil is berekend met de wissels van vóór de begindatum
+		expect(tx('Koersverschil bij wisselen SEK naar EUR')[0]?.amountCents).toBe(-540);
+		expect(tx('ICA Maxi')).toHaveLength(0);
+		expect(() => importRecords(db, records, format, { from: '2026-08-01' })).toThrow(
+			/vanaf deze datum/
+		);
+	});
+
+	it('het uploadformulier geeft de begindatum door en weigert een ongeldige', async () => {
+		const upload = (from: string) => {
+			const body = new FormData();
+			body.set('file', new File([file('revolut.csv')], 'revolut.csv', { type: 'text/csv' }));
+			body.set('from', from);
+			const request = new Request('http://localhost/import?/upload', { method: 'POST', body });
+			return importActions.upload!({ request } as never);
+		};
+		expect(await upload('01-07-2026')).toMatchObject({
+			status: 400,
+			data: { message: 'Ongeldige begindatum.' }
+		});
+		expect(db.select().from(transactions).all()).toHaveLength(0);
+		expect(await upload('2026-07-01')).toMatchObject({ summary: { newCount: 7, earlierCount: 5 } });
+		expect(await upload('')).toMatchObject({
+			summary: { newCount: 5, duplicateCount: 7, earlierCount: 0 }
+		});
+	});
+
+	it('weigert bij meerdere Revolut-rekeningen en importeert dan niets', () => {
+		db.insert(accounts).values({ name: 'Revolut 2', kind: 'revolut', alias: 'rev2' }).run();
+		expect(() => importFixture('revolut.csv')).toThrow(/meerdere Revolut-rekeningen/);
+		expect(db.select().from(transactions).all()).toHaveLength(0);
+	});
+});
