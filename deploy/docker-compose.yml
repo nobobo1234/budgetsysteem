@@ -35,6 +35,10 @@ services:
     read_only: true
     tmpfs:
       - /tmp
+    # Zelfde uid als `node` in de app-container: de database is van die gebruiker, en
+    # Litestream moet erin schrijven (eigen tabel en WAL-checkpoints). Als root zonder
+    # capabilities mag dat niet ("attempt to write a readonly database").
+    user: '1000:1000'
     cap_drop: [ALL]
     security_opt: ['no-new-privileges:true']
     depends_on:
