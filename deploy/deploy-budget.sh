@@ -18,12 +18,15 @@ fi
 mkdir -p "$STATE"
 PREVIOUS="$(cat "$STATE/current-digest" 2>/dev/null || true)"
 
-# Inloggen met het kortlevende token, image op digest ophalen, meteen weer uitloggen
+# Inloggen met het kortlevende token in een tijdelijke Docker-config (niet in
+# /root/.docker), image op digest ophalen, en de config meteen weer weggooien
 TOKEN="$(cat)"
-echo "$TOKEN" | docker login ghcr.io -u deploy --password-stdin >/dev/null
-trap 'docker logout ghcr.io >/dev/null 2>&1 || true' EXIT
-docker pull "$REPO_IMAGE@$DIGEST"
-docker logout ghcr.io >/dev/null
+LOGIN_DIR="$(mktemp -d)"
+trap 'rm -rf "$LOGIN_DIR"' EXIT
+echo "$TOKEN" | DOCKER_CONFIG="$LOGIN_DIR" docker login ghcr.io -u deploy --password-stdin >/dev/null
+DOCKER_CONFIG="$LOGIN_DIR" docker pull "$REPO_IMAGE@$DIGEST"
+rm -rf "$LOGIN_DIR"
+unset TOKEN
 
 # Backup vóór migraties (de app migreert bij het starten). Bij de eerste uitrol is er nog
 # geen container en dus niets om te bewaren.
