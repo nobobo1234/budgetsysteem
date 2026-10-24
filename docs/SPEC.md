@@ -427,7 +427,7 @@ De Haiku-eval draait niet bij elke PR, omdat hij API-tegoed kost en echte bonnet
 
 1. **Elke push:** lint (ESLint, Prettier), typecheck (`svelte-check`) en unit-tests.
 2. **Elke pull request:** daarnaast integratie- en e2e-tests, Docker-build, dependency-audit, image-scan (Trivy), geheimen-scan (gitleaks), statische analyse (Semgrep), workflow-check (zizmor), een check op verwijderde tests en onzichtbare tekens, een SBOM (CycloneDX) en het performance-budget (Lighthouse CI).
-3. **Review door Claude:** de Claude Code GitHub Action reviewt elke PR op beveiliging, testdekking en de afspraken uit deze spec. Via `@claude` in een issue of PR pakt hij ook werk op. Instellen vanuit Claude Code met `/install-github-app`. De spec en de werkafspraken staan in `CLAUDE.md` in de repo.
+3. **Review door Claude:** de Claude Code GitHub Action reviewt een PR op beveiliging, testdekking en de afspraken uit deze spec, zodra je het label `claude-review` zet. Geen `@claude` in issues of reacties: die trigger (`issue_comment`) ziet zizmor als fundamenteel onveilig. Instellen vanuit Claude Code met `/install-github-app`. De spec en de werkafspraken staan in `CLAUDE.md` in de repo.
 4. **Merge naar main:** image naar GitHub Container Registry, backup van de database, deploy via SSH over Tailscale (een tijdelijke Tailscale-node in de action), migraties, health check, en bij een fout terug naar de vorige image.
 
 ### Afspraken
@@ -454,7 +454,7 @@ De action zelf is open source en gratis; de kosten zitten in twee dingen.
 
 - **GitHub Actions-minuten** uit je 3000 per maand.
 - **Claude-gebruik**: via een API-key (per token, met een bestedingslimiet in de Console) of via je abonnement met een token uit `claude setup-token`. De action draait op de Agent SDK, en volgens het helpartikel (update van 7 oktober 2026) kun je de Agent SDK met je abonnementslimieten blijven gebruiken; Max en Team krijgen daarnaast maandelijkse API-credits ([Claude Help Center](https://support.claude.com/en/articles/15036540-use-the-claude-agent-sdk-with-your-claude-plan)). Deze regels zijn in 2026 meerdere keren veranderd, dus check het artikel bij het instellen.
-- **Zuinig houden:** review alleen op verzoek (een label of `@claude`), met `--max-turns` en een timeout.
+- **Zuinig houden:** review alleen op verzoek (het label `claude-review`), met `--max-turns` en een timeout.
 
 ### GitHub Pro (via Education)
 
