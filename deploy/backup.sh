@@ -26,5 +26,7 @@ set -a
 source /etc/budget/restic.env
 set +a
 restic backup --tag "$TAG" "$WORK/budget.db"
+# Markering voor de health check van de app (leeftijd van de laatste geslaagde backup)
+docker exec budget touch /data/.restic-laatste-backup
 restic forget --tag dagelijks --keep-daily 14 --keep-weekly 8 --keep-monthly 12 --prune
 rm -f "$WORK/budget.db"

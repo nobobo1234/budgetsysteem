@@ -4,6 +4,11 @@ import { join } from 'node:path';
 import type { Cookies, RequestEvent } from '@sveltejs/kit';
 import { openDatabase, useDatabase, type DB } from '../../src/lib/server/db/index.ts';
 import type { Session } from '../../src/lib/server/auth/session.ts';
+import {
+	openTelemetryDatabase,
+	useTelemetryDatabase,
+	type TelemetryDB
+} from '../../src/lib/server/telemetry/db.ts';
 
 /** Verse database in een tijdelijk bestand, met migraties en startdata. */
 export function tempDatabase(): { db: DB; cleanup: () => void } {
@@ -15,6 +20,22 @@ export function tempDatabase(): { db: DB; cleanup: () => void } {
 		cleanup: () => {
 			db.$client.close();
 			useDatabase(undefined);
+			rmSync(dir, { recursive: true, force: true });
+		}
+	};
+}
+
+/** Verse telemetrie-database in een tijdelijk bestand. */
+export function tempTelemetry(): { telemetry: TelemetryDB; dir: string; cleanup: () => void } {
+	const dir = mkdtempSync(join(tmpdir(), 'budget-telemetry-'));
+	const telemetry = openTelemetryDatabase(join(dir, 'telemetry.db'), 'drizzle/telemetry');
+	useTelemetryDatabase(telemetry);
+	return {
+		telemetry,
+		dir,
+		cleanup: () => {
+			telemetry.$client.close();
+			useTelemetryDatabase(undefined);
 			rmSync(dir, { recursive: true, force: true });
 		}
 	};

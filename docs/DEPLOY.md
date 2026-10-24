@@ -111,6 +111,8 @@ sudoedit /etc/budget/restic.env
 
 `RESTIC_REPOSITORY` heeft de vorm `s3:https://<endpoint>/<bucket>/budget`. Gebruik een andere bucket (of andere sleutels) dan voor Litestream.
 
+Voor de externe beschikbaarheidscheck (zie Monitoring) komt er later één regel bij in `app.env`: `HEALTHCHECK_PING_URL=https://…`.
+
 ### 6. Restic-wachtwoord en repository
 
 ```bash
@@ -209,6 +211,14 @@ sudo docker ps --filter name=budget
 curl -fsS http://127.0.0.1:3000/healthz
 sudo docker logs budget-litestream --tail 20
 ```
+
+## Monitoring
+
+Telemetrie staat in een aparte database, `/data/telemetry.db` naast de hoofddatabase, en wordt na 90 dagen opgeruimd. Hij wordt niet door Litestream gerepliceerd: verlies is vervelend, niet erg.
+
+- **Fouten.** Elke onverwachte fout komt in de tabel `errors` onder het `errorId` dat je in de app ziet, zonder foutmelding of invoer. Bekijken: `sudo docker exec budget node -e "const D=require('better-sqlite3');console.table(new D('/data/telemetry.db',{readonly:true}).prepare('select at,name,route,method from errors order by at desc limit 20').all())"`.
+- **Health check.** Publiek geeft `/healthz` alleen `ok`. Na inloggen geeft `/api/health` de leeftijd van de laatste Litestream-sync en restic-backup, de schijfruimte van het datavolume, het aantal starts en herstarts (een start van een versie die al eerder draaide) en het aantal fouten.
+- **Externe check.** Maak bij een dienst die alarm slaat als een ping uitblijft (zoals healthchecks.io) een check met een periode van 5 minuten en een marge van 10 minuten, en zet de ping-URL als `HEALTHCHECK_PING_URL` in `/etc/budget/app.env`. De app pingt bij het starten en daarna elke 5 minuten, alleen als de database bereikbaar is. De URL is een geheim: niet in de repo. Een alternatief is Uptime Kuma op een ander apparaat dat `https://budget.example.nl/healthz` opvraagt; dan blijft `HEALTHCHECK_PING_URL` leeg.
 
 ## Eerste keer inloggen
 
