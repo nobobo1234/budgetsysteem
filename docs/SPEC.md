@@ -468,7 +468,7 @@ Elk scherm staat in deze tabel. Een nieuw scherm krijgt eerst een regel hier, in
 | Transactie | `/transacties/[id]` | Tegenpartij en bedrag, groot | Opslaan | Bedrag, richting, datum, categorie, tegenpartij, notitie; verdeling; verwijderen met bevestiging |
 | Budget | `/budget` | Maand met vorige en volgende, totalen | Limiet instellen | Per groep een balk met tempo en een limietveld; link naar categorieën |
 | Categorieën | `/categorieen` | Tabs Categorieën en Regels | Nieuwe categorie | Per groep een kaart; bewerken in de rij (naam, groep, telt mee); gearchiveerd ingeklapt |
-| Regels | `/regels` | Tabs Categorieën en Regels | Nieuwe regel | Lijst als zin ("Tegenpartij bevat … → categorie") met filter; nieuwe regel als "Als … dan …", prioriteit ingeklapt |
+| Regels | `/regels` | Tabs Categorieën en Regels | Nieuwe regel | Lijst als zin ("Tegenpartij bevat … → categorie") met filter; nieuwe regel als "Als … dan …", prioriteit ingeklapt; onderaan "Regels opnieuw toepassen" |
 | Import | `/import` | Sleepvak voor het bankbestand | Importeren | Overzicht na import, tegenpartijen zonder categorie met één klik een regel, eerdere imports |
 | Meer | `/instellingen` | Passkeys | — | Herstelcode, actieve apparaten, rekeningen, links naar categorieën en regels, uitloggen |
 | Inloggen | `/login` | Titel en uitleg | Inloggen met passkey | Herstelcode als terugval |

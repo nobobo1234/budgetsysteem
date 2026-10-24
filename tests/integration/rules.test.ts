@@ -149,6 +149,18 @@ describe('regels op bestaande transacties', () => {
 		expect(only().categoryId).toBeNull();
 	});
 
+	it('opnieuw toepassen zet categorieën van oude regels terug', async () => {
+		await addRule('woolsocks', 'Overig');
+		importRecords(db, [record()], 'camt053');
+		// Zoals na de migratie: een categorie van een regel die niet meer bestaat
+		db.delete(rules).where(eq(rules.pattern, 'woolsocks')).run();
+		expect(only().categoryId).toBe(categoryId('Overig'));
+
+		expect(await actions.reapply!({} as never)).toEqual({ reapplied: true, applied: 1 });
+		expect(only().categoryId).toBeNull();
+		expect(await actions.reapply!({} as never)).toEqual({ reapplied: true, applied: 0 });
+	});
+
 	it('elke wijziging door een regel staat in het audit-log', async () => {
 		importRecords(db, [record()], 'camt053');
 		await addRule('woolsocks', 'Inkomen');

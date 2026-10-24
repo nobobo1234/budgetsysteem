@@ -79,5 +79,6 @@ export const actions: Actions = {
 		recordChange(db(), 'verwijderd', 'rules', id.data.id, before, null);
 		// Transacties van deze regel krijgen de categorie van een andere regel, of geen
 		return { ok: true, applied: applyRules(db()) };
-	}
+	},
+	reapply: () => ({ reapplied: true, applied: applyRules(db()) })
 };

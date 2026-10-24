@@ -65,11 +65,13 @@
 	const feedback = $derived(
 		form && 'message' in form && form.message
 			? { text: form.message, error: true }
-			: form && 'ok' in form
-				? { text: `Regel verwijderd; ${updated(form.applied ?? 0)}.`, error: false }
-				: form && 'applied' in form
-					? { text: `Regel opgeslagen; ${updated(form.applied ?? 0)}.`, error: false }
-					: null
+			: form && 'reapplied' in form
+				? { text: `Regels toegepast; ${updated(form.applied ?? 0)}.`, error: false }
+				: form && 'ok' in form
+					? { text: `Regel verwijderd; ${updated(form.applied ?? 0)}.`, error: false }
+					: form && 'applied' in form
+						? { text: `Regel opgeslagen; ${updated(form.applied ?? 0)}.`, error: false }
+						: null
 	);
 </script>
 
@@ -213,6 +215,13 @@
 				</li>
 			{/each}
 		</ul>
+
+		{#if data.rules.length > 0}
+			<form method="POST" action="?/reapply" use:enhance class="reapply">
+				<button class="button secondary small">Regels opnieuw toepassen</button>
+				<span class="muted small">Op alle transacties, behalve categorieën die je zelf koos.</span>
+			</form>
+		{/if}
 	</section>
 </div>
 
@@ -275,6 +284,13 @@
 
 	.new-rule {
 		justify-self: start;
+	}
+
+	.reapply {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 8px 12px;
 	}
 
 	.actions {
