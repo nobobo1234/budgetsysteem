@@ -20,7 +20,9 @@ export const load: PageServerLoad = () => ({
 			field: rules.field,
 			pattern: rules.pattern,
 			priority: rules.priority,
-			categoryName: categories.name
+			categoryId: rules.categoryId,
+			categoryName: categories.name,
+			categoryGroup: categories.group
 		})
 		.from(rules)
 		.innerJoin(categories, eq(categories.id, rules.categoryId))

@@ -19,7 +19,7 @@ export const load: PageServerLoad = () => ({
 	batches: db().select().from(importBatches).orderBy(desc(importBatches.createdAt)).limit(5).all(),
 	uncategorized: uncategorizedGroups(db()),
 	categories: db()
-		.select({ id: categories.id, name: categories.name })
+		.select({ id: categories.id, name: categories.name, group: categories.group })
 		.from(categories)
 		.where(eq(categories.archived, false))
 		.orderBy(asc(categories.sortOrder))

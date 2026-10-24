@@ -33,6 +33,10 @@
 	--chip-rekening: oklch(0.55 0.12 300 / 0.15);
 	--chip-delen: oklch(0.6 0.15 15 / 0.15);
 
+	/* Bolletjes per categoriegroep; de tint komt uit categoryColor.ts */
+	--dot-l: 0.62;
+	--dot-c: 0.14;
+
 	--radius: 14px;
 	--radius-sm: 10px;
 	--space: 16px;
@@ -94,6 +98,8 @@
 		--danger: oklch(0.7 0.17 28);
 		--focus: oklch(0.8 0.11 169.2);
 		--shadow: none;
+		--dot-l: 0.76;
+		--dot-c: 0.12;
 	}
 }
 

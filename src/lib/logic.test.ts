@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { freeThisMonth, pace } from './budget.ts';
-import { addDays, daysInMonth, isIsoDate, shiftMonth } from './dates.ts';
+import { groupColor, groupHue } from './categoryColor.ts';
+import { addDays, daysInMonth, formatDayHeading, isIsoDate, shiftMonth } from './dates.ts';
 import { matchRule, sortRules, type Rule } from './rules.ts';
 import { isValidIban, normalize, normalizeCounterparty } from './text.ts';
 
@@ -115,5 +116,45 @@ describe('categorieregels', () => {
 
 	it('een patroon dat leeg normaliseert matcht nooit', () => {
 		expect(matchRule(rules, tx('Iets 1234'))).toBeNull();
+	});
+});
+
+describe('dagkoppen in lijsten', () => {
+	it('vandaag en gisteren bij naam, ook over een maandgrens', () => {
+		expect(formatDayHeading('2026-10-24', '2026-10-24')).toBe('Vandaag');
+		expect(formatDayHeading('2026-10-23', '2026-10-24')).toBe('Gisteren');
+		expect(formatDayHeading('2026-09-30', '2026-10-01')).toBe('Gisteren');
+	});
+
+	it('anders weekdag en datum met hoofdletter, het jaar alleen als het een ander jaar is', () => {
+		expect(formatDayHeading('2026-10-22', '2026-10-24')).toBe('Donderdag 22 oktober');
+		expect(formatDayHeading('2025-12-31', '2026-01-02')).toBe('Woensdag 31 december 2025');
+	});
+});
+
+describe('kleur per categoriegroep', () => {
+	it('vaste tinten voor de startgroepen, verschillend per groep', () => {
+		const groups = [
+			'Vaste lasten',
+			'Dagelijks',
+			'Onderweg',
+			'Vrije tijd',
+			'Overig',
+			'Buiten budget'
+		];
+		expect(new Set(groups.map(groupHue)).size).toBe(groups.length);
+	});
+
+	it('een onbekende groep krijgt steeds dezelfde tint binnen 0 tot 360', () => {
+		const h = groupHue('Huisdieren');
+		expect(h).toBe(groupHue('Huisdieren'));
+		expect(h).toBeGreaterThanOrEqual(0);
+		expect(h).toBeLessThan(360);
+	});
+
+	it('zonder categorie geen kleur', () => {
+		expect(groupColor(null)).toBeNull();
+		expect(groupColor('')).toBeNull();
+		expect(groupColor('Dagelijks')).toContain('oklch(');
 	});
 });

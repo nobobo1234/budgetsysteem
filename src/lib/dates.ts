@@ -57,3 +57,24 @@ export function formatMonth(month: string): string {
 export function formatShortDate(iso: string): string {
 	return shortDate.format(fromIsoDate(iso));
 }
+
+const weekdayDate = new Intl.DateTimeFormat('nl-NL', {
+	weekday: 'long',
+	day: 'numeric',
+	month: 'long'
+});
+const weekdayDateYear = new Intl.DateTimeFormat('nl-NL', {
+	weekday: 'long',
+	day: 'numeric',
+	month: 'long',
+	year: 'numeric'
+});
+
+/** Kop boven een dag in een lijst: `Vandaag`, `Gisteren`, `vrijdag 23 oktober`. */
+export function formatDayHeading(iso: string, today: string): string {
+	if (iso === today) return 'Vandaag';
+	if (iso === addDays(today, -1)) return 'Gisteren';
+	const d = fromIsoDate(iso);
+	const text = (iso.slice(0, 4) === today.slice(0, 4) ? weekdayDate : weekdayDateYear).format(d);
+	return text.charAt(0).toUpperCase() + text.slice(1);
+}

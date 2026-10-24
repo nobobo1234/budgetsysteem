@@ -1,7 +1,13 @@
 import { asc, eq } from 'drizzle-orm';
 import { db } from '#lib/server/db/index.ts';
 import { categories } from '#lib/server/db/schema.ts';
-import { listTransactions } from '#lib/server/transactions.ts';
+import { toIsoDate } from '#lib/dates.ts';
+import {
+	listTransactions,
+	summarizeTransactions,
+	type ListFilter,
+	transactionMonths
+} from '#lib/server/transactions.ts';
 import type { PageServerLoad } from './$types';
 
 const PAGE = 50;
@@ -20,22 +26,24 @@ export const load: PageServerLoad = ({ url }) => {
 		Math.min(10_000, Number.parseInt(url.searchParams.get('pagina') ?? '0', 10) || 0)
 	);
 
-	const rows = listTransactions(db(), {
+	const filter: ListFilter = {
 		q,
 		month: month || undefined,
 		categoryId: categoryId || undefined,
-		status,
-		limit: PAGE + 1,
-		offset: page * PAGE
-	});
+		status
+	};
+	const rows = listTransactions(db(), { ...filter, limit: PAGE + 1, offset: page * PAGE });
 
 	return {
 		filter: { q, month, categoryId, status },
 		page,
 		hasMore: rows.length > PAGE,
 		transactions: rows.slice(0, PAGE),
+		summary: summarizeTransactions(db(), filter),
+		months: transactionMonths(db()),
+		today: toIsoDate(new Date()),
 		categories: db()
-			.select({ id: categories.id, name: categories.name })
+			.select({ id: categories.id, name: categories.name, group: categories.group })
 			.from(categories)
 			.where(eq(categories.archived, false))
 			.orderBy(asc(categories.sortOrder))

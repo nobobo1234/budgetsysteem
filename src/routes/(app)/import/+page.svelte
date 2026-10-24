@@ -1,11 +1,45 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import Select, { type SelectOption } from '#lib/components/Select.svelte';
+	import Toast from '#lib/components/Toast.svelte';
+	import { groupColor } from '#lib/categoryColor.ts';
 	import { formatShortDate } from '#lib/dates.ts';
 	import { formatCents } from '#lib/money.ts';
 
 	let { data, form } = $props();
 	let uploading = $state(false);
+	let dragging = $state(false);
+	let file = $state<{ name: string; size: number } | null>(null);
+	let fileInput: HTMLInputElement;
 	const summary = $derived(form && 'summary' in form ? form.summary : null);
+
+	const categoryOptions = $derived<SelectOption[]>(
+		data.categories.map((c) => ({
+			value: c.id,
+			label: c.name,
+			group: c.group,
+			dot: groupColor(c.group)
+		}))
+	);
+
+	const fullDate = (iso: string) => `${formatShortDate(iso)} ${iso.slice(0, 4)}`;
+	const kb = (bytes: number) =>
+		bytes < 1024 * 1024
+			? `${Math.max(1, Math.round(bytes / 1024))} kB`
+			: `${(bytes / 1024 / 1024).toFixed(1).replace('.', ',')} MB`;
+
+	function picked() {
+		const f = fileInput.files?.[0];
+		file = f ? { name: f.name, size: f.size } : null;
+	}
+
+	function drop(e: DragEvent) {
+		e.preventDefault();
+		dragging = false;
+		if (!e.dataTransfer?.files.length) return;
+		fileInput.files = e.dataTransfer.files;
+		picked();
+	}
 </script>
 
 <svelte:head>
@@ -13,33 +47,75 @@
 </svelte:head>
 
 <div class="page">
-	<h1>Importeren</h1>
-	<p class="muted">
-		Download in Mijn SNS je transacties als CAMT.053 (of CSV) en kies het bestand hier. Dezelfde
-		export twee keer importeren levert niets dubbel op.
-	</p>
+	<div class="intro">
+		<h1>Importeren</h1>
+		<p class="muted">
+			Download in Mijn SNS je transacties als CAMT.053 (of CSV) en kies het bestand hier. Dezelfde
+			export twee keer importeren levert niets dubbel op.
+		</p>
+	</div>
 
 	<form
 		method="POST"
 		action="?/upload"
 		enctype="multipart/form-data"
-		class="card upload"
+		class="upload"
 		use:enhance={() => {
 			uploading = true;
 			return async ({ update }) => {
 				await update();
 				uploading = false;
+				file = null;
 			};
 		}}
 	>
-		<label>
-			<span>Bankbestand</span>
+		<label
+			class={['drop', dragging && 'dragging', file && 'chosen']}
+			ondragover={(e) => {
+				e.preventDefault();
+				dragging = true;
+			}}
+			ondragleave={() => (dragging = false)}
+			ondrop={drop}
+		>
 			<input
+				bind:this={fileInput}
+				class="visually-hidden"
 				type="file"
 				name="file"
+				aria-label="Bankbestand"
 				accept=".xml,.csv,application/xml,text/xml,text/csv"
 				required
+				onchange={picked}
 			/>
+			<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+				{#if file}
+					<path
+						d="M7 3h7l5 5v13H7z M14 3v5h5 M10 14.5l2 2 4-4.5"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="1.6"
+						stroke-linejoin="round"
+						stroke-linecap="round"
+					/>
+				{:else}
+					<path
+						d="M12 15V4m0 0L7.5 8.5M12 4l4.5 4.5M5 15v4h14v-4"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="1.6"
+						stroke-linejoin="round"
+						stroke-linecap="round"
+					/>
+				{/if}
+			</svg>
+			{#if file}
+				<span class="title">{file.name}</span>
+				<span class="muted num">{kb(file.size)} · tik om een ander bestand te kiezen</span>
+			{:else}
+				<span class="title">Kies een bankbestand</span>
+				<span class="muted">Of sleep het hierheen. CAMT.053 (.xml) of CSV, tot 20 MB.</span>
+			{/if}
 		</label>
 		<button class="button" disabled={uploading}
 			>{uploading ? 'Bezig met importeren…' : 'Importeren'}</button
@@ -62,13 +138,9 @@
 					<dd class="num">{summary.duplicateCount}</dd>
 				</div>
 				{#if summary.periodStart && summary.periodEnd}
-					<div>
+					<div class="period">
 						<dt>Periode</dt>
-						<dd>
-							{formatShortDate(summary.periodStart)}
-							{summary.periodStart.slice(0, 4)} tot {formatShortDate(summary.periodEnd)}
-							{summary.periodEnd.slice(0, 4)}
-						</dd>
+						<dd>{fullDate(summary.periodStart)} tot {fullDate(summary.periodEnd)}</dd>
 					</div>
 				{/if}
 			</dl>
@@ -76,18 +148,27 @@
 	{/if}
 
 	{#if form && 'applied' in form}
-		<p role="status">Regel voor "{form.pattern}" gemaakt; {form.applied} transacties bijgewerkt.</p>
+		{#key form}
+			<Toast
+				text="Regel voor &quot;{form.pattern}&quot; gemaakt; {form.applied} {form.applied === 1
+					? 'transactie'
+					: 'transacties'} bijgewerkt."
+			/>
+		{/key}
 	{/if}
 
 	{#if data.uncategorized.length > 0}
-		<section class="groups">
-			<h2>Nog zonder categorie</h2>
-			<p class="muted">
-				Eén klik maakt een regel, voor deze en alle volgende transacties van die tegenpartij.
-			</p>
+		<section class="groups" aria-labelledby="uncat-title">
+			<div class="intro">
+				<h2 id="uncat-title">Nog zonder categorie</h2>
+				<p class="muted">
+					Kies een categorie en maak een regel: die geldt voor deze en alle volgende transacties van
+					die tegenpartij.
+				</p>
+			</div>
 			<ul>
 				{#each data.uncategorized as g (g.pattern)}
-					<li>
+					<li class="card">
 						<div class="who">
 							<strong>{g.example}</strong>
 							<span class="muted num"
@@ -96,15 +177,14 @@
 						</div>
 						<form method="POST" action="?/rule" use:enhance>
 							<input type="hidden" name="pattern" value={g.pattern} />
-							<label>
-								<span class="visually-hidden">Categorie voor {g.example}</span>
-								<select name="categoryId" value={g.suggestedCategoryId ?? ''} required>
-									<option value="" disabled>Kies categorie</option>
-									{#each data.categories as c (c.id)}
-										<option value={c.id}>{c.name}</option>
-									{/each}
-								</select>
-							</label>
+							<Select
+								name="categoryId"
+								label="Categorie voor {g.example}"
+								placeholder="Kies categorie"
+								value={g.suggestedCategoryId ?? ''}
+								options={categoryOptions}
+								required
+							/>
 							<button class="button secondary">Regel maken</button>
 						</form>
 					</li>
@@ -112,7 +192,30 @@
 			</ul>
 		</section>
 	{:else if data.batches.length > 0}
-		<p>Alle geïmporteerde transacties hebben een categorie.</p>
+		<p class="card done">Alle geïmporteerde transacties hebben een categorie.</p>
+	{/if}
+
+	{#if data.batches.length > 0}
+		<section class="history" aria-labelledby="history-title">
+			<h2 id="history-title">Eerdere imports</h2>
+			<ul>
+				{#each data.batches as b (b.id)}
+					<li>
+						<div>
+							<strong>{fullDate(b.createdAt.slice(0, 10))}</strong>
+							<span class="muted">
+								{b.format === 'camt053' ? 'CAMT.053' : 'CSV'}
+								{#if b.periodStart && b.periodEnd}
+									· {fullDate(b.periodStart)} tot {fullDate(b.periodEnd)}{/if}
+							</span>
+						</div>
+						<span class="num counts"
+							>{b.newCount} nieuw<span class="muted"> · {b.duplicateCount} bekend</span></span
+						>
+					</li>
+				{/each}
+			</ul>
+		</section>
 	{/if}
 </div>
 
@@ -120,8 +223,13 @@
 	.page {
 		display: grid;
 		grid-template-columns: minmax(0, 1fr);
-		gap: 20px;
+		gap: 28px;
 		max-width: 44rem;
+	}
+
+	.intro {
+		display: grid;
+		gap: 8px;
 	}
 
 	.upload {
@@ -129,36 +237,86 @@
 		gap: 12px;
 	}
 
-	.upload label {
+	.drop {
 		display: grid;
+		justify-items: center;
 		gap: 4px;
-		font-weight: 550;
+		padding: 28px 20px;
+		border: 1.5px dashed color-mix(in oklch, var(--text) 24%, transparent);
+		border-radius: var(--radius);
+		background: var(--surface);
+		text-align: center;
+		cursor: pointer;
+		transition: transform 200ms var(--ease-spring);
 	}
 
-	.upload input[type='file'] {
-		padding: 10px;
+	.drop:hover {
+		border-color: var(--accent);
+	}
+
+	.drop:focus-within {
+		outline: 2px solid var(--focus);
+		outline-offset: 2px;
+	}
+
+	.drop.dragging {
+		border-color: var(--accent);
+		background: var(--accent-soft);
+		transform: scale(1.01);
+	}
+
+	.drop.chosen {
+		border-style: solid;
+		border-color: var(--accent);
+	}
+
+	.icon {
+		width: 32px;
+		height: 32px;
+		margin-bottom: 6px;
+		color: var(--accent-strong);
+	}
+
+	.title {
+		font-weight: 600;
+		overflow-wrap: anywhere;
+	}
+
+	.drop .muted {
+		font-size: 0.92rem;
 	}
 
 	dl {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+		grid-template-columns: repeat(2, minmax(0, 1fr));
 		gap: 12px;
-		margin: 12px 0 0;
+		margin: 14px 0 0;
+	}
+
+	.period {
+		grid-column: 1 / -1;
 	}
 
 	dt {
 		color: var(--muted);
+		font-size: 0.92rem;
 	}
 
 	dd {
 		margin: 0;
 		font-weight: 600;
-		font-size: 1.15rem;
 	}
 
-	.groups {
+	dd.num {
+		font-size: 2rem;
+		letter-spacing: -0.02em;
+		line-height: 1.1;
+	}
+
+	.groups,
+	.history {
 		display: grid;
-		gap: 12px;
+		gap: 14px;
 	}
 
 	ul {
@@ -166,31 +324,57 @@
 		margin: 0;
 		padding: 0;
 		display: grid;
-		gap: 16px;
+		gap: 10px;
 	}
 
-	li {
+	.groups li {
 		display: grid;
-		gap: 8px;
+		gap: 10px;
 	}
 
 	.who {
 		display: flex;
 		justify-content: space-between;
+		align-items: baseline;
 		gap: 12px;
 		flex-wrap: wrap;
 	}
 
-	li form {
-		display: flex;
+	.who strong {
+		font-weight: 600;
+		overflow-wrap: anywhere;
+	}
+
+	.groups form {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto;
 		gap: 8px;
 	}
 
-	li form label {
-		flex: 1;
+	.done {
+		color: var(--accent-strong);
+		font-weight: 550;
 	}
 
-	li select {
-		width: 100%;
+	.history li {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		gap: 12px;
+		flex-wrap: wrap;
+		padding: 10px 0;
+		border-top: 1px solid var(--line);
+	}
+
+	.history li div {
+		display: grid;
+	}
+
+	.history .muted {
+		font-size: 0.92rem;
+	}
+
+	.counts {
+		font-weight: 550;
 	}
 </style>

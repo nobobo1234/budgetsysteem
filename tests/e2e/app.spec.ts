@@ -12,7 +12,8 @@ test('snelinvoer: chips tijdens het typen, opslaan en meteen in de lijst', async
 	const chips = page.locator('#quick-chips');
 	await expect(chips).toContainText('12,50');
 	await expect(chips).toContainText('Albert Heijn');
-	await expect(page.getByRole('combobox', { name: 'Categorie' })).toHaveValue(/.+/);
+	// Eigen select (knop met rol combobox): de regel heeft een categorie gekozen
+	await expect(page.getByRole('combobox', { name: 'Categorie' })).not.toHaveText('Geen categorie');
 
 	await page.getByRole('button', { name: 'Opslaan' }).click();
 	await expect(input).toHaveValue('');
@@ -70,7 +71,11 @@ test('import: overzicht, en dezelfde export opnieuw levert niets dubbel op', asy
 			? ['ALBERT HEIJN 1403 UTRECHT', 'albert heijn utrecht']
 			: ['Spotify AB', 'spotify ab'];
 	const row = page.getByRole('listitem').filter({ hasText: name });
-	await row.getByRole('combobox').selectOption({ label: 'Boodschappen' });
+	// Eigen select: de knop opent een lijst; het zoekveld in die lijst is ook een combobox
+	const select = row.getByRole('combobox', { name: `Categorie voor ${name}`, exact: true });
+	await select.click();
+	await page.getByRole('option', { name: 'Boodschappen', exact: true }).click();
+	await expect(select).toHaveText('Boodschappen');
 	await row.getByRole('button', { name: 'Regel maken' }).click();
 	await expect(page.getByText(`Regel voor "${pattern}" gemaakt`)).toBeVisible();
 });

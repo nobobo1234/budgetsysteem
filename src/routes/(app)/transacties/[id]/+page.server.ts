@@ -23,7 +23,7 @@ export const load: PageServerLoad = ({ params }) => {
 			.all(),
 		owed: db().select().from(owed).where(eq(owed.sourceTransactionId, tx.id)).all(),
 		categories: db()
-			.select({ id: categories.id, name: categories.name })
+			.select({ id: categories.id, name: categories.name, group: categories.group })
 			.from(categories)
 			.where(eq(categories.archived, false))
 			.orderBy(asc(categories.sortOrder))
