@@ -11,8 +11,46 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Alleen docs (docs/ of een .md in de root) gewijzigd? Dan slaan de zware jobs en stappen over.
+  # Overgeslagen jobs tellen als geslaagd voor de verplichte checks; faalt deze job of is het niet
+  # zeker, dan draait alles.
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          if [ "$EVENT" = pull_request ]; then
+            # Merge-commit van de PR: de eerste ouder is de base-branch
+            from=HEAD^1
+          elif git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+            from=$BEFORE
+          else
+            # Nieuwe branch of onbekende vorige stand
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          files=$(git diff --name-only "$from" HEAD)
+          if [ -n "$files" ] && ! printf '%s\n' "$files" | grep -Eqv '^(docs/.*|[^/]+\.md)$'; then
+            echo "code=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          fi
+
   # Elke push: lint, typecheck, unit-tests en de repo-controles
   static:
+    needs: changes
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -27,15 +65,18 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
-      - run: pnpm check
-      - run: pnpm test:unit
+      - if: needs.changes.outputs.code != 'false'
+        run: pnpm check
+      - if: needs.changes.outputs.code != 'false'
+        run: pnpm test:unit
       - name: Onzichtbare tekens
         run: pnpm check:invisible
       - name: Geen echte IBANs
         run: pnpm check:ibans
 
   integration:
-    if: github.event_name == 'pull_request'
+    needs: changes
+    if: ${{ !cancelled() && github.event_name == 'pull_request' && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -52,7 +93,8 @@ jobs:
       - run: pnpm test:integration
 
   e2e:
-    if: github.event_name == 'pull_request'
+    needs: changes
+    if: ${{ !cancelled() && github.event_name == 'pull_request' && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -98,7 +140,8 @@ jobs:
         run: node scripts/check-invisible-chars.mjs --commits
 
   security:
-    if: github.event_name == 'pull_request'
+    needs: changes
+    if: ${{ !cancelled() && github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -112,6 +155,7 @@ jobs:
         with:
           node-version: 24
       - name: Dependency-audit
+        if: needs.changes.outputs.code != 'false'
         run: pnpm audit --prod --audit-level high
       # Images op digest; Dependabot houdt Docker-images in workflows niet bij, dus handmatig bijwerken
       - name: Geheimen (gitleaks v8.30.1)
@@ -120,17 +164,20 @@ jobs:
             zricethezav/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f \
             git /repo --redact --no-banner
       - name: Statische analyse (Semgrep CE 1.181.0)
+        if: needs.changes.outputs.code != 'false'
         run: |
           docker run --rm -v "$PWD:/src" \
             semgrep/semgrep@sha256:81474464c1f07483ba0682a44787fd93c91397419762a04abe2bafaae396304b \
             semgrep scan --config p/default --config p/typescript --error --metrics off
       - name: Workflows (zizmor)
+        if: needs.changes.outputs.code != 'false'
         uses: zizmorcore/zizmor-action@85b2b9fb8e3325e7a23d7d0a9d7ba5ae0f999e3e # v0.7.1
         with:
           advanced-security: false
 
   docker:
-    if: github.event_name == 'pull_request'
+    needs: changes
+    if: ${{ !cancelled() && github.event_name == 'pull_request' && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
