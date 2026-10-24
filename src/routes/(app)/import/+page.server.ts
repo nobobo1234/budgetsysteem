@@ -7,7 +7,7 @@ import { db } from '#lib/server/db/index.ts';
 import { categories, importBatches, rules } from '#lib/server/db/schema.ts';
 import { ImportError, parseBankFile } from '#lib/server/import/index.ts';
 import {
-	applyRulesToUncategorized,
+	applyRules,
 	countCardCounterpartyRepairs,
 	fillCardCounterparties,
 	importRecords,
@@ -79,6 +79,6 @@ export const actions: Actions = {
 			.returning()
 			.get();
 		recordChange(db(), 'regel', 'rules', rule.id, null, rule);
-		return { applied: applyRulesToUncategorized(db()), pattern };
+		return { applied: applyRules(db()), pattern };
 	}
 };

@@ -1,11 +1,18 @@
 import { createHash } from 'node:crypto';
-import { and, eq, isNull, like, sql } from 'drizzle-orm';
+import { and, eq, isNull, like, notExists, or, sql } from 'drizzle-orm';
 import { matchRule, sortRules } from '../../rules.ts';
 import { normalizeCounterparty } from '../../text.ts';
 import { keywordCategory } from '../../quickentry/resolve.ts';
 import { recordChange } from '../audit.ts';
 import type { Conn, DB } from '../db/index.ts';
-import { accounts, categories, importBatches, rules, transactions } from '../db/schema.ts';
+import {
+	accounts,
+	categories,
+	importBatches,
+	rules,
+	transactionSplits,
+	transactions
+} from '../db/schema.ts';
 import { INTERNAL_TRANSFER } from '../db/seed.ts';
 import { mccCategory, parseCardPayment } from './card.ts';
 import { ImportError, type ImportRecord } from './types.ts';
@@ -137,10 +144,9 @@ export function importRecords(
 				hash = dedupeHash(r, nth);
 			}
 
-			const categoryId =
-				r.counterIban && ownIbans.has(r.counterIban)
-					? internalId
-					: (matchRule(sortedRules, r)?.categoryId ?? null);
+			const internal = r.counterIban !== null && ownIbans.has(r.counterIban);
+			const rule = internal ? null : matchRule(sortedRules, r);
+			const categoryId = internal ? internalId : (rule?.categoryId ?? null);
 
 			const result = tx
 				.insert(transactions)
@@ -151,6 +157,8 @@ export function importRecords(
 					counterIban: r.counterIban,
 					description: r.description,
 					categoryId,
+					categorySource: rule ? 'regel' : internal && categoryId ? 'intern' : null,
+					categoryRuleId: rule?.id ?? null,
 					accountId: accountIds.get(r.accountIban)!,
 					source: 'import',
 					bankReference: reference,
@@ -301,34 +309,66 @@ export function fillCardCounterparties(db: DB): { updated: number; categorized: 
 		}
 		return repairs.length;
 	});
-	return { updated, categorized: updated > 0 ? applyRulesToUncategorized(db) : 0 };
+	return { updated, categorized: updated > 0 ? applyRules(db) : 0 };
 }
 
-/** Past alle regels toe op transacties zonder categorie. Geeft het aantal bijgewerkte terug. */
-export function applyRulesToUncategorized(db: DB): number {
+/**
+ * Past de regels opnieuw toe op alle transacties waarvan de categorie niet handmatig gekozen is:
+ * zonder categorie, of met een categorie van een regel. Zo werkt een nieuwe of gewijzigde regel
+ * ook op de historie, en gaat een categorie terug naar leeg als geen regel meer past (bijvoorbeeld
+ * na het verwijderen van een regel). Handmatige keuzes, eigen overboekingen en gedeelde uitgaven
+ * (met een verdeling) blijven staan. Elke wijziging komt in het audit-log. Geeft het aantal
+ * transacties terug waarvan de categorie veranderde.
+ */
+export function applyRules(db: DB): number {
 	const sortedRules = sortRules(db.select().from(rules).all());
-	if (sortedRules.length === 0) return 0;
 	return db.transaction((tx) => {
-		const open = tx
+		const candidates = tx
 			.select({
 				id: transactions.id,
 				counterparty: transactions.counterparty,
 				counterIban: transactions.counterIban,
-				description: transactions.description
+				description: transactions.description,
+				categoryId: transactions.categoryId,
+				categorySource: transactions.categorySource,
+				categoryRuleId: transactions.categoryRuleId
 			})
 			.from(transactions)
-			.where(isNull(transactions.categoryId))
+			.where(
+				and(
+					or(isNull(transactions.categorySource), eq(transactions.categorySource, 'regel')),
+					notExists(
+						tx
+							.select({ id: transactionSplits.id })
+							.from(transactionSplits)
+							.where(eq(transactionSplits.transactionId, transactions.id))
+					)
+				)
+			)
 			.all();
-		let updated = 0;
-		for (const t of open) {
+		const now = new Date().toISOString();
+		let changed = 0;
+		for (const t of candidates) {
 			const rule = matchRule(sortedRules, t);
-			if (!rule) continue;
+			const next = rule
+				? { categoryId: rule.categoryId, categorySource: 'regel' as const, categoryRuleId: rule.id }
+				: t.categorySource === 'regel'
+					? { categoryId: null, categorySource: null, categoryRuleId: null }
+					: null;
+			if (!next || (next.categoryId === t.categoryId && next.categoryRuleId === t.categoryRuleId))
+				continue;
 			tx.update(transactions)
-				.set({ categoryId: rule.categoryId, updatedAt: new Date().toISOString() })
+				.set({ ...next, updatedAt: now })
 				.where(eq(transactions.id, t.id))
 				.run();
-			updated++;
+			const before = {
+				categoryId: t.categoryId,
+				categorySource: t.categorySource,
+				categoryRuleId: t.categoryRuleId
+			};
+			recordChange(tx, 'regel_toegepast', 'transactions', t.id, before, next);
+			if (next.categoryId !== t.categoryId) changed++;
 		}
-		return updated;
+		return changed;
 	});
 }

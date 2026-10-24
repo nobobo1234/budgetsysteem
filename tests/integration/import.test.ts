@@ -12,7 +12,7 @@ import {
 } from '../../src/lib/server/db/schema.ts';
 import { parseBankFile } from '../../src/lib/server/import/index.ts';
 import {
-	applyRulesToUncategorized,
+	applyRules,
 	countCardCounterpartyRepairs,
 	fillCardCounterparties,
 	importRecords,
@@ -141,7 +141,7 @@ describe('import met ontdubbelen', () => {
 		db.insert(rules)
 			.values({ field: 'tegenpartij', pattern: 'albert heijn', categoryId: boodschappen.id })
 			.run();
-		expect(applyRulesToUncategorized(db)).toBe(1);
+		expect(applyRules(db)).toBe(1);
 		const ah = db
 			.select()
 			.from(transactions)

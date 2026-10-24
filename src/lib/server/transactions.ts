@@ -66,6 +66,7 @@ export function createTransaction(
 				counterparty: input.counterparty,
 				description: input.description,
 				categoryId: input.categoryId,
+				categorySource: input.categoryId ? 'handmatig' : null,
 				accountId: input.accountId,
 				source: 'handmatig',
 				origAmountCents: input.origAmountCents,
@@ -149,9 +150,18 @@ export function updateTransaction(
 			before.status === 'te_controleren' && patch.amountCents !== undefined
 				? 'bevestigd'
 				: before.status;
+		// Een zelf gekozen categorie is handmatig: regels blijven er voortaan af. Kies je geen
+		// categorie, dan mogen regels hem weer invullen.
+		const category =
+			patch.categoryId !== undefined && patch.categoryId !== before.categoryId
+				? {
+						categorySource: patch.categoryId ? ('handmatig' as const) : null,
+						categoryRuleId: null
+					}
+				: {};
 		const after = tx
 			.update(transactions)
-			.set({ ...patch, status, updatedAt: new Date().toISOString() })
+			.set({ ...patch, ...category, status, updatedAt: new Date().toISOString() })
 			.where(eq(transactions.id, id))
 			.returning()
 			.get();
