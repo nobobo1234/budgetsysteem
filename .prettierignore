@@ -1,0 +1,12 @@
+pnpm-lock.yaml
+.svelte-kit/
+build/
+drizzle/
+history/
+data/
+test-results/
+playwright-report/
+docs/SPEC.md
+CLAUDE.md
+.e2e/
+.claude/

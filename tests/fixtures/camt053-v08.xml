@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Synthetisch voorbeeld in de 001.08-vorm (Sts/Cd, Pty/Nm), geen echte bankdata. -->
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.053.001.08">
+  <BkToCstmrStmt>
+    <Stmt>
+      <Acct><Id><IBAN>NL12SNSB0123456789</IBAN></Id></Acct>
+      <Ntry>
+        <Amt Ccy="EUR">12.50</Amt>
+        <CdtDbtInd>DBIT</CdtDbtInd>
+        <Sts><Cd>BOOK</Cd></Sts>
+        <BookgDt><DtTm>2026-10-03T14:22:00+02:00</DtTm></BookgDt>
+        <AcctSvcrRef>REF-1001</AcctSvcrRef>
+        <NtryDtls>
+          <TxDtls>
+            <Amt Ccy="EUR">7.50</Amt>
+            <RltdPties><Cdtr><Pty><Nm>Caf&#233; De Hoek</Nm></Pty></Cdtr></RltdPties>
+          </TxDtls>
+          <TxDtls>
+            <Amt Ccy="EUR">5.00</Amt>
+            <RltdPties><Cdtr><Pty><Nm>Bakkerij Brood</Nm></Pty></Cdtr></RltdPties>
+          </TxDtls>
+        </NtryDtls>
+      </Ntry>
+    </Stmt>
+  </BkToCstmrStmt>
+</Document>

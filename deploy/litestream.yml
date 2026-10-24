@@ -1,0 +1,11 @@
+# Litestream 0.5: één replica per database. Bucket en endpoint komen uit
+# /etc/budget/litestream.env (LITESTREAM_BUCKET, LITESTREAM_ENDPOINT) en de sleutels uit
+# AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY in datzelfde bestand.
+dbs:
+  - path: /data/budget.db
+    replica:
+      type: s3
+      bucket: ${LITESTREAM_BUCKET}
+      path: budget.db
+      endpoint: ${LITESTREAM_ENDPOINT}
+      region: ${LITESTREAM_REGION}

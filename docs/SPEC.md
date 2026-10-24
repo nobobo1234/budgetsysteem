@@ -389,7 +389,7 @@ Gekozen: voorstel A. Fraunces voor koppen en het hoofdgetal, Inter voor de inter
 
 ## Telemetrie en monitoring
 
-Alleen een securitylog is niet genoeg: je wilt ook weten of de app werkt, of de backups lopen, of hij snel blijft en hoe goed Haiku leest. Alles blijft op je eigen server, zonder trackers of analytics van derden.
+Alleen een securitylog is niet genoeg: je wilt ook weten of de app werkt, of de backups lopen, of hij snel blijft en hoe goed Haiku leest. Alles blijft op je eigen server, zonder trackers of analytics van derden. In welke fase welk onderdeel komt, staat bij Fasering.
 
 | Wat | Waarom | Hoe |
 | --- | --- | --- |
@@ -427,7 +427,7 @@ De Haiku-eval draait niet bij elke PR, omdat hij API-tegoed kost en echte bonnet
 
 1. **Elke push:** lint (ESLint, Prettier), typecheck (`svelte-check`) en unit-tests.
 2. **Elke pull request:** daarnaast integratie- en e2e-tests, Docker-build, dependency-audit, image-scan (Trivy), geheimen-scan (gitleaks), statische analyse (Semgrep), workflow-check (zizmor), een check op verwijderde tests en onzichtbare tekens, een SBOM (CycloneDX) en het performance-budget (Lighthouse CI).
-3. **Review door Claude:** de Claude Code GitHub Action reviewt elke PR op beveiliging, testdekking en de afspraken uit deze spec. Via `@claude` in een issue of PR pakt hij ook werk op. Instellen vanuit Claude Code met `/install-github-app`. De spec en de werkafspraken staan in `CLAUDE.md` in de repo.
+3. **Review door Claude:** de Claude Code GitHub Action reviewt een PR op beveiliging, testdekking en de afspraken uit deze spec, zodra je het label `claude-review` zet. Geen `@claude` in issues of reacties: die trigger (`issue_comment`) ziet zizmor als fundamenteel onveilig. Instellen vanuit Claude Code met `/install-github-app`. De spec en de werkafspraken staan in `CLAUDE.md` in de repo.
 4. **Merge naar main:** image naar GitHub Container Registry, backup van de database, deploy via SSH over Tailscale (een tijdelijke Tailscale-node in de action), migraties, health check, en bij een fout terug naar de vorige image.
 
 ### Afspraken
@@ -454,7 +454,7 @@ De action zelf is open source en gratis; de kosten zitten in twee dingen.
 
 - **GitHub Actions-minuten** uit je 3000 per maand.
 - **Claude-gebruik**: via een API-key (per token, met een bestedingslimiet in de Console) of via je abonnement met een token uit `claude setup-token`. De action draait op de Agent SDK, en volgens het helpartikel (update van 7 oktober 2026) kun je de Agent SDK met je abonnementslimieten blijven gebruiken; Max en Team krijgen daarnaast maandelijkse API-credits ([Claude Help Center](https://support.claude.com/en/articles/15036540-use-the-claude-agent-sdk-with-your-claude-plan)). Deze regels zijn in 2026 meerdere keren veranderd, dus check het artikel bij het instellen.
-- **Zuinig houden:** review alleen op verzoek (een label of `@claude`), met `--max-turns` en een timeout.
+- **Zuinig houden:** review alleen op verzoek (het label `claude-review`), met `--max-turns` en een timeout.
 
 ### GitHub Pro (via Education)
 
@@ -485,13 +485,13 @@ De repo blijft privé. Publiek maken zou CodeQL, secret scanning en deploy-goedk
 
 Vaste lasten komen vroeg, omdat je na de import handmatig werkt: zonder verwachte posten ontbreken huur en abonnementen in je budget.
 
-1. **Fundament.** Repo met CI-pipeline, testopzet en CLAUDE.md met de AI-afspraken, designsysteem (typografie, kleuren, animatiebasis), Docker-opzet achter je bestaande nginx, passkey-login, datamodel, SNS-import met ontdubbelen, categorieregels, transactielijst met zoeken, snelinvoer, budget met tempo, startscherm, backups.
+1. **Fundament.** Repo met CI-pipeline, testopzet en CLAUDE.md met de AI-afspraken, designsysteem (typografie, kleuren, animatiebasis), Docker-opzet achter je bestaande nginx, passkey-login, datamodel, SNS-import met ontdubbelen, categorieregels, transactielijst met zoeken, snelinvoer, budget met tempo, startscherm, backups. Telemetrie: `errors`-tabel via `handleError` in een aparte telemetrie-database (90 dagen), leeftijd van de laatste backup, schijfruimte en container-restarts in de health check, en een externe beschikbaarheidscheck.
    - Klaar als: je historie staat erin, je kunt vanaf je telefoon een uitgave invoeren en je ziet wat er nog vrij is.
-2. **Vaste lasten en Te krijgen.** Herkenning, verwachte posten, signalen, voorschieten en ontvangen, saldocheck, pushmeldingen.
+2. **Vaste lasten en Te krijgen.** Herkenning, verwachte posten, signalen, voorschieten en ontvangen, saldocheck, pushmeldingen. Telemetrie: pushmeldingen bij een nieuw soort fout, een te oude backup en meer dan 80% schijfgebruik, de statuspagina achter de login, en INP en LCP via web-vitals. CI: Lighthouse CI in de PR-pipeline als performance-budget (eerste JS-bundel onder 100 kB gzip, INP), op de loginpagina en op het startscherm met een testsessie; tot dan bewaakt een e2e-test de bundelgrootte.
    - Klaar als: een maand lang alles bijhouden zonder dat er een vaste last ontbreekt.
-3. **Bonnetjes.** Eerst het testplan op je eigen bonnen, dan de verwerking, de review-inbox, de koppellijst en de opdracht voor het deelmenu.
+3. **Bonnetjes.** Eerst het testplan op je eigen bonnen, dan de verwerking, de review-inbox, de koppellijst en de opdracht voor het deelmenu. Telemetrie: per Haiku-aanroep tokens, kosten, duur, uitkomst en of je velden achteraf corrigeerde.
    - Klaar als: de test het doel haalt, of we bewust kiezen voor altijd reviewen.
-4. **Analyses.** Grafieken, trends, verwachting einde maand, jaaroverzicht, tags.
+4. **Analyses.** Grafieken, trends, verwachting einde maand, jaaroverzicht, tags. Telemetrie: je eigen gebruik (dagen met invoer, tijd van openen tot opslaan).
 5. **AI en extra's.** Maandsamenvatting, vraagveld, MCP-server, garantie-herinneringen.
 
 Het testplan voor de bonnetjes kan parallel met fase 1: je verzamelt de bonnen toch al.

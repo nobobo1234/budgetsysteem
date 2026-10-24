@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Synthetisch voorbeeld, geen echte bankdata. Alleen IBANs uit scripts/test-ibans.txt. -->
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.053.001.02">
+  <BkToCstmrStmt>
+    <GrpHdr><MsgId>TEST-1</MsgId><CreDtTm>2026-10-01T08:00:00</CreDtTm></GrpHdr>
+    <Stmt>
+      <Id>TEST-STMT-1</Id>
+      <Acct><Id><IBAN>NL12SNSB0123456789</IBAN></Id><Ccy>EUR</Ccy></Acct>
+      <Ntry>
+        <Amt Ccy="EUR">23.45</Amt>
+        <CdtDbtInd>DBIT</CdtDbtInd>
+        <Sts>BOOK</Sts>
+        <BookgDt><Dt>2026-09-02</Dt></BookgDt>
+        <ValDt><Dt>2026-09-02</Dt></ValDt>
+        <AcctSvcrRef>REF-0001</AcctSvcrRef>
+        <NtryDtls><TxDtls>
+          <RltdPties>
+            <Cdtr><Nm>ALBERT HEIJN 1403 UTRECHT</Nm></Cdtr>
+          </RltdPties>
+          <RmtInf><Ustrd>Betaalautomaat 02-09-2026</Ustrd></RmtInf>
+        </TxDtls></NtryDtls>
+      </Ntry>
+      <Ntry>
+        <Amt Ccy="EUR">1250.00</Amt>
+        <CdtDbtInd>CRDT</CdtDbtInd>
+        <Sts>BOOK</Sts>
+        <BookgDt><Dt>2026-09-25</Dt></BookgDt>
+        <AcctSvcrRef>REF-0002</AcctSvcrRef>
+        <NtryDtls><TxDtls>
+          <RltdPties>
+            <Dbtr><Nm>Werkgever B.V.</Nm></Dbtr>
+            <DbtrAcct><Id><IBAN>NL91ABNA0417164300</IBAN></Id></DbtrAcct>
+          </RltdPties>
+          <RmtInf><Ustrd>Salaris september</Ustrd></RmtInf>
+        </TxDtls></NtryDtls>
+      </Ntry>
+      <Ntry>
+        <Amt Ccy="EUR">50.00</Amt>
+        <CdtDbtInd>DBIT</CdtDbtInd>
+        <Sts>BOOK</Sts>
+        <BookgDt><Dt>2026-09-26</Dt></BookgDt>
+        <AcctSvcrRef>REF-0003</AcctSvcrRef>
+        <NtryDtls><TxDtls>
+          <RltdPties>
+            <Cdtr><Nm>Revolut Ltd</Nm></Cdtr>
+            <CdtrAcct><Id><IBAN>LT121000011101001000</IBAN></Id></CdtrAcct>
+          </RltdPties>
+          <RmtInf><Ustrd>Top-up</Ustrd></RmtInf>
+        </TxDtls></NtryDtls>
+      </Ntry>
+      <Ntry>
+        <Amt Ccy="EUR">9.99</Amt>
+        <CdtDbtInd>DBIT</CdtDbtInd>
+        <Sts>BOOK</Sts>
+        <BookgDt><Dt>2026-09-28</Dt></BookgDt>
+        <NtryDtls><TxDtls>
+          <RltdPties>
+            <Cdtr><Nm>Spotify AB</Nm></Cdtr>
+            <CdtrAcct><Id><IBAN>GB33BUKB20201555555555</IBAN></Id></CdtrAcct>
+          </RltdPties>
+          <RmtInf><Ustrd>Abonnement &amp; meer</Ustrd><Ustrd>sept</Ustrd></RmtInf>
+        </TxDtls></NtryDtls>
+      </Ntry>
+      <Ntry>
+        <Amt Ccy="EUR">9.99</Amt>
+        <CdtDbtInd>DBIT</CdtDbtInd>
+        <Sts>BOOK</Sts>
+        <BookgDt><Dt>2026-09-28</Dt></BookgDt>
+        <NtryDtls><TxDtls>
+          <RltdPties>
+            <Cdtr><Nm>Spotify AB</Nm></Cdtr>
+            <CdtrAcct><Id><IBAN>GB33BUKB20201555555555</IBAN></Id></CdtrAcct>
+          </RltdPties>
+          <RmtInf><Ustrd>Abonnement &amp; meer</Ustrd><Ustrd>sept</Ustrd></RmtInf>
+        </TxDtls></NtryDtls>
+      </Ntry>
+      <Ntry>
+        <Amt Ccy="EUR">5.00</Amt>
+        <CdtDbtInd>DBIT</CdtDbtInd>
+        <Sts>PDNG</Sts>
+        <BookgDt><Dt>2026-09-30</Dt></BookgDt>
+        <AcctSvcrRef>REF-PENDING</AcctSvcrRef>
+      </Ntry>
+    </Stmt>
+  </BkToCstmrStmt>
+</Document>

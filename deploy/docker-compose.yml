@@ -1,0 +1,44 @@
+# Op de VPS in /opt/budget. Het deploy-script zet BUDGET_IMAGE op een digest (nooit `latest`).
+# Geheimen staan in /etc/budget/*.env op de server, nooit in deze repo.
+name: budget
+
+services:
+  app:
+    image: ${BUDGET_IMAGE:?BUDGET_IMAGE ontbreekt}
+    container_name: budget
+    restart: unless-stopped
+    # Alleen lokaal: nginx is de enige ingang vanaf internet
+    ports:
+      - '127.0.0.1:3000:3000'
+    env_file: /etc/budget/app.env
+    volumes:
+      - budget-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    user: node
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+    pids_limit: 200
+    mem_limit: 512m
+
+  litestream:
+    # Doorlopende replicatie van de database naar opslag buiten de VPS
+    image: litestream/litestream:0.5@sha256:4b02b9859a6b6b4087d8b8944e15f7e984bd7957cba322bbeee38b0e27b9656a
+    container_name: budget-litestream
+    restart: unless-stopped
+    command: replicate
+    env_file: /etc/budget/litestream.env
+    volumes:
+      - budget-data:/data
+      - ./litestream.yml:/etc/litestream.yml:ro
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+    depends_on:
+      - app
+
+volumes:
+  budget-data:

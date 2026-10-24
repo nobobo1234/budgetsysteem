@@ -1,0 +1,129 @@
+import { expect, test } from '@playwright/test';
+import { count, login } from './helpers.ts';
+
+test.beforeEach(async ({ context }) => {
+	await login(context);
+});
+
+test('snelinvoer: chips tijdens het typen, opslaan en meteen in de lijst', async ({ page }) => {
+	await page.goto('/');
+	const input = page.getByLabel('Snel invoeren');
+	await input.fill('12,50 ah gisteren');
+	const chips = page.locator('#quick-chips');
+	await expect(chips).toContainText('12,50');
+	await expect(chips).toContainText('Albert Heijn');
+	await expect(page.getByRole('combobox', { name: 'Categorie' })).toHaveValue(/.+/);
+
+	await page.getByRole('button', { name: 'Opslaan' }).click();
+	await expect(input).toHaveValue('');
+	const recent = page.getByRole('region', { name: 'Recent' });
+	await expect(recent).toContainText('Albert Heijn');
+	await expect(recent).not.toContainText('Wordt opgeslagen');
+
+	await page.reload();
+	await expect(page.getByRole('region', { name: 'Recent' })).toContainText('Albert Heijn');
+});
+
+test('offline invoeren en synchroniseren zodra er verbinding is', async ({ page, context }) => {
+	await page.goto('/');
+	// Pas offline als de app gehydrateerd is; de chunks moeten binnen zijn
+	await page.waitForLoadState('networkidle');
+	const before = count(
+		"SELECT count(*) AS n FROM transactions WHERE counterparty = 'Offline Bakker'"
+	);
+
+	await context.setOffline(true);
+	await page.getByLabel('Snel invoeren').fill('3,10 Offline Bakker');
+	await page.getByRole('button', { name: 'Opslaan' }).click();
+	await expect(page.getByText('Wordt opgeslagen')).toBeVisible();
+	await expect(page.getByRole('status').filter({ hasText: 'Offline' })).toBeVisible();
+	expect(
+		count("SELECT count(*) AS n FROM transactions WHERE counterparty = 'Offline Bakker'")
+	).toBe(before);
+
+	await context.setOffline(false);
+	await page.evaluate(() => window.dispatchEvent(new Event('online')));
+	await expect(page.getByText('Wordt opgeslagen')).toHaveCount(0);
+	await expect
+		.poll(() =>
+			count("SELECT count(*) AS n FROM transactions WHERE counterparty = 'Offline Bakker'")
+		)
+		.toBe(before + 1);
+});
+
+test('import: overzicht, en dezelfde export opnieuw levert niets dubbel op', async ({ page }) => {
+	await page.goto('/import');
+	await page.getByLabel('Bankbestand').setInputFiles('tests/fixtures/camt053-v02.xml');
+	await page.getByRole('button', { name: 'Importeren' }).click();
+	const result = page.getByRole('status').filter({ hasText: 'Import klaar' });
+	await expect(result).toBeVisible();
+	const first = Number(await result.locator('dd').first().textContent());
+
+	await page.getByLabel('Bankbestand').setInputFiles('tests/fixtures/camt053-v02.xml');
+	await page.getByRole('button', { name: 'Importeren' }).click();
+	await expect(result.locator('dd').first()).toHaveText('0');
+	await expect(result.locator('dd').nth(1)).toHaveText(String(first === 0 ? 5 : first));
+
+	// Eén klik maakt een regel. De projecten delen één database, dus elk een eigen tegenpartij.
+	const [name, pattern] =
+		test.info().project.name === 'chromium'
+			? ['ALBERT HEIJN 1403 UTRECHT', 'albert heijn utrecht']
+			: ['Spotify AB', 'spotify ab'];
+	const row = page.getByRole('listitem').filter({ hasText: name });
+	await row.getByRole('combobox').selectOption({ label: 'Boodschappen' });
+	await row.getByRole('button', { name: 'Regel maken' }).click();
+	await expect(page.getByText(`Regel voor "${pattern}" gemaakt`)).toBeVisible();
+});
+
+test('budget instellen en zien wat er nog vrij is', async ({ page }) => {
+	await page.goto('/budget');
+	const item = page.getByRole('listitem').filter({ has: page.getByLabel('Limiet Boodschappen') });
+	await item.getByLabel('Limiet Boodschappen').fill('300');
+	await item.getByRole('button', { name: 'Opslaan' }).click();
+	await expect(item.getByRole('meter')).toBeVisible();
+
+	await page.goto('/');
+	await expect(page.getByRole('region', { name: /Nog vrij in/ })).toBeVisible();
+});
+
+test('transacties zoeken', async ({ page }) => {
+	await page.goto('/transacties?q=Albert');
+	await expect(page.getByRole('list').first()).toContainText('Albert');
+	await page.getByRole('searchbox', { name: 'Zoeken' }).fill('bestaat-zeker-niet');
+	await page.getByRole('button', { name: 'Zoeken' }).click();
+	await expect(page.getByText(/Niets gevonden/)).toBeVisible();
+});
+
+// Een te breed element laat een telefoon de hele pagina uitzoomen
+for (const path of ['/', '/transacties', '/budget', '/import', '/categorieen', '/instellingen']) {
+	test(`${path} past op een telefoonscherm`, async ({ page }) => {
+		await page.goto(path);
+		const { inner, scroll } = await page.evaluate(() => ({
+			inner: document.documentElement.clientWidth,
+			scroll: document.documentElement.scrollWidth
+		}));
+		expect(scroll).toBeLessThanOrEqual(inner);
+	});
+}
+
+// Performance-budget (spec: Design en interactie, Techniek): eerste JS-bundel onder 100 kB gzip.
+// Eén meting is genoeg, dus alleen in Chromium.
+test(
+	'de eerste JavaScript-bundel blijft onder 100 kB gzip',
+	{ tag: '@chromium' },
+	async ({ page }) => {
+		const { gzipSync } = await import('node:zlib');
+		const bodies: Promise<Buffer>[] = [];
+		page.on('response', (r) => {
+			if (r.request().resourceType() === 'script' || r.url().endsWith('.js')) bodies.push(r.body());
+		});
+		await page.goto('/');
+		await page.waitForLoadState('networkidle');
+		const sizes = await Promise.all(bodies);
+		const total = sizes.reduce((sum, b) => sum + gzipSync(b).length, 0);
+		console.log(
+			`Eerste JS-bundel: ${(total / 1024).toFixed(1)} kB gzip in ${sizes.length} bestanden`
+		);
+		expect(total).toBeLessThan(100 * 1024);
+	}
+);

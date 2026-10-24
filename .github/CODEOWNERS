@@ -1,0 +1,8 @@
+# Wijzigingen hieraan vragen altijd review door Noah (CLAUDE.md, spec: A08)
+/.github/            @nobobo1234
+/Dockerfile          @nobobo1234
+/package.json        @nobobo1234
+/pnpm-lock.yaml      @nobobo1234
+/pnpm-workspace.yaml @nobobo1234
+/CLAUDE.md           @nobobo1234
+/deploy/             @nobobo1234

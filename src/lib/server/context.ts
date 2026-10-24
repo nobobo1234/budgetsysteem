@@ -1,0 +1,35 @@
+import { asc, eq } from 'drizzle-orm';
+import { sortRules } from '../rules.ts';
+import type { DB } from './db/index.ts';
+import { accounts, categories, rules } from './db/schema.ts';
+import { knownCounterparties } from './transactions.ts';
+
+/** Alles wat de snelinvoer in de browser nodig heeft om lokaal te parsen en te koppelen. */
+export function quickEntryContext(db: DB) {
+	return {
+		categories: db
+			.select({ id: categories.id, name: categories.name, group: categories.group })
+			.from(categories)
+			.where(eq(categories.archived, false))
+			.orderBy(asc(categories.sortOrder), asc(categories.name))
+			.all(),
+		accounts: db
+			.select({ id: accounts.id, alias: accounts.alias, kind: accounts.kind, name: accounts.name })
+			.from(accounts)
+			.orderBy(asc(accounts.createdAt))
+			.all(),
+		rules: sortRules(
+			db
+				.select({
+					id: rules.id,
+					field: rules.field,
+					pattern: rules.pattern,
+					categoryId: rules.categoryId,
+					priority: rules.priority
+				})
+				.from(rules)
+				.all()
+		),
+		knownCounterparties: knownCounterparties(db)
+	};
+}
