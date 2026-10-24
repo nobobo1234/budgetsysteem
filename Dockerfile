@@ -9,12 +9,14 @@ ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
 WORKDIR /app
 RUN corepack enable
 
-FROM base AS build
+FROM base AS toolchain
 # Bouwgereedschap voor better-sqlite3 als er geen prebuilt binary is
 RUN apt-get update \
  && apt-get install -y --no-install-recommends python3 make g++ \
  && rm -rf /var/lib/apt/lists/*
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+
+FROM toolchain AS build
 RUN pnpm install --frozen-lockfile
 COPY . .
 # De publieke origin wordt bij het bouwen vastgelegd (SvelteKit 3: paths.origin)
@@ -22,7 +24,9 @@ ARG ORIGIN
 RUN test -n "$ORIGIN" || (echo "ORIGIN is verplicht" && exit 1)
 RUN ORIGIN="$ORIGIN" pnpm build
 
-FROM build AS prod-deps
+# Productie-dependencies vers installeren, niet uitdunnen vanuit de build: dan blijven
+# devDependencies (eslint, drizzle-kit, esbuild-binaries) in node_modules/.pnpm achter
+FROM toolchain AS prod-deps
 RUN pnpm install --frozen-lockfile --prod
 
 FROM ${NODE_IMAGE} AS runtime
@@ -36,6 +40,10 @@ ENV NODE_ENV=production \
     BODY_SIZE_LIMIT=25M \
     COOKIE_SECURE=true
 WORKDIR /app
+# Alleen `node` is nodig. npm, npx en corepack uit het base-image eruit: kleiner
+# aanvalsoppervlak, en hun gebundelde packages lopen achter (Trivy)
+RUN rm -rf /usr/local/lib/node_modules /usr/local/bin/npm /usr/local/bin/npx \
+    /usr/local/bin/corepack /usr/local/bin/yarn /usr/local/bin/yarnpkg /opt/yarn-*
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=build /app/build ./build
 COPY --from=build /app/drizzle ./drizzle
