@@ -75,6 +75,26 @@
 		</section>
 	{/if}
 
+	{#if data.repairable > 0}
+		<form method="POST" action="?/repair" class="card repair" use:enhance>
+			<h2>Pinbetalingen zonder naam</h2>
+			<p class="muted">
+				{data.repairable}
+				{data.repairable === 1 ? 'pinbetaling' : 'pinbetalingen'} uit een eerdere import
+				{data.repairable === 1 ? 'heeft' : 'hebben'} geen tegenpartij. De winkel staat wel in de omschrijving;
+				die nemen we over als tegenpartij.
+			</p>
+			<button class="button secondary">Winkelnamen invullen</button>
+		</form>
+	{/if}
+
+	{#if form?.repaired}
+		<p role="status">
+			{form.repaired.updated} tegenpartijen ingevuld; {form.repaired.categorized} transacties kregen een
+			categorie via je regels.
+		</p>
+	{/if}
+
 	{#if form && 'applied' in form}
 		<p role="status">Regel voor "{form.pattern}" gemaakt; {form.applied} transacties bijgewerkt.</p>
 	{/if}
@@ -127,6 +147,17 @@
 	.upload {
 		display: grid;
 		gap: 12px;
+	}
+
+	.repair {
+		display: grid;
+		gap: 8px;
+		justify-items: start;
+	}
+
+	.repair h2,
+	.repair p {
+		margin: 0;
 	}
 
 	.upload label {
