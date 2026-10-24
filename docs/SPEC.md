@@ -445,32 +445,119 @@ De vaste analyses draaien als SQL op je eigen server en zijn direct; AI komt er 
 
 De app krijgt de verzorgde, eigenzinnige uitstraling van Awwwards-sites, maar blijft een gereedschap dat je dagelijks gebruikt. Animatie ondersteunt elke actie en houdt hem nooit op.
 
+Omdat "Awwwards-uitstraling" en "goede UX" op veel manieren te lezen zijn, maakt deze sectie ze toetsbaar: welke schermen er zijn en wat erop staat, welke componenten de app gebruikt, welke beweging bij welk moment hoort, en een lijst waaraan elk scherm moet voldoen voordat het klaar is (Klaar voor UI). Wat hier niet staat, volgt uit de principes hieronder; wijkt een scherm bewust af, dan staat dat in de PR.
+
 **Stijl**
 
-- Grote, zelfverzekerde typografie: één display-font met karakter voor koppen en het hoofdgetal, één rustige font voor de interface. Cijfers in tabular figures, zodat bedragen netjes onder elkaar staan.
+- Grote, zelfverzekerde typografie: één display-font met karakter voor koppen en het hoofdgetal, één rustige font voor de interface. Cijfers in tabular figures, zodat bedragen netjes onder elkaar staan. Contrast in schaal: een paginatitel is minstens twee keer zo groot als de lopende tekst.
 - Veel witruimte, een beperkt palet met één accentkleur, en een licht en een donker thema.
 - Het getal "nog vrij deze maand" is de held van het startscherm: groot, en het telt vloeiend mee bij elke wijziging.
 - Geen eyebrows: geen kleine labels of hoofdletterregels boven titels. Een titel staat op zichzelf; context hoort in de titel of in de tekst eronder.
 - Mobiel eerst en binnen bereik van je duim: de belangrijkste acties onderin. Op desktop meer kolommen via container queries.
 - Lege staten en foutmeldingen krijgen dezelfde zorg, met altijd een volgende stap.
+- Rust: per scherm of kaart één primaire knop (accentkleur); de rest is secundair. Gevaarlijke acties zijn rustig (rode tekst) en vragen bevestiging op de pagina, nooit via `confirm()`.
 
-**Micro-interacties**
+### Schermen
 
-- Snelinvoer: de chips voor bedrag, naam en categorie verschijnen terwijl je typt.
+Elk scherm staat in deze tabel. Een nieuw scherm krijgt eerst een regel hier, in dezelfde PR waarin het gebouwd wordt.
+
+| Scherm | Route | Bovenaan | Hoofdactie | Verder |
+| --- | --- | --- | --- | --- |
+| Overzicht | `/` | Nog vrij deze maand, daaronder de snelinvoer | Uitgave invoeren | Recent (8 posten), aantal te controleren, balken per categorie |
+| Transacties | `/transacties` | Zoekveld met filters op maand en categorie, die direct filteren | Zoeken | Lijst per dag met dagsaldo, aantal en totalen voor het hele filter, pagina's van 50 |
+| Transactie | `/transacties/[id]` | Tegenpartij en bedrag, groot | Opslaan | Bedrag, richting, datum, categorie, tegenpartij, notitie; verdeling; verwijderen met bevestiging |
+| Budget | `/budget` | Maand met vorige en volgende, totalen | Limiet instellen | Per groep een balk met tempo en een limietveld; link naar categorieën |
+| Categorieën | `/categorieen` | Tabs Categorieën en Regels | Nieuwe categorie | Per groep een kaart; bewerken in de rij (naam, groep, telt mee); gearchiveerd ingeklapt |
+| Regels | `/regels` | Tabs Categorieën en Regels | Nieuwe regel | Lijst als zin ("Tegenpartij bevat … → categorie") met filter; nieuwe regel als "Als … dan …", prioriteit ingeklapt |
+| Import | `/import` | Sleepvak voor het bankbestand | Importeren | Overzicht na import, tegenpartijen zonder categorie met één klik een regel, eerdere imports |
+| Meer | `/instellingen` | Passkeys | — | Herstelcode, actieve apparaten, rekeningen, links naar categorieën en regels, uitloggen |
+| Inloggen | `/login` | Titel en uitleg | Inloggen met passkey | Herstelcode als terugval |
+
+Schermen uit latere fasen (vaste lasten, Te krijgen, review-inbox, analyses) komen in de tabel zodra die fase begint.
+
+**Navigatie.** Een tabbalk met vijf tabs (icoon en label) onderin op een telefoon en bovenin op desktop. Hoort een onderwerp bij meerdere pagina's, zoals categorieën en regels, dan krijgen die bovenaan een tab-schakelaar met het aantal per pagina. Geen ankerlinks naar plekken op één lange pagina: wordt een pagina op 375 px breed langer dan ongeveer drie schermhoogtes met verschillende onderwerpen, dan wordt hij gesplitst.
+
+**Indeling**
+
+- Wat je komt bekijken staat boven wat je toevoegt: een lijst staat boven het formulier om iets nieuws te maken, en dat formulier opent via een knop.
+- Bewerken gebeurt waar het item staat (in de rij of op de detailpagina), niet in een apart formulier onderaan.
+- Bedragen staan rechts uitgelijnd in `tabular-nums`; uitgaand in de tekstkleur met een minteken, inkomend in het accent met een plusteken.
+- Een categorie staat overal met het bolletje in de kleur van haar groep; "zonder categorie" is een open bolletje.
+- Lange lijsten zijn gegroepeerd (transacties per dag, categorieën per groep) met een kop die blijft staan tijdens het scrollen.
+
+### Componenten
+
+De app gebruikt eigen, toegankelijke componenten in Svelte 5 in plaats van de standaardbediening van de browser, en liever geen nieuwe dependency. Een nieuwe component komt er pas als een bestaande niet past.
+
+| Component | Wanneer | Eisen |
+| --- | --- | --- |
+| Select | Elke keuze uit een lijst; nooit een native `<select>` | ARIA-patroon "select-only combobox"; pijltjes, Home/End, typen om te zoeken, Esc; zoekveld vanaf 9 opties; groepen met kleurbolletje; op een telefoon een sheet onderin |
+| Sheet en popover | Menu's, keuzelijsten, korte dialogen | In de top layer (`popover`), sluit met Esc en door ernaast te tikken, focus terug naar wat hem opende |
+| Toast | Bevestiging na een actie | Zweeft boven de tabbalk, verdwijnt na 4 seconden; een fout blijft staan |
+| Tabs | Pagina's binnen één onderwerp | Links met `aria-current`, aantal per tab |
+| Keuzeschakelaar | Twee of drie opties die je ziet zonder te openen, zoals uitgave of inkomend | Radioknoppen eronder, toetsenbord werkt |
+| Schakelaar | Aan of uit, zoals "telt mee voor budget" | Checkbox met `role="switch"` |
+| Sleepvak | Een bestand kiezen | Klikken en slepen; toont naam en grootte van het gekozen bestand |
+
+Native blijven: tekstvelden en het datumveld (`type="date"`), omdat de datumkiezer van de telefoon beter is dan een eigen versie. Ze krijgen wel de stijl van de app.
+
+### Staten
+
+Elk scherm en elke lijst heeft vier staten, en alle vier zijn ontworpen:
+
+- **Leeg:** zegt wat er zou staan en geeft de volgende stap, zoals "Historie importeren".
+- **Laden:** de oude inhoud blijft staan, zichtbaar gedimd; geen lege pagina en geen spinner voor iets dat korter duurt dan 300 ms.
+- **Fout:** wat er misging in gewone taal, bij het veld als het om een veld gaat, en wat je nu kunt doen.
+- **Gelukt:** een toast of een korte bevestiging op de plek zelf, nooit alleen stilte.
+
+### Beweging
+
+Beweging vertelt waar je bent en wat er net gebeurde. Elke beweging hieronder duurt tussen 120 en 400 ms, loopt tegelijk met de actie en animeert alleen `transform` en `opacity`.
+
+| Moment | Wat je ziet | Hoe |
+| --- | --- | --- |
+| Tik op een knop, rij of tab | Hij veert kort in | `scale` 0,96–0,99, 160 ms, veer-easing |
+| Naar een ander scherm | De tabbalk blijft staan; de inhoud schuift een stukje in de richting van de navigatie (dieper of naar rechts in de tabbalk: van rechts, terug: van links) | View Transition via `onNavigate`, 260 ms |
+| Van een transactie naar de detailpagina | Tegenpartij en bedrag schuiven vanuit de rij naar de kop van de detailpagina, en terug | View Transition met een eigen `view-transition-name` per transactie |
+| Keuzelijst of sheet opent | Komt van onder (telefoon) of schaalt licht op (desktop) | `@starting-style`, 180 ms |
+| Melding | Komt omhoog en verdwijnt na 4 seconden | CSS-animatie |
+| Nieuwe post in een lijst | Schuift de lijst in | Svelte-transitie, 220 ms |
+| Nog vrij deze maand | Telt mee naar het nieuwe getal | GSAP, 600 ms |
+| Budgetbalk | Vult met een veer; de kleur verloopt bij de limiet | CSS, 700 ms |
+| Snelinvoer | Chips verschijnen terwijl je typt | CSS, 160 ms |
+
+Uit latere fasen: swipen op een transactie en de vink-animatie bij een verwachte post (fase 2), de laadstaat van een bon (fase 3), grafieken die zich opbouwen (fase 4) en SplitText voor koppen bij de maandafsluiting.
+
+Bij `prefers-reduced-motion` vallen de View Transitions weg en worden alle andere animaties direct; niets hangt ervan af dat een animatie afspeelt.
+
+**Overige micro-interacties**
+
 - Opslaan: de knop veert kort in en de nieuwe post schuift de lijst in, terwijl hij op de achtergrond wordt opgeslagen.
-- Budgetbalken vullen met een veer-easing; nadert een categorie de limiet, dan verloopt de kleur geleidelijk.
 - Swipen op een transactie bevestigt hem of wijzigt de categorie; een verwachte post afvinken geeft een korte vink-animatie.
 - Een bon die wordt gelezen toont een rustige laadstaat die overgaat in de herkende velden.
 - Elke reactie op een tik is binnen 100 ms zichtbaar; een animatie loopt altijd tegelijk met de actie, nooit ervoor.
 
 **Techniek**
 
-- Moderne CSS waar die volstaat: View Transitions voor schermovergangen (via `onNavigate` in SvelteKit), scroll-driven animations voor lijsten en grafieken, `@starting-style` voor sheets en dialogen, container queries, `:has()`, kleuren in `oklch()` en anchor positioning voor tooltips en menu's. Met een nette terugval waar een browser iets nog niet ondersteunt.
+- Moderne CSS waar die volstaat: View Transitions voor schermovergangen (via `onNavigate` in SvelteKit, met benoemde delen voor de tabbalk, de inhoud en gedeelde elementen), scroll-driven animations voor lijsten en grafieken, `@starting-style` voor sheets en dialogen, container queries, `:has()`, kleuren in `oklch()`, en de top layer (`popover`) met anchor positioning voor tooltips en menu's. Met een nette terugval waar een browser iets nog niet ondersteunt.
 - GSAP voor wat CSS niet goed kan: tellende getallen, Flip bij het herordenen van lijsten, timelines voor het opbouwen van grafieken en SplitText voor koppen bij grote momenten zoals de maandafsluiting. GSAP wordt pas geladen na de eerste weergave.
 - Alleen `transform` en `opacity` animeren, op 60 fps op een middenklasse telefoon.
 - Bij `prefers-reduced-motion` worden animaties korte fades of vallen ze weg.
 - Toegankelijk: contrast volgens WCAG AA, zichtbare focusstijlen, alles bereikbaar met het toetsenbord en tikdoelen van minstens 44 px.
 - Performance-budget: de eerste JavaScript-bundel blijft onder 100 kB gzip, bewaakt in CI.
+
+### Klaar voor UI
+
+Een scherm is pas klaar als het aan deze lijst voldoet. Een PR die een scherm toevoegt of verandert, loopt de lijst na en zet voor- en na-screenshots (375 px) in de beschrijving.
+
+- [ ] Het scherm staat in de tabel Schermen, en bovenaan staat wat daar volgens de tabel hoort.
+- [ ] Bekeken op 375 px en op desktop, in licht en donker thema; geen horizontale scroll (e2e).
+- [ ] Geen native `<select>` (e2e); keuzes gaan via de eigen Select.
+- [ ] Lege, laad-, fout- en gelukt-staat zijn ontworpen.
+- [ ] Alles werkt met het toetsenbord, met zichtbare focus; tikdoelen van minstens 44 px; contrast AA.
+- [ ] De overgang naar en van het scherm loopt via een View Transition, en de bewegingen volgen de tabel Beweging.
+- [ ] Eén primaire knop per scherm of kaart; een lijst staat boven het formulier om iets toe te voegen.
+- [ ] De eerste JS-bundel blijft onder 100 kB gzip (e2e).
 
 ### Typografie en kleur
 
@@ -515,7 +602,7 @@ Elke pull request draait lint, typecheck en drie testlagen, en wordt gereviewd d
 | --- | --- | --- | --- |
 | Unit | Vitest | CAMT- en CSV-parser, snelinvoer-parser, koppelscore, herkenning van vaste lasten, budget- en tempoberekening, categorieregels, validatie van de Haiku-uitvoer | \~50% |
 | Integratie | Vitest met echte SQLite (tijdelijk bestand) | API-routes, import met ontdubbelen, elke route zonder sessie geeft 401, upload-token mag alleen uploaden, jobs met een nagebootste Haiku, migraties | \~40% |
-| E2E | Playwright (Chromium en WebKit, telefoonformaat) | inloggen met een virtuele passkey, snelinvoer, offline invoeren en synchroniseren, import, bon uploaden tot de review-inbox, verwachte post bevestigen | \~10% |
+| E2E | Playwright (Chromium en WebKit, telefoonformaat) | inloggen met een virtuele passkey, snelinvoer, offline invoeren en synchroniseren, import, bon uploaden tot de review-inbox, verwachte post bevestigen; per scherm geen horizontale scroll en geen native `<select>` (zie Klaar voor UI) | \~10% |
 | Haiku-eval | eigen script | 25 tot 30 gelabelde bonnetjes, nauwkeurigheid per veld | apart, handmatig of wekelijks |
 
 De Haiku-eval draait niet bij elke PR, omdat hij API-tegoed kost en echte bonnetjes nodig heeft. In alle andere tests is Haiku nagebootst.
@@ -581,6 +668,8 @@ De repo blijft privé. Publiek maken zou CodeQL, secret scanning en deploy-goedk
 ## Fasering
 
 Vaste lasten komen vroeg, omdat je na de import handmatig werkt: zonder verwachte posten ontbreken huur en abonnementen in je budget.
+
+Bij elke fase hoort naast "Klaar als" ook Klaar voor UI (zie Design en interactie): de schermen uit die fase voldoen aan die lijst.
 
 1. **Fundament.** Repo met CI-pipeline, testopzet en CLAUDE.md met de AI-afspraken, designsysteem (typografie, kleuren, animatiebasis), Docker-opzet achter je bestaande nginx, passkey-login, datamodel, SNS-import met ontdubbelen, categorieregels, transactielijst met zoeken, snelinvoer, budget met tempo, startscherm, backups. Telemetrie: `errors`-tabel via `handleError` in een aparte telemetrie-database (90 dagen), leeftijd van de laatste backup, schijfruimte en container-restarts in de health check, en een externe beschikbaarheidscheck.
    - Klaar als: je historie staat erin, je kunt vanaf je telefoon een uitgave invoeren en je ziet wat er nog vrij is.

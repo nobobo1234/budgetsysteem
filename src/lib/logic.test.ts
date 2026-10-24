@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { freeThisMonth, pace } from './budget.ts';
 import { groupColor, groupHue } from './categoryColor.ts';
+import { keyboardInset } from './viewport.ts';
 import { addDays, daysInMonth, formatDayHeading, isIsoDate, shiftMonth } from './dates.ts';
 import { matchRule, sortRules, type Rule } from './rules.ts';
 import { isValidIban, normalize, normalizeCounterparty } from './text.ts';
@@ -156,5 +157,24 @@ describe('kleur per categoriegroep', () => {
 		expect(groupColor(null)).toBeNull();
 		expect(groupColor('')).toBeNull();
 		expect(groupColor('Dagelijks')).toContain('oklch(');
+	});
+});
+
+describe('sheet boven het schermtoetsenbord', () => {
+	it('zonder toetsenbord blijft de sheet onderin met de hele hoogte als ruimte', () => {
+		expect(keyboardInset(800, { height: 800, offsetTop: 0 })).toEqual({ bottom: 0, room: 800 });
+	});
+
+	it('met toetsenbord schuift de sheet erboven en krimpt de ruimte mee', () => {
+		expect(keyboardInset(800, { height: 460, offsetTop: 0 })).toEqual({ bottom: 340, room: 460 });
+	});
+
+	it('houdt rekening met een verschoven visual viewport (iOS scrolt naar het veld)', () => {
+		expect(keyboardInset(800, { height: 460, offsetTop: 120 })).toEqual({ bottom: 220, room: 460 });
+	});
+
+	it('zonder visualViewport of bij afrondingsruis nooit negatief', () => {
+		expect(keyboardInset(800, null)).toEqual({ bottom: 0, room: 800 });
+		expect(keyboardInset(800, { height: 800.4, offsetTop: 0 }).bottom).toBe(0);
 	});
 });

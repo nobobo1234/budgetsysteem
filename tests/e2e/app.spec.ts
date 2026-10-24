@@ -117,7 +117,67 @@ for (const path of [
 		}));
 		expect(scroll).toBeLessThanOrEqual(inner);
 	});
+
+	// Spec: Klaar voor UI. Keuzes gaan via de eigen Select, nooit via een native <select>.
+	test(`${path} gebruikt geen native select`, async ({ page }) => {
+		await page.goto(path);
+		await expect(page.locator('select')).toHaveCount(0);
+	});
 }
+
+// Regel maken met alleen de eigen selects: veld kiezen, categorie zoeken door te typen. Op
+// telefoonformaat is de keuzelijst een sheet, op desktop een uitklaplijst: beide testen.
+for (const [size, viewport] of [
+	['telefoon', null],
+	['desktop', { width: 1280, height: 800 }]
+] as const) {
+	test(`regel toevoegen via de selects op /regels (${size})`, async ({ page }) => {
+		if (viewport) await page.setViewportSize(viewport);
+		await page.goto('/regels');
+		await page.getByRole('button', { name: 'Nieuwe regel' }).click();
+		const field = page.getByRole('combobox', { name: 'Veld', exact: true });
+		await field.click();
+		// De lijst heeft echt hoogte: alle opties staan erin en zijn zichtbaar
+		const listbox = page.getByRole('listbox', { name: 'Veld' });
+		await expect(listbox.getByRole('option')).toHaveCount(3);
+		expect((await listbox.boundingBox())!.height).toBeGreaterThan(3 * 40);
+		await page.getByRole('option', { name: 'Omschrijving bevat' }).click();
+		await expect(field).toHaveText('Omschrijving bevat');
+
+		const pattern = `e2e-${size}-${test.info().project.name}`;
+		await page.getByRole('textbox', { name: 'Patroon' }).fill(pattern);
+		const category = page.getByRole('combobox', { name: 'Categorie', exact: true });
+		await category.click();
+		const search = page.getByRole('combobox', { name: 'Zoek in Categorie' });
+		await search.click();
+		await search.pressSequentially('boods');
+		// Tijdens het typen blijven de passende opties zichtbaar
+		const option = page.getByRole('option', { name: 'Boodschappen', exact: true });
+		await expect(option).toBeVisible();
+		expect((await option.boundingBox())!.height).toBeGreaterThanOrEqual(40);
+		await option.click();
+		await expect(category).toHaveText('Boodschappen');
+
+		await page.getByRole('button', { name: 'Regel toevoegen' }).click();
+		await expect(page.getByRole('status').filter({ hasText: 'Regel opgeslagen' })).toBeVisible();
+		await expect(page.locator('.rules')).toContainText(pattern);
+	});
+}
+
+// Schermwissel met View Transitions (spec: Beweging): de navigatie komt altijd aan, ook met
+// gedeelde elementen tussen de lijst en de detailpagina
+test('van de lijst naar een transactie en terug', async ({ page }) => {
+	await page.goto('/transacties');
+	await page.waitForLoadState('networkidle');
+	const row = page.locator('.days a').first();
+	const name = (await row.locator('[data-tx-name]').textContent())!.trim();
+	await row.click();
+	await expect(page.getByRole('heading', { level: 1 })).toHaveText(name);
+	await page.getByRole('link', { name: 'Transacties' }).first().click();
+	await expect(page.getByRole('heading', { level: 1 })).toHaveText('Transacties');
+	// Na de overgang blijven er geen namen op de rijen achter
+	await expect(page.locator('[data-tx-name][style*="view-transition-name"]')).toHaveCount(0);
+});
 
 // Performance-budget (spec: Design en interactie, Techniek): eerste JS-bundel onder 100 kB gzip.
 // Eén meting is genoeg, dus alleen in Chromium.
