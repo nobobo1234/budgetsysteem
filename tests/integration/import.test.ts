@@ -13,12 +13,14 @@ import {
 import { parseBankFile } from '../../src/lib/server/import/index.ts';
 import {
 	applyRulesToUncategorized,
+	countCardCounterpartyRepairs,
 	fillCardCounterparties,
 	importRecords,
 	uncategorizedGroups
 } from '../../src/lib/server/import/importer.ts';
 import type { ImportRecord } from '../../src/lib/server/import/types.ts';
-import { tempDatabase } from './helpers.ts';
+import { actions as importActions } from '../../src/routes/(app)/import/+page.server.ts';
+import { fakeEvent, tempDatabase } from './helpers.ts';
 
 const file = (name: string) => readFileSync(`tests/fixtures/${name}`);
 
@@ -336,6 +338,27 @@ describe('reparatie van bestaande pinbetalingen', () => {
 				)
 				.all()
 		).toHaveLength(1);
+	});
+
+	it('telt vooraf hoeveel er te repareren is', () => {
+		importFixture('camt053-pin.xml');
+		expect(countCardCounterpartyRepairs(db)).toBe(0);
+		db.delete(transactions).run();
+		importWithoutMerchants('camt053-pin.xml');
+		expect(countCardCounterpartyRepairs(db)).toBe(5);
+		fillCardCounterparties(db);
+		expect(countCardCounterpartyRepairs(db)).toBe(0);
+	});
+
+	it('draait via de knop op de importpagina', async () => {
+		importWithoutMerchants('camt053-pin.xml');
+		const event = fakeEvent({ path: '/import?/repair', routeId: '/(app)/import', method: 'POST' });
+		expect(await importActions.repair!(event as never)).toEqual({
+			repaired: { updated: 5, categorized: 0 }
+		});
+		expect(await importActions.repair!(event as never)).toEqual({
+			repaired: { updated: 0, categorized: 0 }
+		});
 	});
 
 	it('maakt de groepen in het overzicht weer zichtbaar', () => {

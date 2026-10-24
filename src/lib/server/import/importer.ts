@@ -248,48 +248,58 @@ function mostFrequent(counts: Map<string, number> | undefined): string | null {
 	return best;
 }
 
+/** Geïmporteerde pinbetalingen zonder tegenpartij waarvan de winkel in de omschrijving staat. */
+function cardCounterpartyRepairs(db: Conn): { id: string; before: string; merchant: string }[] {
+	return db
+		.select({
+			id: transactions.id,
+			counterparty: transactions.counterparty,
+			description: transactions.description
+		})
+		.from(transactions)
+		.where(
+			and(
+				eq(transactions.source, 'import'),
+				sql`trim(${transactions.counterparty}) = ''`,
+				like(transactions.description, '%MCC:%')
+			)
+		)
+		.all()
+		.flatMap((t) => {
+			const merchant = parseCardPayment(t.description)?.merchant.slice(0, 140);
+			return merchant ? [{ id: t.id, before: t.counterparty, merchant }] : [];
+		});
+}
+
+/** Hoeveel transacties `fillCardCounterparties` zou bijwerken. */
+export function countCardCounterpartyRepairs(db: Conn): number {
+	return cardCounterpartyRepairs(db).length;
+}
+
 /**
- * Eenmalige reparatie, veilig om bij elke start te draaien: geïmporteerde pinbetalingen zonder
- * tegenpartij krijgen de winkel uit de omschrijving. De omschrijving, bankreferentie en
- * ontdubbelhash blijven ongewijzigd. Elke wijziging komt in het audit-log, zodat hij terug te
- * volgen en ongedaan te maken is. Daarna worden de regels opnieuw toegepast.
+ * Reparatie voor imports van vóór de herkenning van pinbetalingen: geïmporteerde pinbetalingen
+ * zonder tegenpartij krijgen de winkel uit de omschrijving. Idempotent; omschrijving,
+ * bankreferentie en ontdubbelhash blijven ongewijzigd. Elke wijziging komt in het audit-log,
+ * zodat hij terug te volgen en ongedaan te maken is. Daarna worden de regels opnieuw toegepast.
  */
 export function fillCardCounterparties(db: DB): { updated: number; categorized: number } {
 	const updated = db.transaction((tx) => {
-		const open = tx
-			.select({
-				id: transactions.id,
-				counterparty: transactions.counterparty,
-				description: transactions.description
-			})
-			.from(transactions)
-			.where(
-				and(
-					eq(transactions.source, 'import'),
-					sql`trim(${transactions.counterparty}) = ''`,
-					like(transactions.description, '%MCC:%')
-				)
-			)
-			.all();
-		let n = 0;
-		for (const t of open) {
-			const merchant = parseCardPayment(t.description)?.merchant.slice(0, 140);
-			if (!merchant) continue;
+		const repairs = cardCounterpartyRepairs(tx);
+		for (const r of repairs) {
 			tx.update(transactions)
-				.set({ counterparty: merchant, updatedAt: new Date().toISOString() })
-				.where(eq(transactions.id, t.id))
+				.set({ counterparty: r.merchant, updatedAt: new Date().toISOString() })
+				.where(eq(transactions.id, r.id))
 				.run();
 			recordChange(
 				tx,
 				'tegenpartij_uit_pinbetaling',
 				'transactions',
-				t.id,
-				{ counterparty: t.counterparty },
-				{ counterparty: merchant }
+				r.id,
+				{ counterparty: r.before },
+				{ counterparty: r.merchant }
 			);
-			n++;
 		}
-		return n;
+		return repairs.length;
 	});
 	return { updated, categorized: updated > 0 ? applyRulesToUncategorized(db) : 0 };
 }
