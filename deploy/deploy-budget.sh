@@ -25,11 +25,18 @@ trap 'docker logout ghcr.io >/dev/null 2>&1 || true' EXIT
 docker pull "$REPO_IMAGE@$DIGEST"
 docker logout ghcr.io >/dev/null
 
-# Backup vóór migraties (de app migreert bij het starten)
-"$DIR/backup.sh" pre-deploy
+# Backup vóór migraties (de app migreert bij het starten). Bij de eerste uitrol is er nog
+# geen container en dus niets om te bewaren.
+if docker ps --format '{{.Names}}' | grep -qx budget; then
+  "$DIR/backup.sh" pre-deploy
+fi
+
+compose() {
+  BUDGET_IMAGE="$REPO_IMAGE@$1" docker compose -f "$DIR/docker-compose.yml" "${@:2}"
+}
 
 start() {
-  BUDGET_IMAGE="$REPO_IMAGE@$1" docker compose -f "$DIR/docker-compose.yml" up -d --no-deps app
+  compose "$1" up -d --no-deps app
 }
 
 healthy() {
@@ -43,6 +50,8 @@ healthy() {
 start "$DIGEST"
 if healthy; then
   echo "$DIGEST" > "$STATE/current-digest"
+  # Litestream draait naast de app; bij de eerste uitrol wordt hij hier gestart
+  compose "$DIGEST" up -d litestream
   echo "Uitgerold: $DIGEST"
   # Oude images opruimen, de laatste paar blijven staan voor een rollback
   docker image prune -f --filter "until=720h" >/dev/null || true
