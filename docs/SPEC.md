@@ -147,7 +147,7 @@ Bedragen staan altijd als hele centen (integer) in euro; een vreemde valuta is e
 | Tabel | Belangrijkste velden |
 | --- | --- |
 | accounts | naam, IBAN, soort (SNS, Revolut) — eigen IBANs herkennen interne overboekingen |
-| transactions | bedrag\_cent (EUR), datum, tegenpartij, tegen\_iban, omschrijving, categorie, account, bron (import / handmatig / bon / verwacht), bankreferentie (uniek), orig\_bedrag\_cent + orig\_valuta (optioneel), status (bevestigd / verwacht / te controleren), notitie |
+| transactions | bedrag\_cent (EUR), datum, tegenpartij, tegen\_iban, omschrijving, categorie, account, bron (import / handmatig / bon / verwacht), bankreferentie (uniek), orig\_bedrag\_cent + orig\_valuta (optioneel), status (bevestigd / verwacht / te controleren), notitie, correctie\_van (optioneel; de boeking die een terugboeking of retour verrekent) |
 | transaction\_splits | transactie, categorie, bedrag\_cent — ook voor "mijn deel" bij voorgeschoten bedragen |
 | categories | naam, groep, telt mee voor budget (ja/nee) |
 | rules | patroon op tegenpartij, IBAN of omschrijving, categorie, prioriteit |
@@ -183,6 +183,7 @@ De historie komt binnen via één CAMT.053-export van SNS; daarna blijft importe
 - Na de import een overzicht: aantal nieuw, aantal al bekend, periode, en welke tegenpartijen nog geen categorie hebben.
 - De categorieregels worden meteen uit de historie voorgesteld: per tegenpartij één klik om een regel te maken.
 - Een latere import wordt tegen je handmatige invoer gehouden via de koppellijst (zie Bonnetjes en koppelen), zodat niets dubbel telt.
+- Terugboekingen (`RvslInd`) en het end-to-end-kenmerk worden meegelezen, zodat een storno aan de oorspronkelijke boeking gekoppeld kan worden (zie Terugboekingen en retouren).
 
 **Revolut.** Opwaarderingen vanuit SNS naar Revolut worden herkend als interne overboeking en tellen niet mee als uitgave. De echte uitgaven staan bij Revolut; zonder Revolut-export ontbreken die in de historie. Revolut kan afschriften exporteren; het formaat controleer ik als je er één hebt.
 
@@ -206,6 +207,7 @@ Het startscherm toont één getal, wat je deze maand nog vrij hebt, met daaronde
 | `$20 netflix rev` | $20 op Revolut, eurobedrag nog in te vullen |
 | `45 etentje voor 3` | €45 uit eten; vraagt wie je nog moet terugbetalen |
 | `+15 tikkie sanne` | €15 binnen; stelt de openstaande post van Sanne voor |
+| `+25 retour zalando` | €25 terug; stelt de uitgave bij Zalando voor waar het bij hoort |
 
 **Zoals Todoist.** Terwijl je typt, herkent een lokale parser de onderdelen en kleurt ze in het invoerveld; eronder staan ze als chips. Tik op een chip om hem aan te passen, of op het kruisje om dat stuk weer gewone tekst te maken. Parsen kost minder dan een milliseconde per toetsaanslag en gebeurt zonder netwerk of AI. Opslaan werkt ook offline en synct zodra er verbinding is.
 
@@ -378,6 +380,17 @@ Alleen jouw deel van een voorgeschoten betaling telt mee in je budget; de rest s
 - **Ontvangen.** Bij binnenkomend geld (`+15 tikkie sanne`) stelt de koppellijst de openstaande posten voor, gesorteerd op bedrag en naam. Een gedeeltelijke betaling laat de rest open.
 - **Andersom.** Dezelfde opzet werkt voor "nog te betalen", als jij iemand nog geld schuldig bent.
 - **Herinnering.** Na 14 dagen open komt de post in de review-inbox; later ook als pushmelding.
+
+## Terugboekingen en retouren
+
+Een retour of storno verrekent de oorspronkelijke uitgave, in diens categorie en maand. Zo blijft een teruggebrachte jas niet als uitgave in je budget staan en kloppen de trends.
+
+- **Koppeling.** De terugboeking verwijst via `correctie_van` naar de oorspronkelijke boeking. Hij heeft het tegengestelde teken, mag gedeeltelijk zijn en er mogen er meer zijn op één boeking, maar samen nooit meer dan het oorspronkelijke bedrag; meer wordt geweigerd.
+- **Verrekenen in de oorspronkelijke maand.** Budget, tempo, "nog vrij" en de analyses tellen de terugboeking in de categorie en de maand van de oorspronkelijke boeking, ook als het geld een maand later binnenkomt. Verandert daardoor een afgesloten maand, dan staat dat in het audit-log en zie je het bij die maand. Het saldo van de rekening, en dus de saldocheck, telt de terugboeking op de datum dat het geld binnenkwam.
+- **Verdeling.** Heeft de oorspronkelijke boeking een verdeling over categorieën, dan kies je waar de terugboeking afgaat; standaard het grootste deel.
+- **Storno van de bank.** Bij een import met `RvslInd` koppelt de app automatisch als precies één eerdere boeking past op tegen-IBAN en end-to-end-kenmerk, en het bedrag binnen de grens valt. Dat staat in het audit-log en is met één tik ongedaan te maken. Anders komt hij in de review-inbox met de koppellijst.
+- **Retour van een winkel.** Bij binnenkomend geld van een tegenpartij waar je in de laatste 60 dagen iets uitgaf, stelt de koppellijst die uitgaven voor naast de openstaande posten. Een lager bedrag dan de uitgave telt hier niet als afwijking. Snelinvoer herkent `retour` en vraagt direct welke uitgave het was.
+- **Losmaken.** Maak je de koppeling los, of verwijder je de oorspronkelijke boeking, dan wordt de terugboeking een gewone inkomende boeking met status "te controleren".
 
 ## Gedeelde vaste lasten
 
@@ -600,8 +613,8 @@ Elke pull request draait lint, typecheck en drie testlagen, en wordt gereviewd d
 
 | Laag | Tool | Wat | Aandeel |
 | --- | --- | --- | --- |
-| Unit | Vitest | CAMT- en CSV-parser, snelinvoer-parser, koppelscore, herkenning van vaste lasten, budget- en tempoberekening, categorieregels, validatie van de Haiku-uitvoer | \~50% |
-| Integratie | Vitest met echte SQLite (tijdelijk bestand) | API-routes, import met ontdubbelen, elke route zonder sessie geeft 401, upload-token mag alleen uploaden, jobs met een nagebootste Haiku, migraties | \~40% |
+| Unit | Vitest | CAMT- en CSV-parser, snelinvoer-parser, koppelscore, herkenning van vaste lasten, budget- en tempoberekening, verrekenen van terugboekingen, categorieregels, validatie van de Haiku-uitvoer | \~50% |
+| Integratie | Vitest met echte SQLite (tijdelijk bestand) | API-routes, import met ontdubbelen en terugboekingen, elke route zonder sessie geeft 401, upload-token mag alleen uploaden, jobs met een nagebootste Haiku, migraties | \~40% |
 | E2E | Playwright (Chromium en WebKit, telefoonformaat) | inloggen met een virtuele passkey, snelinvoer, offline invoeren en synchroniseren, import, bon uploaden tot de review-inbox, verwachte post bevestigen; per scherm geen horizontale scroll en geen native `<select>` (zie Klaar voor UI) | \~10% |
 | Haiku-eval | eigen script | 25 tot 30 gelabelde bonnetjes, nauwkeurigheid per veld | apart, handmatig of wekelijks |
 
@@ -673,7 +686,7 @@ Bij elke fase hoort naast "Klaar als" ook Klaar voor UI (zie Design en interacti
 
 1. **Fundament.** Repo met CI-pipeline, testopzet en CLAUDE.md met de AI-afspraken, designsysteem (typografie, kleuren, animatiebasis), Docker-opzet achter je bestaande nginx, passkey-login, datamodel, SNS-import met ontdubbelen, categorieregels, transactielijst met zoeken, snelinvoer, budget met tempo, startscherm, backups. Telemetrie: `errors`-tabel via `handleError` in een aparte telemetrie-database (90 dagen), leeftijd van de laatste backup, schijfruimte en container-restarts in de health check, en een externe beschikbaarheidscheck.
    - Klaar als: je historie staat erin, je kunt vanaf je telefoon een uitgave invoeren en je ziet wat er nog vrij is.
-2. **Vaste lasten en Te krijgen.** Herkenning, verwachte posten, reserveringen voor vaste lasten die niet elke maand komen, tempo zonder geplande posten, signalen, voorschieten en ontvangen, saldocheck, pushmeldingen. Telemetrie: pushmeldingen bij een nieuw soort fout, een te oude backup en meer dan 80% schijfgebruik, de statuspagina achter de login, en INP en LCP via web-vitals. CI: Lighthouse CI in de PR-pipeline als performance-budget (eerste JS-bundel onder 100 kB gzip, INP), op de loginpagina en op het startscherm met een testsessie; tot dan bewaakt een e2e-test de bundelgrootte.
+2. **Vaste lasten en Te krijgen.** Herkenning, verwachte posten, reserveringen voor vaste lasten die niet elke maand komen, tempo zonder geplande posten, signalen, voorschieten en ontvangen, terugboekingen en retouren, saldocheck, pushmeldingen. Telemetrie: pushmeldingen bij een nieuw soort fout, een te oude backup en meer dan 80% schijfgebruik, de statuspagina achter de login, en INP en LCP via web-vitals. CI: Lighthouse CI in de PR-pipeline als performance-budget (eerste JS-bundel onder 100 kB gzip, INP), op de loginpagina en op het startscherm met een testsessie; tot dan bewaakt een e2e-test de bundelgrootte.
    - Klaar als: een maand lang alles bijhouden zonder dat er een vaste last ontbreekt.
    - Daarna, als laatste blok van deze fase: **gedeelde vaste lasten** (personen, aandelen, terugbetalingen koppelen en het overzicht). Het bouwt direct op vaste lasten en Te krijgen, en levert elke maand iets op; het hoort niet in het klaar-criterium hierboven, zodat dat niet wacht. Tot dan telt de wifi bruto mee. Klaar als: twee maanden lang per huisgenoot klopt wat er binnen is, met alleen bevestigen als handwerk.
 3. **Bonnetjes.** Eerst het testplan op je eigen bonnen, dan de verwerking, de review-inbox, de koppellijst en de opdracht voor het deelmenu. Telemetrie: per Haiku-aanroep tokens, kosten, duur, uitkomst en of je velden achteraf corrigeerde.
@@ -712,7 +725,9 @@ Voor fase 1 zijn alleen de repo en de SNS-export nodig; die lever je aan in Clau
 
 **Nog te beslissen**
 
-- Niets meer open: font en accent (voorstel A), sessies van 30 dagen per apparaat met opnieuw bevestigen bij gevoelige acties, en een privé-repo zijn besloten.
+- Font en accent (voorstel A), sessies van 30 dagen per apparaat met opnieuw bevestigen bij gevoelige acties, en een privé-repo zijn besloten.
+- **Retour van een voorgeschoten uitgave.** Gaat de terugboeking naar verhouding over jouw deel en de openstaande posten van de anderen, of eerst alleen van jouw deel af? Te beslissen voordat terugboekingen in fase 2 gebouwd worden.
+- **Storno herkennen bij SNS.** Of SNS `RvslInd` en het end-to-end-kenmerk in de CAMT.053-export zet, controleer ik op de export; zo niet, dan valt een storno terug op de koppellijst.
 
 **Risico's**
 
