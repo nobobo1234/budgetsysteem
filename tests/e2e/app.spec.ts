@@ -100,7 +100,15 @@ test('transacties zoeken', async ({ page }) => {
 });
 
 // Een te breed element laat een telefoon de hele pagina uitzoomen
-for (const path of ['/', '/transacties', '/budget', '/import', '/categorieen', '/instellingen']) {
+for (const path of [
+	'/',
+	'/transacties',
+	'/budget',
+	'/import',
+	'/categorieen',
+	'/regels',
+	'/instellingen'
+]) {
 	test(`${path} past op een telefoonscherm`, async ({ page }) => {
 		await page.goto(path);
 		const { inner, scroll } = await page.evaluate(() => ({

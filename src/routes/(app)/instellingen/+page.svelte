@@ -183,7 +183,8 @@
 
 	<section>
 		<h2>Overig</h2>
-		<a href="/categorieen">Categorieën en regels</a>
+		<a href="/categorieen">Categorieën</a>
+		<a href="/regels">Regels</a>
 		<form method="POST" action="?/logout">
 			<button class="button secondary">Uitloggen</button>
 		</form>

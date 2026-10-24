@@ -117,15 +117,25 @@
 	async function ontoggle(e: ToggleEvent) {
 		if (e.newState === 'open') {
 			await tick();
-			// Op een aanraakscherm geen toetsenbord opdringen: focus op de lijst, niet op het zoekveld
-			const touch = matchMedia('(pointer: coarse)').matches;
-			(searchable && !touch ? search : list)?.focus();
+			focusInside();
 			scrollToActive();
 		} else {
 			open = false;
 			if (popup.contains(document.activeElement) || document.activeElement === document.body)
 				trigger.focus();
 		}
+	}
+
+	function focusInside() {
+		// Op een aanraakscherm geen toetsenbord opdringen: focus op de lijst, niet op het zoekveld
+		const touch = matchMedia('(pointer: coarse)').matches;
+		(searchable && !touch ? search : list)?.focus();
+	}
+
+	// Gaat de focus naar iets buiten de lijst (behalve de knop zelf), dan sluit de lijst
+	function onfocusout(e: FocusEvent) {
+		const to = e.relatedTarget as Node | null;
+		if (to && !popup.contains(to) && to !== trigger) hide();
 	}
 
 	function show() {
@@ -158,7 +168,9 @@
 	function onTriggerKey(e: KeyboardEvent) {
 		if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
 			e.preventDefault();
-			show();
+			// Staat de lijst al open, dan gaat de focus erin
+			if (open) focusInside();
+			else show();
 		} else if (
 			searchable &&
 			e.key.length === 1 &&
@@ -284,6 +296,7 @@
 		style:--max="{place.max}px"
 		{onbeforetoggle}
 		{ontoggle}
+		{onfocusout}
 	>
 		{#if open}
 			{#if sheet && label}<p class="sheet-title" aria-hidden="true">{label}</p>{/if}
