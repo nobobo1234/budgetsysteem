@@ -7,6 +7,13 @@ updates:
     cooldown:
       default-days: 7
     open-pull-requests-limit: 5
+    # Majors hiervan zijn een bewuste upgrade: @types/node volgt de Node-major van het image,
+    # typescript wacht op ondersteuning in typescript-eslint en svelte-check.
+    ignore:
+      - dependency-name: typescript
+        update-types: ['version-update:semver-major']
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
     groups:
       dev:
         dependency-type: development
