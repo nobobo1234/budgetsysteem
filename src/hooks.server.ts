@@ -1,5 +1,5 @@
 import type { Handle, HandleServerError, ServerInit } from '@sveltejs/kit/hooks';
-import { building, dev } from '$app/env';
+import { building, dev, version } from '$app/env';
 import { pruneSessions, sessionCookieName, validateSession } from '#lib/server/auth/session.ts';
 import { config } from '#lib/server/config.ts';
 import { db } from '#lib/server/db/index.ts';
@@ -12,11 +12,18 @@ import {
 } from '#lib/server/guard.ts';
 import { log } from '#lib/server/log.ts';
 import { requestLimiter } from '#lib/server/ratelimit.ts';
+import {
+	describeError,
+	recordError,
+	startTelemetry,
+	telemetryDb
+} from '#lib/server/telemetry/index.ts';
 
 export const init: ServerInit = () => {
 	if (building) return;
 	// Database openen en migraties draaien bij het starten, niet bij het eerste verzoek
 	pruneSessions(db());
+	startTelemetry(version);
 	log.info('gestart');
 };
 
@@ -64,16 +71,26 @@ export const handleError: HandleServerError = ({ kind, error, event }) => {
 	const errorId = crypto.randomUUID();
 	// Soort fout, route en de stackframes zonder de foutmelding zelf (die kan data bevatten).
 	// Nooit naar de client: die krijgt alleen een errorId.
-	const e = error instanceof Error ? error : new Error('Onbekende fout');
-	const frames = e.stack?.split('\n').slice(1, 10).join('\n');
+	const info = describeError(error);
 	log.error(
 		{
 			errorId,
 			route: event.route.id,
 			method: event.request.method,
-			err: { name: e.name, message: dev ? e.message : undefined, frames }
+			err: {
+				name: info.name,
+				message: dev && error instanceof Error ? error.message : undefined,
+				frames: info.frames.join('\n')
+			}
 		},
 		'onverwachte fout'
 	);
+	recordError(telemetryDb, {
+		id: errorId,
+		source: 'verzoek',
+		error,
+		route: event.route.id,
+		method: event.request.method
+	});
 	return { status: 500, message: 'Er ging iets mis.', errorId };
 };

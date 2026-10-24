@@ -1,6 +1,13 @@
 # Litestream 0.5: één replica per database. Bucket en endpoint komen uit
 # /etc/budget/litestream.env (LITESTREAM_BUCKET, LITESTREAM_ENDPOINT) en de sleutels uit
 # AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY in datzelfde bestand.
+
+# Externe check op de replicatie (vanaf Litestream 0.5.6): Litestream pingt alleen als elke
+# database binnen het interval een geslaagde sync had. De URL is een geheim en staat als
+# LITESTREAM_HEARTBEAT_URL in litestream.env; leeg betekent geen heartbeat.
+heartbeat-url: ${LITESTREAM_HEARTBEAT_URL}
+heartbeat-interval: 5m
+
 dbs:
   - path: /data/budget.db
     replica:

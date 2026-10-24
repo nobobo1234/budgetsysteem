@@ -1,6 +1,7 @@
 import { isValidDate } from '../../dates.ts';
 import { parseDecimal } from '../../money.ts';
 import { normalizeIban } from '../../text.ts';
+import { counterpartyOrMerchant } from './card.ts';
 import { ImportError, MAX_IMPORT_BYTES, type ImportRecord } from './types.ts';
 
 // Terugvaloptie: de CSV-download van Mijn SNS. Kolommen volgens "Uitleg transactieoverzicht in
@@ -143,13 +144,15 @@ export function parseSnsCsv(text: string): ImportRecord[] {
 		}
 		const sequence = (row[l.sequence] ?? '').trim();
 		const counterIban = normalizeIban(row[l.counterIban] ?? '');
+		const description = (row[l.description] ?? '').trim().slice(0, 500);
 		records.push({
 			accountIban,
 			date,
 			amountCents: amount,
-			counterparty: (row[l.name] ?? '').trim().slice(0, 140),
+			// Zelfde terugval als bij CAMT: een pinbetaling zonder naam krijgt de winkel als tegenpartij
+			counterparty: counterpartyOrMerchant((row[l.name] ?? '').trim(), description).slice(0, 140),
 			counterIban: counterIban || null,
-			description: (row[l.description] ?? '').trim().slice(0, 500),
+			description,
 			bankReference: sequence ? `${accountIban}:${sequence}` : null
 		});
 	}

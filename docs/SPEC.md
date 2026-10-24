@@ -21,7 +21,7 @@ Alle keuzes liggen vast; wat nog aangeleverd moet worden staat bij Open punten.
 | Bank | SNS, eenmalige import van de historie (CAMT.053), daarna zelf aanvullen |
 | Revolut | Eigen rekening in de app; opwaarderen vanuit SNS telt als interne overboeking, niet als uitgave |
 | Valuta | Alles in euro; bij dollar via Revolut optioneel het oorspronkelijke bedrag erbij |
-| Budget | Simpele limiet per categorie per maand |
+| Budget | Simpele limiet per categorie per maand; vaste lasten die niet elke maand komen worden per maand gereserveerd |
 | Categorieën | Startlijst door Claude bepaald, zelf aan te passen (zie Datamodel) |
 | Toegang | Publiek via finance.mijndomein.nl achter je bestaande nginx, met passkeys en sessies van 30 dagen per apparaat; SSH alleen via Tailscale |
 | Hosting | Docker op je bestaande VPS; code in een privé GitHub-repo |
@@ -152,9 +152,13 @@ Bedragen staan altijd als hele centen (integer) in euro; een vreemde valuta is e
 | categories | naam, groep, telt mee voor budget (ja/nee) |
 | rules | patroon op tegenpartij, IBAN of omschrijving, categorie, prioriteit |
 | budgets | maand, categorie, limiet\_cent |
+| reservations | vaste last, maand, bedrag\_cent, afschrijving (transactie, alleen in de afschrijfmaand) |
 | receipts | bestand, ruwe AI-uitvoer, gecontroleerde velden, zekerheid per veld, transactie |
-| recurring | tegenpartij, interval, verwachte dag, mediaan + min/max bedrag, soort (vast / wisselend), volgende datum |
-| owed | persoon, bedrag\_cent, richting (te krijgen / te betalen), bron-transactie, status, betaald-via-transactie |
+| recurring | tegenpartij, interval (maandelijks / kwartaal / halfjaarlijks / jaarlijks), verwachte dag, mediaan + min/max bedrag, soort (vast / wisselend), volgende datum, uitsmeren (ja/nee; standaard ja bij een interval langer dan een maand) |
+| owed | persoon (verwijzing naar people), bedrag\_cent, richting (te krijgen / te betalen), bron-transactie, aandeel + maand (optioneel, samen uniek), status (open / deels / betaald / kwijtgescholden) |
+| owed\_payments | transactie, persoon, post (leeg = tegoed), bedrag\_cent — vervangt betaald-via-transactie, zodat één betaling meerdere posten dekt en andersom |
+| people | naam, actief; IBANs in `people_ibans` (persoon, iban), elke IBAN bij hooguit één persoon en nooit een eigen rekening |
+| recurring\_shares | vaste last, persoon, soort (vast / percentage), bedrag\_cent of basispunten, verwachte ontvangstdag, vanaf maand, tot maand (optioneel) |
 | sessions, passkeys | apparaat, laatst gebruikt, ingetrokken |
 | jobs, audit\_log | achtergrondtaken; wijzigingen met ongedaan maken |
 
@@ -190,8 +194,8 @@ Het startscherm toont één getal, wat je deze maand nog vrij hebt, met daaronde
 
 **Startscherm**
 
-- Bovenaan: nog vrij deze maand (som van de limieten min de uitgaven in budgetcategorieën).
-- Per categorie een balk met tempo: uitgegeven als deel van de limiet tegenover het deel van de maand dat voorbij is. Boodschappen op 70% bij dag 19 van 31 kleurt oranje.
+- Bovenaan: nog vrij deze maand (som van de limieten min de uitgaven en reserveringen in budgetcategorieën).
+- Per categorie een balk met tempo: uitgegeven als deel van de limiet tegenover het deel van de maand dat voorbij is. Boodschappen op 70% bij dag 19 van 31 kleurt oranje. Geplande vaste lasten en reserveringen tellen niet mee in het tempo (zie Vaste lasten).
 - Daaronder: verwachte vaste lasten die op bevestiging wachten en het aantal items in de review-inbox.
 
 **Snelinvoer** — één veld, lokaal geparsed, zonder AI:
@@ -222,7 +226,7 @@ Het startscherm toont één getal, wat je deze maand nog vrij hebt, met daaronde
 - De server vertrouwt de parse niet. Hij krijgt losse velden, valideert ze met een schema (bedrag binnen grenzen, datum niet ver in de toekomst, categorie bestaat) en weigert de rest.
 - Tests: unit-tests per grammaticaregel, plus fuzz-tests met willekeurige invoer (fast-check) die controleren dat de parser nooit crasht en altijd binnen 5 ms klaar is.
 
-**Budget.** Een limiet per categorie per maand; een nieuwe maand neemt de limieten van de vorige over.
+**Budget.** Een limiet per categorie per maand; een nieuwe maand neemt de limieten van de vorige over. Vaste lasten die niet elke maand komen, zoals een halfjaarlijkse contributie, worden binnen die limiet per maand gereserveerd (zie Vaste lasten).
 
 **Saldocheck.** Omdat je na de import handmatig werkt, kunnen je cijfers ongemerkt afwijken van de bank. Eén keer per maand vul je het echte saldo van SNS en Revolut in; de app toont het verschil met wat hij verwacht. Een verschil betekent een vergeten uitgave, en dan kun je gericht zoeken of alsnog een export importeren.
 
@@ -230,7 +234,7 @@ Het startscherm toont één getal, wat je deze maand nog vrij hebt, met daaronde
 
 - een verwachte vaste last staat klaar om te bevestigen;
 - een bon is gelezen, of heeft je controle nodig;
-- een categorie zit op 90% van de limiet;
+- een categorie zit op 90% van de limiet (gemeten op het deel buiten geplande vaste lasten en reserveringen);
 - een Tikkie staat 14 dagen open;
 - de maand is voorbij en de afsluiting staat klaar.
 
@@ -293,19 +297,29 @@ De lijst toont maximaal vijf kandidaten met een label (waarschijnlijk, mogelijk,
 
 ## Vaste lasten
 
-Een vaste last is een aanbieder die met een vast ritme rond dezelfde dag afschrijft; het bedrag mag wisselen. Omdat je na de import zelf invoert, maakt de app ze elke maand aan als verwachte posten die je met één tik bevestigt.
+Een vaste last is een aanbieder die met een vast ritme rond dezelfde dag afschrijft; het bedrag mag wisselen. Omdat je na de import zelf invoert, maakt de app ze op hun eigen ritme aan als verwachte posten die je met één tik bevestigt.
 
 **Herkennen** (uit de import en je eigen invoer):
 
 - Groeperen op tegenpartij en tegen-IBAN.
-- Minstens 3 keer in de laatste 6 maanden, met een interval van 28 tot 35 dagen (maandelijks), 85 tot 95 dagen (kwartaal) of 350 tot 380 dagen (jaarlijks; dat vraagt meer dan een jaar historie).
+- Een vast ritme, met genoeg herhalingen in de historie:
+
+| Ritme | Interval tussen afschrijvingen | Minimaal |
+| --- | --- | --- |
+| Maandelijks | 28 tot 35 dagen | 3 keer in de laatste 6 maanden |
+| Kwartaal | 85 tot 95 dagen | 3 keer in de laatste 6 maanden |
+| Halfjaarlijks | 150 tot 215 dagen; bij drie afschrijvingen liggen de eerste en de derde 350 tot 380 dagen uit elkaar | 2 keer, de laatste hooguit 7 maanden geleden |
+| Jaarlijks | 350 tot 380 dagen | 2 keer; dat vraagt meer dan een jaar historie |
+
+- Halfjaarlijks is bewust ruim: verenigingen en opleidingen schrijven vaak per semester af (bijvoorbeeld september en februari), dus de twee helften van het jaar hoeven niet even lang te zijn. De volgende datum is dezelfde maand als een jaar eerder als de historie dat laat zien, anders de vorige afschrijving plus het laatste interval; je past hem aan bij het bevestigen van het voorstel.
 - Dag van de maand wijkt hooguit 4 dagen af van de mediaan; een weekend schuift de afschrijving soms op.
 - Bedrag: als de spreiding binnen 5% blijft heet hij **vast**, anders **wisselend** (zoals energie of telefoon). Bewaard worden de mediaan en het minimum en maximum.
 - Kandidaten verschijnen als voorstel ("Is Vattenfall een vaste last?"); er wordt niets toegevoegd zonder je bevestiging.
 
-**Elke maand**
+**Verwachte posten**
 
 - Op de verwachte dag staat er een post met status "verwacht" en het mediane bedrag. Eén tik bevestigt; bij een wisselende last pas je eerst het bedrag aan.
+- Een kwartaal-, halfjaarlijkse of jaarlijkse last krijgt alleen in de afschrijfmaand een post; in de maanden ervoor wordt er gereserveerd (zie hieronder).
 - Verwachte posten tellen al mee in de verwachting voor het einde van de maand, maar pas na bevestiging in je uitgaven.
 - Niet bevestigd 7 dagen na de verwachte dag: naar de review-inbox als "gemist of opgezegd?".
 
@@ -313,17 +327,100 @@ Een vaste last is een aanbieder die met een vast ritme rond dezelfde dag afschri
 
 - Vaste last 2% of meer duurder dan vorige keer: prijsverhoging.
 - Wisselende last boven 120% van het hoogste bedrag tot nu toe: uitschieter.
-- Overzicht: alle vaste lasten met bedrag per maand, totaal per maand en wat ze per jaar kosten.
+- Overzicht: alle vaste lasten met bedrag per maand (een halfjaarlijkse last voor een zesde), totaal per maand en wat ze per jaar kosten.
+
+### Vaste lasten die niet elke maand komen
+
+Een kwartaal-, halfjaarlijkse of jaarlijkse vaste last wordt standaard uitgesmeerd: elke maand gaat er een deel opzij als reservering, en de afschrijving zelf komt uit die reservering. Zo klopt "nog vrij" elke maand en geeft de afschrijfmaand geen piek.
+
+**Afweging**
+
+| Aanpak | Voordeel | Nadeel |
+| --- | --- | --- |
+| Piek in de afschrijfmaand (die maand een hogere limiet) | Geen nieuw begrip; het budget volgt de bank | De maanden ervoor lijkt er meer vrij dan er is; in de afschrijfmaand springen tempo en "nog vrij"; de volgende maand neemt de verhoogde limiet over |
+| Aparte categorie met een jaarbudget | Het jaartotaal klopt | Een tweede soort budgetperiode naast de maandlimiet; tempo per maand zegt niets; "nog vrij deze maand" ziet het geld niet |
+| **Uitsmeren met een reservering per maand (gekozen)** | "Nog vrij" klopt elke maand; de afschrijfmaand is rustig; de limiet blijft een maandlimiet | Eén extra begrip (reservering) en wat rekenwerk bij een afwijkend bedrag |
+
+**Hoe de reservering werkt**
+
+- Reservering deze maand = (verwacht bedrag − al gereserveerd) gedeeld door het aantal maanden tot en met de afschrijfmaand, naar beneden afgerond op hele centen. De laatste maand neemt zo vanzelf de rest. Een halfjaarlijkse post van €90 met gelijke helften is €15 per maand.
+- De reservering wordt aan het begin van de maand aangemaakt, samen met de verwachte posten, en telt vanaf de eerste van de maand als uitgave in de categorie. Het is geen transactie: saldocheck en bankimport merken er niets van. Een afgesloten maand verandert niet meer.
+- Instappen halverwege werkt met dezelfde formule: bevestig je de vaste last twee maanden voor de afschrijving, dan gaat er in elk van die twee maanden de helft opzij. Ongelijke semesters (vijf en zeven maanden) lossen zich ook zo op.
+- In de afschrijfmaand gaat de bevestigde afschrijving van de reservering af, niet van de limiet. Het verschil telt in die maand als uitgave in de categorie: duurder dan gereserveerd is een extra uitgave, goedkoper geeft de rest terug. Daarna begint de reservering weer bij nul.
+- Een prijsverhoging (zie Signalen) past het verwachte bedrag aan; de volgende reserveringen schuiven vanzelf mee.
+- Stopt de vaste last, dan valt wat al gereserveerd is vrij in die maand.
+- Bij de vaste last en in de categorie zie je de stand: "€60 van €90 opzij, afschrijving rond 1 februari".
+- Uitsmeren staat per vaste last uit te zetten; dan krijgt de afschrijfmaand gewoon de piek. Maandelijkse vaste lasten worden nooit uitgesmeerd.
+- Unit-tests dekken de berekening: afronding, instappen halverwege, ongelijke semesters, een duurdere en een goedkopere afschrijving, en stoppen.
+
+**Tempo met vaste lasten**
+
+Het tempo meet alleen het deel van de limiet dat niet al gepland is. Gepland zijn de reserveringen en de verwachte of bevestigde vaste lasten van die maand in de categorie.
+
+- De balk toont het geplande deel als eigen segment (lichter tot het bevestigd is) en daarnaast het vrije deel met tempo.
+- Tempo = overige uitgaven gedeeld door (limiet − gepland), tegenover het deel van de maand dat voorbij is.
+- Een categorie met alleen geplande posten heeft geen tempo; de balk kleurt alleen als de categorie over de limiet gaat.
+- Is de limiet lager dan wat gepland is, dan meldt de budgetpagina dat en stelt hij een limiet voor.
+- Dit geldt voor alle vaste lasten: ook huur op de eerste van de maand kleurt de balk niet meer oranje.
+
+**Voorbeeld: vereniging** (bedragen verzonnen)
+
+Een categorie Vereniging (zelf aan te maken, bijvoorbeeld in de groep Vrije tijd) met twee vaste lasten: de contributie van €90 in januari en juli, en het dispuut van €8 per maand. De limiet is €23 (€15 reservering + €8 dispuut), of hoger als je borrels ook hier boekt; alleen dat extra deel krijgt tempo. Elke maand gaat er €15 opzij en wordt €8 bevestigd. In januari komt de €90 uit de reservering; de balk ziet er die maand uit als elke andere.
 
 ## Nog te krijgen
 
 Alleen jouw deel van een voorgeschoten betaling telt mee in je budget; de rest staat als openstaande post per persoon tot de Tikkie binnen is.
 
 - **Voorschieten.** Bij een uitgave tik je "voorgeschoten" en kies je per persoon een bedrag, of "gelijk verdelen over 3". Jouw deel blijft in de categorie; de rest gaat naar Te krijgen.
+  - **Gelijk verdelen.** Het aantal is altijd inclusief jou: `voor 3` is jij plus twee anderen, `met sanne en tim` ook. Jouw deel is het totaal gedeeld door het aantal, naar beneden afgerond op hele centen. De rest gaat gelijk over de anderen, en de restcenten één voor één naar de anderen in de volgorde waarin je ze noemt. €10 voor 3 met Sanne en Tim: jij €3,33, Sanne €3,34, Tim €3,33. Samen altijd precies het totaal.
+  - **Bedrag per persoon.** Je vult de bedragen van de anderen in; jouw deel is wat overblijft. Samen meer dan het totaal wordt geweigerd; jouw deel mag nul zijn, niet negatief.
 - **Overzicht.** Totaal openstaand, per persoon, en hoe lang het al openstaat. Optioneel een Tikkie-link of notitie bij de post.
 - **Ontvangen.** Bij binnenkomend geld (`+15 tikkie sanne`) stelt de koppellijst de openstaande posten voor, gesorteerd op bedrag en naam. Een gedeeltelijke betaling laat de rest open.
 - **Andersom.** Dezelfde opzet werkt voor "nog te betalen", als jij iemand nog geld schuldig bent.
 - **Herinnering.** Na 14 dagen open komt de post in de review-inbox; later ook als pushmelding.
+
+## Gedeelde vaste lasten
+
+Een vaste last die je voor het hele huis betaalt, zoals de wifi, krijgt een aandeel per huisgenoot. Hun maandelijkse overboekingen worden daaraan gekoppeld, zodat je per persoon ziet wat er binnen is en wat nog mist. Het bouwt op Vaste lasten en Nog te krijgen: elk maandaandeel is een gewone openstaande post.
+
+**Instellen**
+
+- **Personen.** Een persoon heeft een naam en nul of meer tegen-IBANs. Nog te krijgen gebruikt dezelfde personen, dus `+20 sanne` en de wifi van Sanne komen op één plek uit.
+- **Aandeel.** Per gedeelde vaste last en per persoon: een vast bedrag in centen (standaard, want een periodieke overboeking is ook een vast bedrag) of een percentage voor wisselende lasten zoals energie. Een percentage staat als hele basispunten (2500 = 25%); het aandeel wordt naar beneden afgerond op hele centen en de restcent is van jou. Elk aandeel heeft een verwachte ontvangstdag, een startmaand en optioneel een eindmaand. Aandelen samen mogen niet meer zijn dan het bedrag van de last.
+- **Voorstel uit de historie.** Een inkomende overboeking die volgens de regels van Vaste lasten maandelijks terugkomt van dezelfde IBAN, met een bedrag tussen 10% en 90% van een actieve vaste last, wordt een voorstel ("Krijg je van S. elke maand €20 voor Ziggo?"). Er wordt niets toegevoegd zonder je bevestiging. De herkenning van vaste lasten zelf kijkt alleen naar uitgaande bedragen.
+- **Terugwerkend.** Ligt de startmaand in het verleden, dan maakt de app de posten vanaf die maand aan en koppelt hij de overboekingen uit de historie één keer met dezelfde regels als hieronder.
+
+**Elke maand**
+
+- Zodra de verwachte post van de gedeelde last verschijnt, krijgt elke persoon met een actief aandeel een openstaande post voor die maand. Bij een percentage wordt de post herberekend als je het echte bedrag bevestigt.
+- Omdat je na de import zelf invoert, zie je de overboekingen van huisgenoten niet vanzelf. Op de verwachte ontvangstdag staat de post daarom klaar om met één tik als ontvangen te bevestigen; dat boekt een inkomende transactie in de categorie Terugbetaling.
+- Bij een import of handmatige invoer koppelt de app automatisch als de tegen-IBAN bij precies één persoon hoort en het bedrag gelijk is aan wat die persoon openstaat. Dat staat in het audit-log en is met één tik ongedaan te maken. Anders stelt de koppellijst de openstaande posten voor; een bekende IBAN van de persoon telt daar als volle score op naam. Koppel je een betaling van een onbekende IBAN, dan vraagt de app of die bij de persoon hoort.
+- Een betaling wordt verdeeld over de openstaande posten van die persoon, oudste eerst. Wat overblijft is tegoed en gaat automatisch naar de volgende post. Zo telt een overboeking op de 28e voor de wifi van de 1e gewoon voor die volgende maand.
+
+**Budget: netto.** De afschrijving staat bruto in de transactielijst en de saldocheck, zoals bij de bank. In het budget telt alleen jouw deel: de transactie krijgt splits, met jouw deel in de categorie van de vaste last en de aandelen in Terugbetaling (buiten budget). Dat is dezelfde regel als bij voorschieten, en je budget schommelt zo niet mee met wanneer huisgenoten betalen. Omdat de inkomende overboekingen ook in Terugbetaling staan, is het saldo van die categorie precies wat er nog openstaat. Bruto tot het geld binnen is zou een late overboeking als overschrijding tonen en de maand erna als meevaller. Het overzicht van vaste lasten toont beide: "Ziggo €60, jouw deel €20". Bij een gedeelde last die niet elke maand komt hoort elk aandeel bij de afschrijving, en wordt alleen jouw deel uitgesmeerd en gereserveerd.
+
+**Overzicht Terugbetalingen**
+
+- Bovenaan de totale achterstand (vervallen en niet volledig betaald) en het tegoed.
+- Per persoon de laatste zes maanden als vakjes: binnen, deels, open, te laat of kwijtgescholden, met tekst of icoon en niet alleen met kleur. Daarnaast verwacht tegenover ontvangen over die periode en de achterstand in euro.
+- Per gedeelde last het bruto bedrag, de aandelen en jouw deel.
+- Tik op een maand voor de gekoppelde betalingen, om een koppeling aan te passen of om kwijt te schelden. De app stuurt huisgenoten zelf niets; herinneren doe je zelf, eventueel met een Tikkie-link bij de post.
+
+**Randgevallen**
+
+| Geval | Wat de app doet |
+| --- | --- |
+| Te laat | Niet volledig binnen 7 dagen na de verwachte ontvangstdag: status "te laat", naar de review-inbox en optioneel een pushmelding met een eigen schakelaar |
+| Ander bedrag | Minder: de post wordt "deels" en de rest blijft open. Meer: het verschil wordt tegoed |
+| Dubbel betaald | De tweede betaling wordt tegoed en de review-inbox meldt het eenmalig; je laat het staan of maakt er een post "te betalen" van |
+| Bedrag van de last verandert | Het prijsverhogingssignaal vraagt ook of de aandelen mee moeten, met een voorstel per persoon en een ingangsmaand. Een vast aandeel verandert nooit vanzelf, net als de overboeking van je huisgenoot; een percentage volgt automatisch, en past de overboeking dan niet meer, dan wordt de post "deels" |
+| Huisgenoot vertrekt | Eindmaand op het aandeel: geen nieuwe posten, openstaande blijven tot ze betaald of kwijtgescholden zijn. Een latere overboeking wordt tegoed en komt in de review-inbox. Vanaf die maand stijgt jouw deel, tot je een nieuw aandeel toevoegt |
+| Kwijtschelden | Het deel gaat in de oorspronkelijke maand alsnog naar de categorie van de vaste last; staat in het audit-log en is ongedaan te maken |
+| Last gemist of opgezegd | Zonder afschrijving geen posten; een overboeking die toch binnenkomt wordt tegoed |
+
+**Privacy.** IBANs van huisgenoten zijn persoonsgegevens van anderen: nooit in logs of naar AI, en niet in de views voor het vraagveld en de MCP-server, waar alleen de naam staat. Op het vergrendelscherm staan ook hier standaard geen namen of bedragen. Test-fixtures gebruiken alleen test-IBANs.
+
+**Tests.** Unit: verdeling in centen met afronding, toewijzing oudste eerst met tegoed, status per maand, voorstellen uit de historie. Integratie: een import koppelt een overboeking automatisch en ontdubbelt tegen een al met één tik bevestigde ontvangst.
 
 ## Analyses
 
@@ -331,11 +428,11 @@ De vaste analyses draaien als SQL op je eigen server en zijn direct; AI komt er 
 
 **Zonder AI**
 
-- Maandoverzicht: limiet tegenover uitgegeven per categorie.
+- Maandoverzicht: limiet tegenover uitgegeven per categorie, met reserveringen apart zichtbaar.
 - Trend over 12 maanden per categorie.
 - Topuitgaven per tegenpartij, per maand en per jaar.
 - Vaste lasten: totaal per maand en als deel van je uitgaven.
-- Verwachting einde maand: uitgegeven + verwachte vaste lasten + je gemiddelde variabele uitgaven per resterende dag.
+- Verwachting einde maand: uitgegeven + verwachte vaste lasten (bij uitgesmeerde lasten de reservering in plaats van de afschrijving) + je gemiddelde variabele uitgaven per resterende dag.
 - Jaaroverzicht, en wat een tag (bijvoorbeeld een reis) in totaal kostte.
 
 **Met AI** (later)
@@ -487,8 +584,9 @@ Vaste lasten komen vroeg, omdat je na de import handmatig werkt: zonder verwacht
 
 1. **Fundament.** Repo met CI-pipeline, testopzet en CLAUDE.md met de AI-afspraken, designsysteem (typografie, kleuren, animatiebasis), Docker-opzet achter je bestaande nginx, passkey-login, datamodel, SNS-import met ontdubbelen, categorieregels, transactielijst met zoeken, snelinvoer, budget met tempo, startscherm, backups. Telemetrie: `errors`-tabel via `handleError` in een aparte telemetrie-database (90 dagen), leeftijd van de laatste backup, schijfruimte en container-restarts in de health check, en een externe beschikbaarheidscheck.
    - Klaar als: je historie staat erin, je kunt vanaf je telefoon een uitgave invoeren en je ziet wat er nog vrij is.
-2. **Vaste lasten en Te krijgen.** Herkenning, verwachte posten, signalen, voorschieten en ontvangen, saldocheck, pushmeldingen. Telemetrie: pushmeldingen bij een nieuw soort fout, een te oude backup en meer dan 80% schijfgebruik, de statuspagina achter de login, en INP en LCP via web-vitals. CI: Lighthouse CI in de PR-pipeline als performance-budget (eerste JS-bundel onder 100 kB gzip, INP), op de loginpagina en op het startscherm met een testsessie; tot dan bewaakt een e2e-test de bundelgrootte.
+2. **Vaste lasten en Te krijgen.** Herkenning, verwachte posten, reserveringen voor vaste lasten die niet elke maand komen, tempo zonder geplande posten, signalen, voorschieten en ontvangen, saldocheck, pushmeldingen. Telemetrie: pushmeldingen bij een nieuw soort fout, een te oude backup en meer dan 80% schijfgebruik, de statuspagina achter de login, en INP en LCP via web-vitals. CI: Lighthouse CI in de PR-pipeline als performance-budget (eerste JS-bundel onder 100 kB gzip, INP), op de loginpagina en op het startscherm met een testsessie; tot dan bewaakt een e2e-test de bundelgrootte.
    - Klaar als: een maand lang alles bijhouden zonder dat er een vaste last ontbreekt.
+   - Daarna, als laatste blok van deze fase: **gedeelde vaste lasten** (personen, aandelen, terugbetalingen koppelen en het overzicht). Het bouwt direct op vaste lasten en Te krijgen, en levert elke maand iets op; het hoort niet in het klaar-criterium hierboven, zodat dat niet wacht. Tot dan telt de wifi bruto mee. Klaar als: twee maanden lang per huisgenoot klopt wat er binnen is, met alleen bevestigen als handwerk.
 3. **Bonnetjes.** Eerst het testplan op je eigen bonnen, dan de verwerking, de review-inbox, de koppellijst en de opdracht voor het deelmenu. Telemetrie: per Haiku-aanroep tokens, kosten, duur, uitkomst en of je velden achteraf corrigeerde.
    - Klaar als: de test het doel haalt, of we bewust kiezen voor altijd reviewen.
 4. **Analyses.** Grafieken, trends, verwachting einde maand, jaaroverzicht, tags. Telemetrie: je eigen gebruik (dagen met invoer, tijd van openen tot opslaan).

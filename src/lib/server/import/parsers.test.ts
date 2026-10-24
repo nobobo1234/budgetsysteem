@@ -54,6 +54,29 @@ describe('CAMT.053 (001.08)', () => {
 	});
 });
 
+describe('CAMT.053 pinbetalingen zonder RltdPties', () => {
+	const records = parseCamt053(fixture('camt053-pin.xml'));
+
+	it('neemt de winkel uit de omschrijving als tegenpartij', () => {
+		expect(records.map((r) => r.counterparty)).toEqual([
+			'BAKKERIJ - 123456 Teststr',
+			'Koffiebar Voorbeeld B.V.',
+			'SUPERMARKT TEST 11',
+			'SUPERMARKT TEST 11',
+			'WINKEL VOORBEELD FIL0001',
+			'',
+			'Verhuurder Test'
+		]);
+	});
+
+	it('laat de omschrijving ongewijzigd, ook de opgevulde spaties', () => {
+		expect(records[2]?.description).toBe(
+			'SUPERMARKT TEST 11     >TESTDORP 03.02.2026 9U57 KV011 ET000001 MCC:5499 Apple Pay betaling NLNEDERLAND'
+		);
+		expect(records[0]?.description.startsWith('BAKKERIJ - 123456 Teststr>Utrecht')).toBe(true);
+	});
+});
+
 describe('CAMT.053 beveiliging (XXE)', () => {
 	const xxe = `<?xml version="1.0"?>
 <!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>
@@ -132,6 +155,17 @@ describe('SNS-CSV', () => {
 			amountCents: -310,
 			date: '2026-10-01',
 			counterparty: 'Bakker'
+		});
+	});
+
+	it('vult een lege naam bij een pinbetaling met de winkel', () => {
+		const csv =
+			'Datum;Je rekening;Van / naar;Naam;Bedrag bij/af;Volgnummer;Omschrijving\n' +
+			'2-2-2026;NL12SNSB0123456789;;;-4.35;78;"BAKKERIJ - 123456 Teststr>Utrecht 01.02.2026 8U05 KV011 PTR00001 MCC:5499 Apple Pay betaling NLNEDERLAND"\n';
+		expect(parseSnsCsv(csv)[0]).toMatchObject({
+			counterparty: 'BAKKERIJ - 123456 Teststr',
+			description:
+				'BAKKERIJ - 123456 Teststr>Utrecht 01.02.2026 8U05 KV011 PTR00001 MCC:5499 Apple Pay betaling NLNEDERLAND'
 		});
 	});
 
