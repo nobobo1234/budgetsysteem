@@ -19,7 +19,9 @@ export default defineConfig({
 	},
 	projects: [
 		{ name: 'chromium', use: { ...devices['Pixel 7'] } },
-		{ name: 'webkit', use: { ...devices['iPhone 14'] } }
+		// Tests met de tag @chromium draaien alleen in Chromium (virtuele passkeys via CDP,
+		// één bundelmeting). Filteren per project in plaats van overslaan in de test zelf.
+		{ name: 'webkit', use: { ...devices['iPhone 14'] }, grepInvert: /@chromium/ }
 	],
 	webServer: {
 		// Elke run een verse database

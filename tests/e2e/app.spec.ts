@@ -106,20 +106,24 @@ for (const path of ['/', '/transacties', '/budget', '/import', '/categorieen', '
 	});
 }
 
-// Performance-budget (spec: Design en interactie, Techniek): eerste JS-bundel onder 100 kB gzip
-test('de eerste JavaScript-bundel blijft onder 100 kB gzip', async ({ page }) => {
-	test.skip(test.info().project.name !== 'chromium', 'Eén meting is genoeg');
-	const { gzipSync } = await import('node:zlib');
-	const bodies: Promise<Buffer>[] = [];
-	page.on('response', (r) => {
-		if (r.request().resourceType() === 'script' || r.url().endsWith('.js')) bodies.push(r.body());
-	});
-	await page.goto('/');
-	await page.waitForLoadState('networkidle');
-	const sizes = await Promise.all(bodies);
-	const total = sizes.reduce((sum, b) => sum + gzipSync(b).length, 0);
-	console.log(
-		`Eerste JS-bundel: ${(total / 1024).toFixed(1)} kB gzip in ${sizes.length} bestanden`
-	);
-	expect(total).toBeLessThan(100 * 1024);
-});
+// Performance-budget (spec: Design en interactie, Techniek): eerste JS-bundel onder 100 kB gzip.
+// Eén meting is genoeg, dus alleen in Chromium.
+test(
+	'de eerste JavaScript-bundel blijft onder 100 kB gzip',
+	{ tag: '@chromium' },
+	async ({ page }) => {
+		const { gzipSync } = await import('node:zlib');
+		const bodies: Promise<Buffer>[] = [];
+		page.on('response', (r) => {
+			if (r.request().resourceType() === 'script' || r.url().endsWith('.js')) bodies.push(r.body());
+		});
+		await page.goto('/');
+		await page.waitForLoadState('networkidle');
+		const sizes = await Promise.all(bodies);
+		const total = sizes.reduce((sum, b) => sum + gzipSync(b).length, 0);
+		console.log(
+			`Eerste JS-bundel: ${(total / 1024).toFixed(1)} kB gzip in ${sizes.length} bestanden`
+		);
+		expect(total).toBeLessThan(100 * 1024);
+	}
+);
