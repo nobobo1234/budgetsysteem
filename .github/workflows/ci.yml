@@ -118,9 +118,9 @@ jobs:
           path: playwright-report/
           retention-days: 7
 
-  # Performance-budget met Lighthouse CI (lighthouserc.json): loginpagina en startscherm met een
-  # testsessie; eerste JS-bundel < 100 kB gzip, TBT, LCP en CLS. Rapporten alleen als artifact,
-  # nooit naar publieke opslag.
+  # Performance-budget met Lighthouse (budget in scripts/lighthouse.mjs): loginpagina en
+  # startscherm met een testsessie; eerste JS-bundel < 100 kB gzip, TBT, LCP en CLS. Rapporten
+  # alleen als artifact, nooit naar publieke opslag.
   lighthouse:
     needs: changes
     if: ${{ !cancelled() && github.event_name == 'pull_request' && needs.changes.outputs.code != 'false' }}
