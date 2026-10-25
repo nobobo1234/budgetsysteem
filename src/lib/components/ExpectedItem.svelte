@@ -66,9 +66,10 @@
 			<span class="who">{item.counterparty}</span>
 			<span class="meta">
 				<span>verwacht {formatShortDate(item.date)}</span>
-				<span class="sep" aria-hidden="true">·</span>
-				<span class={['dot', !color && 'none']} style:--dot={color} aria-hidden="true"></span>
-				<span class="cat">{item.categoryName ?? 'Geen categorie'}</span>
+				<span class="category">
+					<span class={['dot', !color && 'none']} style:--dot={color} aria-hidden="true"></span>
+					<span class="cat">{item.categoryName ?? 'Geen categorie'}</span>
+				</span>
 			</span>
 		</a>
 		<span class="amount num">{formatCents(item.amountCents)}</span>
@@ -174,23 +175,33 @@
 		white-space: nowrap;
 	}
 
+	/* Datum en categorie; op een smal scherm komt de categorie op een eigen regel */
 	.meta {
 		display: flex;
+		flex-wrap: wrap;
 		align-items: center;
-		gap: 6px;
+		gap: 0 12px;
 		min-width: 0;
 		color: var(--muted);
 		font-size: 0.9rem;
+	}
+
+	.meta > span {
 		white-space: nowrap;
 	}
 
-	.cat {
-		overflow: hidden;
-		text-overflow: ellipsis;
+	.category {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		min-width: 0;
+		max-width: 100%;
 	}
 
-	.sep {
-		opacity: 0.6;
+	.cat {
+		max-width: 100%;
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
 
 	.dot {

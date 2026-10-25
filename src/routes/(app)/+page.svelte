@@ -239,8 +239,10 @@
 			column-gap: 56px;
 		}
 
+		/* Meldingen over de volle breedte, boven de twee kolommen */
 		.top,
-		.fixed {
+		.fixed,
+		.reminder {
 			grid-column: 1 / -1;
 		}
 	}
