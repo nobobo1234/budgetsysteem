@@ -21,6 +21,9 @@ import {
 	matchCandidates,
 	owedOverview,
 	owedReminders,
+	paymentLinks,
+	postsOfTransaction,
+	refundInfo,
 	settlePayment,
 	unlinkPayment,
 	updateOwed
@@ -36,11 +39,14 @@ import {
 import {
 	createTransaction,
 	deleteTransaction,
+	listTransactions,
 	updateTransaction,
-	ValidationError
+	ValidationError,
+	withRefunds
 } from '../../src/lib/server/transactions.ts';
 import { newTransactionSchema } from '../../src/lib/server/validation.ts';
 import { actions as settingsActions } from '../../src/routes/(app)/instellingen/+page.server.ts';
+import { load as transactionsLoad } from '../../src/routes/(app)/transacties/+page.server.ts';
 import { ORIGIN, tempDatabase } from './helpers.ts';
 
 let db: DB;
@@ -314,6 +320,108 @@ describe('ontvangen', () => {
 		const { id, sanne } = shared();
 		tx({ amountCents: 500, categoryId: null, settle: { owedId: sanne.id } });
 		expect(() => db.transaction((t) => applyShare(t, id, null))).toThrow(/al betaald/);
+	});
+});
+
+describe('terugbetalingen in de lijst', () => {
+	it('een Tikkie wijst naar zijn uitgave, met de persoon erbij', () => {
+		const pizza = tx({
+			amountCents: -3000,
+			counterparty: "Domino's",
+			share: { people: 3, with: ['Sanne', 'Tim'] }
+		});
+		const [sanne] = posts(pizza);
+		const pay = tx({
+			amountCents: 1000,
+			counterparty: 'Tikkie',
+			categoryId: null,
+			settle: { owedId: sanne!.id }
+		});
+		const other = tx({ amountCents: -500, counterparty: 'Bakker' });
+		const info = refundInfo(db, [pay, pizza, other]);
+		expect(info.get(pay)).toEqual({
+			direction: 'te_krijgen',
+			people: ['Sanne'],
+			targets: [{ transactionId: pizza, label: "Domino's", month: null }],
+			creditCents: 0
+		});
+		// Alleen betalingen krijgen iets; de uitgave en een gewone boeking niet
+		expect(info.has(pizza)).toBe(false);
+		expect(info.has(other)).toBe(false);
+		expect(refundInfo(db, []).size).toBe(0);
+	});
+
+	it('één betaling voor twee posten en tegoed', () => {
+		const first = tx({
+			amountCents: -2000,
+			date: '2026-10-01',
+			counterparty: 'Bioscoop',
+			share: { people: 2, with: ['Sanne'] }
+		});
+		const second = tx({
+			amountCents: -3000,
+			date: '2026-10-10',
+			counterparty: 'Etentje',
+			share: { people: 2, with: ['Sanne'] }
+		});
+		const [b] = posts(second);
+		const pay = tx({ amountCents: 2700, counterparty: 'S DE VRIES', settle: { owedId: b!.id } });
+		const info = refundInfo(db, [pay]).get(pay)!;
+		expect(info.targets.map((t) => t.transactionId).sort()).toEqual([first, second].sort());
+		expect(info.creditCents).toBe(200);
+
+		// Alleen tegoed: geen posten, wel de persoon
+		const credit = tx({ amountCents: 500, counterparty: 'S DE VRIES', categoryId: null });
+		settlePayment(db, credit, { personId: person('Sanne') });
+		expect(refundInfo(db, [credit]).get(credit)).toMatchObject({
+			people: ['Sanne'],
+			targets: [],
+			creditCents: 500
+		});
+	});
+
+	it('een losse post zonder uitgave heeft zijn omschrijving', () => {
+		const post = createOwed(db, {
+			personId: createPerson(db, 'Sanne'),
+			amountCents: 1200,
+			direction: 'te_krijgen',
+			description: 'Concertkaartje',
+			date: '2026-10-01'
+		});
+		const pay = tx({ amountCents: 1200, counterparty: 'Sanne', settle: { owedId: post } });
+		expect(refundInfo(db, [pay]).get(pay)?.targets).toEqual([
+			{ transactionId: null, label: 'Concertkaartje', month: null }
+		]);
+	});
+
+	it('de lijst en de detailpagina: van betaling naar uitgave en terug', async () => {
+		const pizza = tx({
+			amountCents: -3000,
+			counterparty: "Domino's",
+			share: { people: 3, with: ['Sanne', 'Tim'] }
+		});
+		const [sanne] = posts(pizza);
+		const pay = tx({
+			amountCents: 1000,
+			date: '2026-10-21',
+			counterparty: 'Tikkie',
+			categoryId: null,
+			settle: { owedId: sanne!.id }
+		});
+		const rows = withRefunds(db, listTransactions(db));
+		expect(rows.find((r) => r.id === pay)?.refund?.targets[0]?.transactionId).toBe(pizza);
+		expect(rows.find((r) => r.id === pizza)?.refund).toBeNull();
+
+		const page = (await transactionsLoad({
+			url: new URL('http://localhost/transacties')
+		} as Parameters<typeof transactionsLoad>[0])) as { transactions: typeof rows };
+		expect(page.transactions.find((r) => r.id === pay)?.refund?.people).toEqual(['Sanne']);
+
+		expect(paymentLinks(db, pay)).toMatchObject([
+			{ sourceId: pizza, sourceCounterparty: "Domino's", sourceAmountCents: -3000 }
+		]);
+		const [p] = postsOfTransaction(db, pizza);
+		expect(p!.payments).toEqual([{ transactionId: pay, date: '2026-10-21' }]);
 	});
 });
 

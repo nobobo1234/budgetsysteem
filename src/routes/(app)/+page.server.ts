@@ -15,7 +15,12 @@ import {
 	upcomingThisMonth
 } from '#lib/server/recurring.ts';
 import { confirmReceived, dueReceipts } from '#lib/server/shares.ts';
-import { listTransactions, reviewCount, ValidationError } from '#lib/server/transactions.ts';
+import {
+	listTransactions,
+	reviewCount,
+	ValidationError,
+	withRefunds
+} from '#lib/server/transactions.ts';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = ({ setHeaders }) => {
@@ -26,7 +31,7 @@ export const load: PageServerLoad = ({ setHeaders }) => {
 	return {
 		today,
 		overview: monthOverview(db(), month, today),
-		recent: listTransactions(db(), { limit: 8 }),
+		recent: withRefunds(db(), listTransactions(db(), { limit: 8 })),
 		reviewCount: reviewCount(db()),
 		owed: owedSummary(db()),
 		expected: awaitingConfirmation(db(), today),

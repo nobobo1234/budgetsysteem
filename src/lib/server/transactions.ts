@@ -18,6 +18,7 @@ import {
 	dropSourcePosts,
 	MY_SHARE,
 	recomputeStatus,
+	refundInfo,
 	settlePayment,
 	shareFromNames,
 	unlinkPayment
@@ -379,6 +380,15 @@ export function listTransactions(db: DB, filter: ListFilter = {}) {
 }
 
 export type TransactionRow = ReturnType<typeof listTransactions>[number];
+
+/** Rijen voor een lijst, met bij een gekoppelde betaling waar hij voor was. */
+export function withRefunds<T extends { id: string }>(db: DB, rows: T[]) {
+	const info = refundInfo(
+		db,
+		rows.map((r) => r.id)
+	);
+	return rows.map((r) => ({ ...r, refund: info.get(r.id) ?? null }));
+}
 
 /** Aantal en totalen voor alles wat het filter vindt, over alle pagina's heen. */
 export function summarizeTransactions(db: DB, filter: Omit<ListFilter, 'limit' | 'offset'> = {}) {

@@ -245,12 +245,26 @@
 						</li>
 					{/if}
 					{#each data.posts as p (p.id)}
+						{@const payment = p.payments.at(-1)}
 						<li>
-							<span>
-								{p.personName ?? 'Nog onbekend'}
-								<span class="muted small">{postStatus(p)}</span>
-							</span>
-							<span class="num">{formatCents(p.amountCents)}</span>
+							{#if payment}
+								<!-- Naar de (laatste) betaling op deze post -->
+								<a class="row-link" href={`/transacties/${payment.transactionId}`}>
+									<span>
+										{p.personName ?? 'Nog onbekend'}
+										<span class="muted small"
+											>{postStatus(p)} · {formatShortDate(payment.date)}</span
+										>
+									</span>
+									<span class="num">{formatCents(p.amountCents)}</span>
+								</a>
+							{:else}
+								<span>
+									{p.personName ?? 'Nog onbekend'}
+									<span class="muted small">{postStatus(p)}</span>
+								</span>
+								<span class="num">{formatCents(p.amountCents)}</span>
+							{/if}
 						</li>
 					{/each}
 				</ul>
@@ -304,15 +318,32 @@
 				<ul class="lines">
 					{#each data.links as l (l.id)}
 						<li>
-							<span>
-								{l.personName}
-								<span class="muted small"
-									>{l.owedId
-										? `${l.description || 'Post'} · ${formatShortDate(l.date!)}`
-										: 'Tegoed voor de volgende post'}</span
-								>
-							</span>
-							<span class="num">{formatCents(l.amountCents)}</span>
+							<!-- Naar de uitgave van de post; zonder uitgave naar het overzicht van de post -->
+							<a
+								class="row-link"
+								href={l.sourceId
+									? `/transacties/${l.sourceId}`
+									: l.owedId && !l.month
+										? '/te-krijgen'
+										: '/terugbetalingen'}
+							>
+								<span>
+									{l.personName}
+									<span class="muted small"
+										>{l.owedId
+											? `${l.sourceCounterparty || l.description || 'Post'} · ${l.month ? formatMonth(l.month) : formatShortDate(l.sourceDate ?? l.date!)}`
+											: 'Tegoed voor de volgende post'}</span
+									>
+								</span>
+								<span class="side">
+									<span class="num">{formatCents(l.amountCents)}</span>
+									{#if l.sourceAmountCents !== null}
+										<span class="muted small num"
+											>van {formatCents(l.sourceAmountCents, { sign: true })}</span
+										>
+									{/if}
+								</span>
+							</a>
 						</li>
 					{/each}
 				</ul>

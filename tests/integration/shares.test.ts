@@ -21,6 +21,7 @@ import type { ImportRecord } from '../../src/lib/server/import/types.ts';
 import {
 	applyShare,
 	forgiveOwed,
+	refundInfo,
 	settlePayment,
 	unlinkPayment
 } from '../../src/lib/server/owed.ts';
@@ -178,6 +179,25 @@ function record(over: Partial<ImportRecord>): ImportRecord {
 }
 
 describe('elke maand', () => {
+	it('in de lijst wijst de overboeking naar de afschrijving en de maand', () => {
+		share(sanne);
+		generateMonth(db, '2026-10');
+		const t = expected('2026-10');
+		// Automatisch gekoppeld op IBAN en bedrag
+		importRecords(db, [record({ date: '2026-10-03' })], 'camt053');
+		const id = db
+			.select({ id: transactions.id })
+			.from(transactions)
+			.where(eq(transactions.counterparty, 'S DE VRIES'))
+			.get()!.id;
+		expect(refundInfo(db, [id]).get(id)).toEqual({
+			direction: 'te_krijgen',
+			people: ['Sanne'],
+			targets: [{ transactionId: t.id, label: 'Ziggo', month: '2026-10' }],
+			creditCents: 0
+		});
+	});
+
 	it('een post per persoon zodra de verwachte post verschijnt, en splits met jouw deel', () => {
 		share(sanne);
 		share(tim);

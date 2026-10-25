@@ -2,6 +2,7 @@
 	import { groupColor } from '#lib/categoryColor.ts';
 	import { formatShortDate } from '#lib/dates.ts';
 	import { centsToInput, formatCents } from '#lib/money.ts';
+	import { describeRefund, type RefundInfo } from '#lib/refund.ts';
 
 	interface Item {
 		/** Alleen nodig voor de overgang naar de detailpagina */
@@ -15,6 +16,8 @@
 		status: 'bevestigd' | 'verwacht' | 'te_controleren';
 		origAmountCents: number | null;
 		origCurrency: string | null;
+		/** Een gekoppelde terugbetaling: dan staat hier waar hij voor was, niet de categorie */
+		refund?: RefundInfo | null;
 	}
 
 	let {
@@ -26,6 +29,7 @@
 	}: { tx: Item; pending?: boolean; error?: string; href?: string; showDate?: boolean } = $props();
 
 	const color = $derived(tx.categoryName ? groupColor(tx.categoryGroup ?? tx.categoryName) : null);
+	const refund = $derived(tx.refund ? describeRefund(tx.refund, tx.counterparty) : null);
 	const orig = $derived(
 		tx.origCurrency && tx.origAmountCents !== null
 			? `${tx.origCurrency === 'USD' ? '$' : `${tx.origCurrency} `}${centsToInput(tx.origAmountCents)}`
@@ -39,9 +43,24 @@
 			>{tx.counterparty || 'Zonder naam'}</span
 		>
 		<span class="meta">
-			<span class={['dot', !color && 'none']} style:--dot={color} aria-hidden="true"></span>
-			<span class={['cat', !tx.categoryName && 'uncat']}>{tx.categoryName ?? 'Geen categorie'}</span
-			>
+			{#if refund}
+				<svg class="hook" viewBox="0 0 12 12" aria-hidden="true">
+					<path
+						d="M4.5 1.75 1.75 4.5 4.5 7.25M2 4.5h5a3 3 0 0 1 0 6H5.5"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="1.5"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					/>
+				</svg>
+				<span class="cat refund" data-refund>{refund}</span>
+			{:else}
+				<span class={['dot', !color && 'none']} style:--dot={color} aria-hidden="true"></span>
+				<span class={['cat', !tx.categoryName && 'uncat']}
+					>{tx.categoryName ?? 'Geen categorie'}</span
+				>
+			{/if}
 			{#if showDate}<span class="sep" aria-hidden="true">·</span>{formatShortDate(tx.date)}{/if}
 			{#if tx.accountAlias}<span class="sep" aria-hidden="true">·</span><span
 					>{tx.accountAlias}</span
@@ -132,6 +151,13 @@
 
 	.sep {
 		opacity: 0.6;
+	}
+
+	.hook {
+		flex: none;
+		width: 12px;
+		height: 12px;
+		color: var(--accent-strong);
 	}
 
 	.dot {
