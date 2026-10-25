@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, isNull, lte, ne, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, isNull, lte, ne, or, sql, type SQL } from 'drizzle-orm';
 import { addDays } from '../dates.ts';
 import { advancePast } from '../recurring.ts';
 import { recordChange } from './audit.ts';
@@ -409,6 +409,33 @@ export function summarizeTransactions(db: DB, filter: Omit<ListFilter, 'limit' |
 }
 
 /** Maanden (`YYYY-MM`) waarin transacties staan, de nieuwste eerst. */
+/**
+ * Uitgaven per dag voor het staafdiagram boven Transacties: alleen uitgaand, zonder verwachte
+ * posten, met de rest van het filter (zoekterm, categorie, rekening).
+ */
+export function spendingPerDay(
+	db: DB,
+	filter: Omit<ListFilter, 'limit' | 'offset' | 'status' | 'withoutExpected'> & { month: string }
+): { date: string; outCents: number }[] {
+	return db
+		.select({
+			date: transactions.date,
+			outCents: sql<number>`-sum(${transactions.amountCents})`
+		})
+		.from(transactions)
+		.where(
+			and(
+				filterWhere({ ...filter, withoutExpected: true }),
+				sql`${transactions.amountCents} < 0`,
+				// Een overboeking naar je eigen rekening is geen uitgave
+				or(isNull(transactions.categorySource), ne(transactions.categorySource, 'intern'))
+			)
+		)
+		.groupBy(transactions.date)
+		.orderBy(asc(transactions.date))
+		.all();
+}
+
 export function transactionMonths(db: DB): string[] {
 	return db
 		.selectDistinct({ month: sql<string>`substr(${transactions.date}, 1, 7)` })

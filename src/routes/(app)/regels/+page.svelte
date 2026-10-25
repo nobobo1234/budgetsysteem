@@ -2,6 +2,7 @@
 	import { tick } from 'svelte';
 	import { enhance, type SubmitFunction } from '$app/forms';
 	import BackLink from '#lib/components/BackLink.svelte';
+	import EmptyState from '#lib/components/EmptyState.svelte';
 	import ManageTabs from '#lib/components/ManageTabs.svelte';
 	import Select, { type SelectOption } from '#lib/components/Select.svelte';
 	import Toast from '#lib/components/Toast.svelte';
@@ -207,12 +208,21 @@
 					</form>
 				</li>
 			{:else}
-				<li class="empty muted">
+				<li class="empty">
 					{#if data.rules.length === 0}
-						Nog geen regels. Maak er hierboven een, of snel vanuit de
-						<a href="/import">import</a>.
+						<EmptyState
+							icon="regels"
+							text="Nog geen regels. Maak er hierboven een, of snel vanuit de import."
+							compact
+						>
+							<a class="more-link" href="/import">Naar de import</a>
+						</EmptyState>
 					{:else}
-						Geen regel past bij "{ruleFilter}".
+						<EmptyState
+							icon="zoeken"
+							text="Geen regel past bij &quot;{ruleFilter}&quot;."
+							compact
+						/>
 					{/if}
 				</li>
 			{/each}

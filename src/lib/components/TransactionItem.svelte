@@ -3,6 +3,8 @@
 	import { formatShortDate } from '#lib/dates.ts';
 	import { centsToInput, formatCents } from '#lib/money.ts';
 	import { describeRefund, type RefundInfo } from '#lib/refund.ts';
+	import { displayName } from '#lib/text.ts';
+	import Monogram from './Monogram.svelte';
 
 	interface Item {
 		/** Alleen nodig voor de overgang naar de detailpagina */
@@ -38,9 +40,13 @@
 </script>
 
 <svelte:element this={href ? 'a' : 'div'} {href} class={['item', href && 'link']}>
+	<Monogram
+		name={tx.counterparty || '?'}
+		group={tx.categoryName ? (tx.categoryGroup ?? tx.categoryName) : null}
+	/>
 	<div class="main">
 		<span class="who" data-tx-name={href ? tx.id : undefined}
-			>{tx.counterparty || 'Zonder naam'}</span
+			>{displayName(tx.counterparty) || 'Zonder naam'}</span
 		>
 		<span class="meta">
 			{#if refund}
@@ -95,7 +101,7 @@
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		gap: 16px;
+		gap: 12px;
 		min-height: 64px;
 		padding: 10px 0;
 		color: inherit;
@@ -121,6 +127,7 @@
 
 	.main {
 		display: grid;
+		flex: 1;
 		gap: 3px;
 		min-width: 0;
 	}

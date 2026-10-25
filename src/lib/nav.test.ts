@@ -49,4 +49,16 @@ describe('meeschuiven tussen pagina’s', () => {
 		expect(morphPlan('/', '/te-krijgen')?.parts).toEqual(['bedrag']);
 		expect(morphPlan('/budget', '/te-krijgen')).toBeNull();
 	});
+
+	it('een vaste last schuift uit Te bevestigen of de lijst naar zijn detailpagina', () => {
+		const detail = '/vaste-lasten/0b7f3c52-6a2e-4c8e-9a43-1f2d3e4c5b6a';
+		const plan = morphPlan('/', detail);
+		expect(plan).toEqual({ source: '/', target: detail, parts: ['titel'] });
+		expect(morphSelector(plan!, '/', 'titel')).toBe(
+			`[data-morph-to="${detail}"][data-morph-part="titel"]`
+		);
+		expect(morphPlan(detail, '/vaste-lasten')?.source).toBe('/vaste-lasten');
+		expect(morphPlan('/budget', detail)).toBeNull();
+		expect(morphPlan('/', '/vaste-lasten/niet-een-id')).toBeNull();
+	});
 });

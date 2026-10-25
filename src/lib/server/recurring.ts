@@ -7,6 +7,7 @@ import {
 	occurrencesThrough,
 	perMonthCents,
 	perYearCents,
+	recurringKey,
 	reservationFor,
 	signalFor,
 	type AmountKind,
@@ -699,6 +700,7 @@ export function upcomingThisMonth(db: DB, today = toIsoDate(new Date())) {
 	return db
 		.select({
 			id: transactions.id,
+			recurringId: transactions.recurringId,
 			date: transactions.date,
 			amountCents: transactions.amountCents,
 			counterparty: transactions.counterparty,
@@ -943,23 +945,133 @@ export function recurringOverview(db: DB, today = toIsoDate(new Date())) {
 	};
 }
 
-export function getRecurring(db: DB, id: string, today = toIsoDate(new Date())) {
-	const item = recurringOverview(db, today);
-	const found = [...item.active, ...item.proposals, ...item.stopped].find((i) => i.id === id);
-	if (!found) return null;
-	const history = db
+export interface Charge {
+	id: string;
+	date: string;
+	/** Positieve centen */
+	amountCents: number;
+	status: (typeof transactions.$inferSelect)['status'];
+}
+
+/**
+ * Afschrijvingen van vaste lasten: wat aan een vaste last gekoppeld is, plus de uitgaven uit
+ * de historie (de import) die dezelfde sleutel hebben maar nog niet gekoppeld zijn. Zonder dat
+ * laatste is er vóór de eerste bevestiging niets te zien.
+ */
+function chargesFor(
+	db: Conn,
+	items: { id: string; matchKey: string }[],
+	from: string,
+	to: string
+): Map<string, Charge[]> {
+	const out = new Map<string, Charge[]>(items.map((i) => [i.id, []]));
+	if (items.length === 0) return out;
+	const byKey = new Map(items.map((i) => [i.matchKey, i.id]));
+	const rows = db
 		.select({
 			id: transactions.id,
 			date: transactions.date,
 			amountCents: transactions.amountCents,
-			status: transactions.status
+			status: transactions.status,
+			counterparty: transactions.counterparty,
+			counterIban: transactions.counterIban,
+			recurringId: transactions.recurringId
 		})
 		.from(transactions)
-		.where(eq(transactions.recurringId, id))
+		.where(
+			and(
+				gte(transactions.date, from),
+				lte(transactions.date, to),
+				sql`${transactions.amountCents} < 0`,
+				or(
+					inArray(
+						transactions.recurringId,
+						items.map((i) => i.id)
+					),
+					isNull(transactions.recurringId)
+				)
+			)
+		)
 		.orderBy(desc(transactions.date))
-		.limit(12)
 		.all();
+	for (const t of rows) {
+		const id =
+			t.recurringId ??
+			(t.status === 'verwacht'
+				? undefined
+				: byKey.get(recurringKey(t.counterparty, t.counterIban)));
+		if (!id) continue;
+		out.get(id)?.push({ id: t.id, date: t.date, amountCents: -t.amountCents, status: t.status });
+	}
+	return out;
+}
+
+export function getRecurring(db: DB, id: string, today = toIsoDate(new Date())) {
+	const item = recurringOverview(db, today);
+	const found = [...item.active, ...item.proposals, ...item.stopped].find((i) => i.id === id);
+	if (!found) return null;
+	const r = db
+		.select({ matchKey: recurring.matchKey })
+		.from(recurring)
+		.where(eq(recurring.id, id))
+		.get()!;
+	// De laatste twaalf, nieuwste eerst; ook uit de historie, zodat een prijsverhoging te zien is
+	const from = `${shiftMonth(today.slice(0, 7), -HISTORY_MONTHS)}-01`;
+	const history = (
+		chargesFor(
+			db,
+			[{ id, matchKey: r.matchKey }],
+			from,
+			`${shiftMonth(today.slice(0, 7), 1)}-31`
+		).get(id) ?? []
+	).slice(0, 12);
 	return { ...found, history };
+}
+
+export interface MonthCharge {
+	recurringId: string;
+	counterparty: string;
+	categoryGroup: string | null;
+	date: string;
+	amountCents: number;
+	/** Al afgeschreven (bevestigd of uit de import); anders verwacht of nog te komen */
+	done: boolean;
+}
+
+/**
+ * De afschrijvingen van deze maand voor de strook op Vaste lasten: wat al is afgeschreven en
+ * wat nog komt, op de dag waarop het (verwacht) gebeurt.
+ */
+export function chargesThisMonth(db: DB, today = toIsoDate(new Date())): MonthCharge[] {
+	const month = today.slice(0, 7);
+	const active = db
+		.select({ r: recurring, categoryGroup: categories.group })
+		.from(recurring)
+		.leftJoin(categories, eq(categories.id, recurring.categoryId))
+		.where(eq(recurring.status, 'actief'))
+		.all();
+	const charges = chargesFor(
+		db,
+		active.map(({ r }) => ({ id: r.id, matchKey: r.matchKey })),
+		`${month}-01`,
+		`${month}-${String(daysInMonth(month)).padStart(2, '0')}`
+	);
+	const out: MonthCharge[] = [];
+	for (const { r, categoryGroup } of active) {
+		const base = { recurringId: r.id, counterparty: r.counterparty, categoryGroup };
+		const found = charges.get(r.id) ?? [];
+		for (const c of found)
+			out.push({
+				...base,
+				date: c.date,
+				amountCents: c.amountCents,
+				done: c.status !== 'verwacht'
+			});
+		// Nog geen post deze maand, maar de volgende afschrijving valt erin
+		if (found.length === 0 && r.nextDate?.slice(0, 7) === month)
+			out.push({ ...base, date: r.nextDate, amountCents: r.medianCents, done: false });
+	}
+	return out.sort((a, b) => a.date.localeCompare(b.date) || b.amountCents - a.amountCents);
 }
 
 // --- Maandjob -------------------------------------------------------------------------------

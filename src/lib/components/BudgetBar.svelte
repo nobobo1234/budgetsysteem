@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Pace } from '#lib/budget.ts';
+	import { groupColor } from '#lib/categoryColor.ts';
 	import { formatCents } from '#lib/money.ts';
 
 	let {
@@ -10,9 +11,12 @@
 		pace,
 		plannedCents = 0,
 		plannedSpentCents = 0,
-		otherCents = spentCents
+		otherCents = spentCents,
+		group
 	}: {
 		name: string;
+		/** Categoriegroep: de balk krijgt de tint van de groep (spec: Kleur met betekenis) */
+		group?: string;
 		spentCents: number;
 		limitCents: number;
 		monthRatio: number;
@@ -46,7 +50,7 @@
 	};
 </script>
 
-<div class="row" data-pace={pace}>
+<div class="row" data-pace={pace} style:--bar={group ? groupColor(group) : undefined}>
 	<div class="top">
 		<span class="name">{name}</span>
 		<span class="num amounts">
@@ -125,29 +129,56 @@
 		}
 	}
 
+	/* Waar het kan, vult de balk pas als hij in beeld komt (scroll-driven, spec: Beweging) */
+	@supports (animation-timeline: view()) {
+		.seg {
+			animation: fill-in linear both;
+			animation-timeline: view();
+			animation-range: entry 10% cover 30%;
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.seg {
+			animation: none !important;
+		}
+	}
+
+	@keyframes fill-in {
+		from {
+			transform: translateX(0) scaleX(0);
+		}
+	}
+
+	.row {
+		--bar: var(--accent);
+	}
+
 	.planned {
-		background: color-mix(in oklch, var(--accent) 45%, var(--surface-2));
+		background: color-mix(in oklch, var(--bar) 45%, var(--surface-2));
 	}
 
 	/* Nog niet bevestigd: lichter, met een arcering zodat het ook zonder kleur te zien is */
 	.expected {
 		background: repeating-linear-gradient(
 			-45deg,
-			color-mix(in oklch, var(--accent) 30%, var(--surface-2)) 0 3px,
-			color-mix(in oklch, var(--accent) 12%, var(--surface-2)) 3px 6px
+			color-mix(in oklch, var(--bar) 30%, var(--surface-2)) 0 3px,
+			color-mix(in oklch, var(--bar) 12%, var(--surface-2)) 3px 6px
 		);
 	}
 
 	.bar {
-		background: var(--accent);
+		background: var(--bar);
 	}
 
 	/* Nadert de limiet: de kleur verloopt geleidelijk naar oranje */
+	/* Mengen in oklab (rechte lijn) en pas vanaf 80%: in oklch loopt blauw naar oranje via
+	   paars, en dat leest als een eigen kleur in plaats van als "bijna vol" */
 	[data-pace='op_schema'] .bar {
 		background: color-mix(
-			in oklch,
-			var(--accent),
-			var(--warn) clamp(0%, calc((var(--fill) - 0.6) * 150%), 100%)
+			in oklab,
+			var(--bar),
+			var(--warn) clamp(0%, calc((var(--fill) - 0.8) * 350%), 70%)
 		);
 	}
 

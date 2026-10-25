@@ -80,12 +80,23 @@ test('import: overzicht, en dezelfde export opnieuw levert niets dubbel op', asy
 	await expect(page.getByText(`Regel voor "${pattern}" gemaakt`)).toBeVisible();
 });
 
+// Budget: een tik op een balk (of op een categorie zonder limiet) opent een sheet met de limiet
 test('budget instellen en zien wat er nog vrij is', async ({ page }) => {
 	await page.goto('/budget');
-	const item = page.getByRole('listitem').filter({ has: page.getByLabel('Limiet Boodschappen') });
-	await item.getByLabel('Limiet Boodschappen').fill('300');
-	await item.getByRole('button', { name: 'Opslaan' }).click();
-	await expect(item.getByRole('meter')).toBeVisible();
+	await page.waitForLoadState('networkidle');
+	// De projecten delen één database: zonder limiet staat Boodschappen in de ingeklapte groep
+	const edit = page.getByRole('button', { name: /limiet Boodschappen aanpassen/i });
+	if ((await edit.count()) === 0) await page.getByRole('button', { name: /zonder limiet/ }).click();
+	await edit.click();
+	const sheet = page.getByRole('dialog', { name: 'Limiet Boodschappen' });
+	await expect(sheet).toBeVisible();
+	await sheet.getByLabel('Limiet Boodschappen').fill('300');
+	await sheet.getByRole('button', { name: 'Opslaan' }).click();
+	await expect(sheet).toBeHidden();
+	await expect(
+		page.getByRole('status').filter({ hasText: 'Limiet Boodschappen opgeslagen' })
+	).toBeVisible();
+	await expect(page.getByRole('meter', { name: /^Boodschappen/ })).toBeVisible();
 
 	await page.goto('/');
 	await expect(page.getByRole('region', { name: /Nog vrij in/ })).toBeVisible();

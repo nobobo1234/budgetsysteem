@@ -32,6 +32,9 @@ export function backTarget(
 	return { href, label: labels[key] ?? LABELS[key] ?? 'Terug' };
 }
 
+/** De vijf tabs; elke andere pagina is een subpagina met een terugknop. */
+export const TABS = ['/', '/transacties', '/budget', '/import', '/instellingen'] as const;
+
 /** Pagina's met een vaste tab: een subpagina laat de tab van haar ouder actief. */
 const TAB_OF: [prefix: string, tab: string][] = [
 	['/vaste-lasten', '/budget'],
@@ -48,7 +51,6 @@ const under = (path: string, prefix: string) => path === prefix || path.startsWi
 export function activeTab(path: string): string {
 	if (path === '/') return '/';
 	for (const [prefix, tab] of TAB_OF) if (under(path, prefix)) return tab;
-	for (const tab of ['/transacties', '/budget', '/import', '/instellingen'])
-		if (under(path, tab)) return tab;
+	for (const tab of TABS.slice(1)) if (under(path, tab)) return tab;
 	return '';
 }

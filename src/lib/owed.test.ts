@@ -5,6 +5,8 @@ import {
 	daysBetween,
 	formatOpenFor,
 	owedStatus,
+	remindProgress,
+	reminderText,
 	splitByAmounts,
 	splitEqually
 } from './owed.ts';
@@ -177,5 +179,38 @@ describe('status en duur', () => {
 		expect(formatOpenFor(14)).toBe('2 weken');
 		expect(formatOpenFor(45)).toBe('6 weken');
 		expect(formatOpenFor(65)).toBe('2 maanden');
+	});
+});
+
+describe('herinneren', () => {
+	const euro = (c: number) => `€ ${(c / 100).toFixed(2).replace('.', ',')}`;
+
+	it('de kleur verloopt in 14 dagen naar de herinnering', () => {
+		expect(remindProgress(0)).toBe(0);
+		expect(remindProgress(7)).toBe(0.5);
+		expect(remindProgress(14)).toBe(1);
+		expect(remindProgress(40)).toBe(1);
+		expect(remindProgress(-2)).toBe(0);
+	});
+
+	it('één zin met het totaal, waarvoor en een Tikkie-link als die er is', () => {
+		expect(
+			reminderText(
+				'Sanne',
+				[
+					{ description: 'Etentje', outstandingCents: 1500, tikkieUrl: null },
+					{ description: 'Bioscoop', outstandingCents: 920, tikkieUrl: 'https://tikkie.me/x' }
+				],
+				euro
+			)
+		).toBe(
+			'Hoi Sanne, je moet me nog € 24,20 voor Etentje en Bioscoop. Tikkie: https://tikkie.me/x'
+		);
+	});
+
+	it('zonder omschrijving geen lege "voor"', () => {
+		expect(
+			reminderText('Tim', [{ description: ' ', outstandingCents: 333, tikkieUrl: null }], euro)
+		).toBe('Hoi Tim, je moet me nog € 3,33.');
 	});
 });

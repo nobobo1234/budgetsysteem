@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import BackLink from '#lib/components/BackLink.svelte';
+	import EmptyState from '#lib/components/EmptyState.svelte';
 	import Toast from '#lib/components/Toast.svelte';
 
 	let { data, form } = $props();
@@ -34,7 +35,14 @@
 			<button class="button secondary">Opslaan</button>
 		</form>
 	{:else}
-		<p class="muted">Nog geen rekeningen. Ze komen erbij met je eerste import.</p>
+		<div class="card">
+			<EmptyState
+				icon="rekeningen"
+				text="Nog geen rekeningen. Ze komen erbij met je eerste import."
+			>
+				<a class="button secondary" href="/import">Naar de import</a>
+			</EmptyState>
+		</div>
 	{/each}
 
 	{#if form && 'ok' in form && form.ok}

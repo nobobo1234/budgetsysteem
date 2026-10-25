@@ -2,7 +2,10 @@
 	import { tick } from 'svelte';
 	import { enhance, type SubmitFunction } from '$app/forms';
 	import BackLink from '#lib/components/BackLink.svelte';
+	import EmptyState from '#lib/components/EmptyState.svelte';
+	import Monogram from '#lib/components/Monogram.svelte';
 	import OwedTabs from '#lib/components/OwedTabs.svelte';
+	import Sheet from '#lib/components/Sheet.svelte';
 	import Toast from '#lib/components/Toast.svelte';
 	import { formatCents } from '#lib/money.ts';
 
@@ -18,13 +21,13 @@
 			await update({ reset: result.type === 'success' });
 			busy = false;
 			confirmDelete = null;
+			if (result.type === 'success' && result.data && 'added' in result.data) adding = false;
 		};
 	};
 
 	async function openForm() {
 		adding = true;
 		await tick();
-		document.querySelector<HTMLInputElement>('#person-name')?.focus();
 	}
 
 	// IBAN in groepjes van vier, alleen voor weergave
@@ -56,9 +59,6 @@
 		<BackLink parents={['/instellingen', '/', '/te-krijgen']} />
 		<h1 data-morph-head="titel">Personen</h1>
 		<OwedTabs current="personen" open={data.openCount} people={data.people.length} />
-		<p class="muted">
-			Met wie je voorschiet of deelt. Met een IBAN herkent de koppellijst hun betalingen.
-		</p>
 	</div>
 
 	{#if feedback}
@@ -70,6 +70,7 @@
 			<li class={[!p.active && 'inactive']}>
 				<details>
 					<summary>
+						<Monogram name={p.name} />
 						<span class="name">
 							<strong>{p.name}</strong>
 							<span class="muted small">
@@ -107,6 +108,9 @@
 
 						<div class="ibans">
 							<h3>IBANs</h3>
+							<p class="muted small">
+								Met een IBAN herkent de koppellijst betalingen van {p.name}.
+							</p>
 							{#if p.ibans.length > 0}
 								<ul>
 									{#each p.ibans as iban (iban)}
@@ -163,31 +167,37 @@
 				</details>
 			</li>
 		{:else}
-			<li class="empty muted">
-				Nog niemand. Typ in de snelinvoer <strong>met sanne</strong>, dan komt Sanne hier vanzelf
-				bij, of voeg hieronder iemand toe.
+			<li class="empty">
+				<EmptyState
+					icon="personen"
+					text="Nog niemand om mee te delen. Typ in de snelinvoer met sanne, dan komt Sanne hier vanzelf bij."
+				/>
 			</li>
 		{/each}
 	</ul>
 
 	<section aria-label="Nieuwe persoon" class="new">
-		{#if !adding}
-			<button class="button secondary" onclick={openForm}>Nieuwe persoon</button>
-		{:else}
-			<form method="POST" action="?/add" use:enhance={keep} class="card add">
-				<label class="field">
-					<span>Naam</span>
-					<input id="person-name" name="name" maxlength="40" required autocomplete="off" />
-				</label>
-				<div class="actions">
-					<button class="button" disabled={busy}>Toevoegen</button>
-					<button type="button" class="button secondary" onclick={() => (adding = false)}
-						>Sluiten</button
-					>
-				</div>
-			</form>
-		{/if}
+		<button class="button secondary" onclick={openForm}>
+			<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+			Nieuwe persoon
+		</button>
 	</section>
+
+	<Sheet bind:open={adding} title="Nieuwe persoon">
+		<form method="POST" action="?/add" use:enhance={keep} class="add">
+			<p class="muted small">
+				Met wie je voorschiet of een vaste last deelt. Een IBAN voeg je daarna toe, zodat de
+				koppellijst hun betalingen herkent.
+			</p>
+			<label class="field">
+				<span>Naam</span>
+				<input id="person-name" name="name" maxlength="40" required autocomplete="off" />
+			</label>
+			<div class="actions">
+				<button class="button" disabled={busy}>Toevoegen</button>
+			</div>
+		</form>
+	</Sheet>
 </div>
 
 <style>
@@ -272,10 +282,6 @@
 		gap: 14px;
 	}
 
-	.add {
-		padding: 18px;
-	}
-
 	.field {
 		display: grid;
 		gap: 6px;
@@ -338,12 +344,17 @@
 		justify-items: start;
 	}
 
-	.new .add {
-		justify-self: stretch;
+	.new svg {
+		width: 20px;
+		height: 20px;
+		fill: none;
+		stroke: currentColor;
+		stroke-width: 1.8;
+		stroke-linecap: round;
 	}
 
 	.empty {
-		padding: 16px 0;
+		padding: 8px 0;
 	}
 
 	.switch {

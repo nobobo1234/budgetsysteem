@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { ICONS, type IconName } from '#lib/icons.ts';
+	import Tile from '#lib/components/Tile.svelte';
+	import type { IconName } from '#lib/icons.ts';
 	import { formatCents } from '#lib/money.ts';
 
 	let { data } = $props();
@@ -9,7 +10,7 @@
 	const names = (list: string[]) =>
 		list.length <= 1 ? (list[0] ?? '') : `${list.slice(0, -1).join(', ')} en ${list.at(-1)}`;
 
-	interface Tile {
+	interface TileData {
 		href: string;
 		title: string;
 		value: string;
@@ -18,7 +19,7 @@
 		warn?: boolean;
 	}
 
-	const groups = $derived<{ title: string; tiles: Tile[] }[]>([
+	const groups = $derived<{ title: string; tiles: TileData[] }[]>([
 		{
 			title: 'Geld',
 			tiles: [
@@ -143,33 +144,7 @@
 			<ul class="tiles">
 				{#each group.tiles as tile (tile.href)}
 					<li>
-						<a
-							class={['tile', 'hue', tile.warn && 'warn']}
-							href={tile.href}
-							style:--h={ICONS[tile.icon].hue}
-						>
-							<span class="icon-badge" aria-hidden="true">
-								<svg viewBox="0 0 24 24">
-									<path
-										d={ICONS[tile.icon].path}
-										fill="none"
-										stroke="currentColor"
-										stroke-width="1.7"
-										stroke-linecap="round"
-										stroke-linejoin="round"
-									/>
-								</svg>
-							</span>
-							<span class="title" data-morph-to={tile.href} data-morph-part="titel"
-								>{tile.title}</span
-							>
-							<span class="value num">
-								{#if tile.warn}<span class="visually-hidden"
-										>Vraagt aandacht:
-									</span>{/if}{tile.value}
-							</span>
-							{#if tile.warn}<span class="dot" aria-hidden="true"></span>{/if}
-						</a>
+						<Tile {...tile} />
 					</li>
 				{/each}
 			</ul>
@@ -215,74 +190,6 @@
 		gap: 10px;
 	}
 
-	.tile {
-		position: relative;
-		display: grid;
-		grid-template-rows: auto 1fr auto;
-		gap: 4px;
-		height: 100%;
-		min-height: 124px;
-		padding: 14px;
-		border-radius: var(--radius);
-		background: var(--surface);
-		box-shadow: var(--shadow);
-		color: var(--text);
-		text-decoration: none;
-		transition:
-			transform 220ms var(--ease-spring),
-			box-shadow 220ms var(--ease-out);
-	}
-
-	.tile:active {
-		transform: scale(0.97);
-	}
-
-	@media (hover: hover) {
-		.tile:hover {
-			transform: translateY(-2px);
-			box-shadow:
-				var(--shadow),
-				0 10px 28px oklch(0.2 0.01 85 / 0.08);
-		}
-
-		.tile:hover .icon-badge {
-			transform: rotate(-6deg) scale(1.06);
-		}
-	}
-
-	.icon-badge {
-		margin-bottom: 10px;
-	}
-
-	.title {
-		align-self: end;
-		font-weight: 600;
-		line-height: 1.25;
-	}
-
-	.value {
-		color: var(--muted);
-		font-size: 0.9rem;
-		line-height: 1.35;
-		overflow-wrap: anywhere;
-	}
-
-	.warn .value {
-		color: color-mix(in oklch, var(--warn) 70%, var(--text));
-		font-weight: 550;
-	}
-
-	.dot {
-		position: absolute;
-		top: 14px;
-		right: 14px;
-		width: 9px;
-		height: 9px;
-		border-radius: 50%;
-		background: var(--warn);
-		box-shadow: 0 0 0 4px color-mix(in oklch, var(--warn) 22%, transparent);
-	}
-
 	.logout {
 		padding-top: 4px;
 	}
@@ -290,12 +197,5 @@
 	.logout svg {
 		width: 18px;
 		height: 18px;
-	}
-
-	@media (prefers-reduced-motion: reduce) {
-		.tile:hover,
-		.tile:hover .icon-badge {
-			transform: none;
-		}
 	}
 </style>

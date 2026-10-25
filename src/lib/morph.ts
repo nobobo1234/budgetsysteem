@@ -1,5 +1,6 @@
 // Gedeelde elementen bij een schermwissel (spec: Beweging): een tegel op Meer of een
-// signaalkaartje op het startscherm schuift mee naar de kop van zijn pagina, en terug.
+// signaalkaartje op het startscherm schuift mee naar de kop van zijn pagina, en terug. Net zo
+// de naam van een vaste last, uit Te bevestigen of de lijst, naar de kop van zijn detailpagina.
 // Op de bronpagina staat `data-morph-to="<pad>"` met `data-morph-part`, op de doelpagina
 // `data-morph-head="<deel>"`. De namen gelden alleen tijdens de overgang.
 
@@ -33,10 +34,23 @@ export interface MorphPlan {
 	parts: MorphPart[];
 }
 
+/** Detailpagina's met een naam die meeschuift, en de pagina's met een rij die erheen leidt. */
+const DETAILS: [pattern: RegExp, sources: string[]][] = [
+	[/^\/vaste-lasten\/[0-9a-f-]{36}$/, ['/', '/vaste-lasten']]
+];
+
+function sourceParts(source: string, target: string): MorphPart[] | undefined {
+	const fixed = SOURCES[source]?.[target];
+	if (fixed) return fixed;
+	for (const [pattern, sources] of DETAILS)
+		if (pattern.test(target) && sources.includes(source)) return ['titel'];
+	return undefined;
+}
+
 export function morphPlan(from: string, to: string): MorphPlan | null {
-	const forward = SOURCES[from]?.[to];
+	const forward = sourceParts(from, to);
 	if (forward) return { source: from, target: to, parts: forward };
-	const back = SOURCES[to]?.[from];
+	const back = sourceParts(to, from);
 	if (back) return { source: to, target: from, parts: back };
 	return null;
 }

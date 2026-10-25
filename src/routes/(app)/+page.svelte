@@ -2,23 +2,27 @@
 	import { enhance, type SubmitFunction } from '$app/forms';
 	import { refreshAll } from '$app/navigation';
 	import { fly } from 'svelte/transition';
-	import { homeBars, monthStory, storySentence } from '#lib/budget.ts';
+	import { FIXED_GROUP, homeBars, monthStory, storySentence } from '#lib/budget.ts';
 	import { groupColor } from '#lib/categoryColor.ts';
 	import BudgetBar from '#lib/components/BudgetBar.svelte';
+	import EmptyState from '#lib/components/EmptyState.svelte';
 	import ExpectedItem from '#lib/components/ExpectedItem.svelte';
 	import HeroAmount from '#lib/components/HeroAmount.svelte';
 	import LinkThreads, { threadGutter } from '#lib/components/LinkThreads.svelte';
+	import Monogram from '#lib/components/Monogram.svelte';
 	import MonthLine from '#lib/components/MonthLine.svelte';
 	import QuickEntry from '#lib/components/QuickEntry.svelte';
+	import SignalCard from '#lib/components/SignalCard.svelte';
 	import Toast from '#lib/components/Toast.svelte';
 	import TransactionItem from '#lib/components/TransactionItem.svelte';
 	import { daysInMonth, formatMonth, formatShortDate, fromIsoDate } from '#lib/dates.ts';
-	import { ICONS, type IconName } from '#lib/icons.ts';
+	import type { IconName } from '#lib/icons.ts';
 	import { formatCents } from '#lib/money.ts';
 	import { flush, type QueuedTransaction } from '#lib/offline/queue.ts';
 	import { sync } from '#lib/offline/sync.svelte.ts';
 	import { motion } from '#lib/motion.ts';
 	import { threadLayout } from '#lib/refund.ts';
+	import { displayName } from '#lib/text.ts';
 
 	let { data } = $props();
 
@@ -161,13 +165,18 @@
 					spentCents={data.overview.totalLimitCents - data.overview.freeCents}
 					over={data.overview.freeCents < 0}
 				/>
-				<p class="story">{storySentence(story, data.overview.freeCents)}</p>
+				<p class="story tell">{storySentence(story, data.overview.freeCents)}</p>
 			</section>
 		{:else}
-			<section class="empty">
-				<h1>Nog geen budget</h1>
-				<p class="muted">Stel limieten per categorie in, dan zie je hier wat je nog vrij hebt.</p>
-				<a class="button secondary" href="/budget">Budget instellen</a>
+			<section class="empty" aria-labelledby="empty-title">
+				<h1 id="empty-title">Nog geen budget</h1>
+				<EmptyState
+					icon="budget"
+					text="Stel limieten per categorie in, dan zie je hier wat je nog vrij hebt."
+					compact
+				>
+					<a class="button secondary" href="/budget">Budget instellen</a>
+				</EmptyState>
 			</section>
 		{/if}
 
@@ -178,32 +187,7 @@
 		<ul class="signals" aria-label="Wacht op je">
 			{#each signals as signal (signal.href)}
 				<li>
-					<a
-						class={['signal', 'hue', signal.warn && 'warn']}
-						href={signal.href}
-						style:--h={ICONS[signal.icon].hue}
-					>
-						<span class="icon-badge" aria-hidden="true">
-							<svg viewBox="0 0 24 24">
-								<path
-									d={ICONS[signal.icon].path}
-									fill="none"
-									stroke="currentColor"
-									stroke-width="1.7"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-								/>
-							</svg>
-						</span>
-						<span class="signal-text">
-							<span
-								class="big num"
-								data-morph-to={signal.morph ? signal.href : undefined}
-								data-morph-part={signal.morph}>{signal.big}</span
-							>
-							<span class="small">{signal.small}</span>
-						</span>
-					</a>
+					<SignalCard {...signal} />
 				</li>
 			{/each}
 		</ul>
@@ -232,12 +216,13 @@
 								<ExpectedItem item={entry.item} ondone={notify} />
 							{:else}
 								{@const item = entry.item}
+								<Monogram name={item.personName} size={32} />
 								<a class="who" href="/terugbetalingen">
 									<span class="name">{item.personName}</span>
 									<span class="muted small">
-										{item.counterparty} · verwacht {formatShortDate(item.dueDate)}{item.late
-											? ' · te laat'
-											: ''}
+										{displayName(item.counterparty)} · verwacht {formatShortDate(
+											item.dueDate
+										)}{item.late ? ' · te laat' : ''}
 									</span>
 								</a>
 								<span class="num in">+{formatCents(item.outstandingCents)}</span>
@@ -307,20 +292,26 @@
 						{#each data.upcoming as item (item.id)}
 							{@const d = dayParts(item.date)}
 							<li>
-								<span class="date num" aria-label={formatShortDate(item.date)}>
-									<span class="d">{d.day}</span><span class="wd">{d.weekday}</span>
-								</span>
-								<span class="what">
-									<span class="name">{item.counterparty}</span>
-									<span class="muted small">
-										<span
-											class={['dot', !item.categoryGroup && 'none']}
-											style:--dot={item.categoryGroup ? groupColor(item.categoryGroup) : null}
-										></span>
-										{item.categoryName ?? 'Geen categorie'}
+								<a class="upcoming-row" href="/vaste-lasten/{item.recurringId}">
+									<span class="date num" aria-label={formatShortDate(item.date)}>
+										<span class="d">{d.day}</span><span class="wd">{d.weekday}</span>
 									</span>
-								</span>
-								<span class="num amount">{formatCents(item.amountCents, { sign: true })}</span>
+									<span class="what">
+										<span
+											class="name"
+											data-morph-to="/vaste-lasten/{item.recurringId}"
+											data-morph-part="titel">{displayName(item.counterparty)}</span
+										>
+										<span class="muted small">
+											<span
+												class={['dot', !item.categoryGroup && 'none']}
+												style:--dot={item.categoryGroup ? groupColor(item.categoryGroup) : null}
+											></span>
+											{item.categoryName ?? 'Geen categorie'}
+										</span>
+									</span>
+									<span class="num amount">{formatCents(item.amountCents, { sign: true })}</span>
+								</a>
 							</li>
 						{/each}
 					</ul>
@@ -365,9 +356,14 @@
 					</li>
 				{:else}
 					{#if queued.length === 0}
-						<li class="muted none">
-							Nog niets ingevoerd. Typ hierboven bijvoorbeeld <strong>12,50 ah</strong>, of
-							<a href="/import">importeer je SNS-historie</a>.
+						<li class="none">
+							<EmptyState
+								icon="transacties"
+								text="Nog niets ingevoerd. Typ hierboven bijvoorbeeld 12,50 ah, of importeer je historie."
+								compact
+							>
+								<a class="more-link" href="/import">Historie importeren</a>
+							</EmptyState>
 						</li>
 					{/if}
 				{/each}
@@ -383,7 +379,7 @@
 			</div>
 			<div class="bars">
 				{#if bars.fixed}
-					<BudgetBar name="Vaste lasten" {...bars.fixed} />
+					<BudgetBar name="Vaste lasten" group={FIXED_GROUP} {...bars.fixed} />
 				{/if}
 				{#each bars.top as line (line.categoryId)}
 					<BudgetBar {...line} />
@@ -419,13 +415,9 @@
 		gap: 14px;
 	}
 
-	/* De zin onder het getal: het verhaal van de maand, in de display-font */
+	/* De zin onder het getal: het verhaal van de maand, vertellend in Fraunces italic */
 	.story {
-		font-family: var(--font-display);
-		font-style: italic;
 		font-size: 1.2rem;
-		font-variation-settings: 'opsz' 24;
-		line-height: 1.35;
 		max-width: 34ch;
 	}
 
@@ -498,74 +490,6 @@
 			grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 			overflow: visible;
 		}
-
-		.signal {
-			flex-direction: row;
-			align-items: center;
-			gap: 12px;
-		}
-	}
-
-	.signal {
-		position: relative;
-		display: flex;
-		flex-direction: column;
-		align-items: flex-start;
-		gap: 10px;
-		height: 100%;
-		min-height: 72px;
-		padding: 12px 14px;
-		border-radius: var(--radius);
-		background: var(--surface);
-		box-shadow: var(--shadow);
-		color: var(--text);
-		text-decoration: none;
-		transition:
-			transform 220ms var(--ease-spring),
-			box-shadow 220ms var(--ease-out);
-	}
-
-	.signal:active {
-		transform: scale(0.97);
-	}
-
-	@media (hover: hover) {
-		.signal:hover {
-			transform: translateY(-2px);
-		}
-
-		.signal:hover .icon-badge {
-			transform: rotate(-6deg) scale(1.06);
-		}
-	}
-
-	.signal.warn::after {
-		content: '';
-		position: absolute;
-		top: 10px;
-		right: 10px;
-		width: 8px;
-		height: 8px;
-		border-radius: 50%;
-		background: var(--warn);
-	}
-
-	.signal-text {
-		display: grid;
-		min-width: 0;
-	}
-
-	.big {
-		font-size: 1.15rem;
-		font-weight: 650;
-		letter-spacing: -0.01em;
-		line-height: 1.2;
-	}
-
-	.signal-text .small {
-		color: var(--muted);
-		font-size: 0.86rem;
-		line-height: 1.3;
 	}
 
 	.fixed,
@@ -734,11 +658,18 @@
 		font-size: 1.05rem;
 	}
 
-	.upcoming li {
+	.upcoming-row {
 		display: flex;
 		align-items: center;
 		gap: 12px;
 		padding: 8px 0;
+		color: inherit;
+		text-decoration: none;
+		transition: transform 160ms var(--ease-spring);
+	}
+
+	.upcoming-row:active {
+		transform: scale(0.99);
 	}
 
 	.upcoming li + li {

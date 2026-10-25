@@ -23,7 +23,11 @@
 		'/te-krijgen',
 		'/personen',
 		'/terugbetalingen',
-		'/saldocheck'
+		'/saldocheck',
+		'/instellingen/meldingen',
+		'/instellingen/rekeningen',
+		'/instellingen/beveiliging',
+		'/instellingen/status'
 	];
 	const TX = /^\/transacties\/([0-9a-f-]{36})$/;
 	const depth = (path: string) => path.split('/').filter(Boolean).length;

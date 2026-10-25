@@ -1,12 +1,14 @@
-// Kleur per categoriegroep, zodat je in lijsten in één oogopslag ziet waar iets onder valt.
-// Alleen de tint ligt hier vast; licht en verzadiging komen uit app.css (licht en donker thema).
+// Kleur per categoriegroep, zodat je in lijsten in één oogopslag ziet waar iets onder valt: in
+// bolletjes, budgetbalken en monogrammen. Alleen de tint ligt hier vast; licht en verzadiging
+// komen uit app.css (licht en donker thema). Geen groep in de tint van oranje of rood: die
+// betekenen tempo en aandacht.
 
 const HUES: Record<string, number> = {
 	'Vaste lasten': 250,
 	Dagelijks: 150,
 	Onderweg: 205,
 	'Vrije tijd': 320,
-	Overig: 60,
+	Overig: 285,
 	'Buiten budget': 95
 };
 

@@ -1,11 +1,11 @@
 import { fail } from '@sveltejs/kit';
-import { asc, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, isNotNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { isIsoDate } from '#lib/dates.ts';
 import { normalizeCounterparty } from '#lib/text.ts';
 import { recordChange } from '#lib/server/audit.ts';
 import { db } from '#lib/server/db/index.ts';
-import { categories, importBatches, rules } from '#lib/server/db/schema.ts';
+import { categories, importBatches, rules, transactions } from '#lib/server/db/schema.ts';
 import { ImportError, parseBankFile } from '#lib/server/import/index.ts';
 import {
 	applyRules,
@@ -20,7 +20,28 @@ import { log } from '#lib/server/log.ts';
 import { proposalCount, refreshProposals } from '#lib/server/recurring.ts';
 import type { Actions, PageServerLoad } from './$types';
 
+/** De categorieën die je het vaakst gebruikt, als snelle keuze naast het voorstel. */
+function topCategories(limit = 4): string[] {
+	return db()
+		.select({ id: transactions.categoryId })
+		.from(transactions)
+		.innerJoin(categories, eq(categories.id, transactions.categoryId))
+		.where(
+			and(
+				isNotNull(transactions.categoryId),
+				eq(categories.archived, false),
+				eq(categories.countsForBudget, true)
+			)
+		)
+		.groupBy(transactions.categoryId)
+		.orderBy(desc(sql`count(*)`))
+		.limit(limit)
+		.all()
+		.map((r) => r.id!);
+}
+
 export const load: PageServerLoad = () => ({
+	topCategories: topCategories(),
 	batches: db().select().from(importBatches).orderBy(desc(importBatches.createdAt)).limit(5).all(),
 	uncategorized: uncategorizedGroups(db()),
 	// Pinbetalingen uit een import van vóór de herkenning van winkelnamen
