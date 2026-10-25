@@ -58,6 +58,13 @@ export function formatShortDate(iso: string): string {
 	return shortDate.format(fromIsoDate(iso));
 }
 
+const shortMonth = new Intl.DateTimeFormat('nl-NL', { month: 'short' });
+
+/** `okt`, voor een maand (`YYYY-MM`) in een smal vakje. */
+export function formatShortMonth(month: string): string {
+	return shortMonth.format(fromIsoDate(`${month}-01`)).replace('.', '');
+}
+
 const dayMonth = new Intl.DateTimeFormat('nl-NL', { day: 'numeric', month: 'long' });
 
 /** `1 februari` */

@@ -158,7 +158,8 @@ Bedragen staan altijd als hele centen (integer) in euro; een vreemde valuta is e
 | owed | persoon (verwijzing naar people; leeg zolang je bij `voor 3` nog niet koos wie), bedrag\_cent, richting (te krijgen / te betalen), bron-transactie, omschrijving, datum (open sinds), aandeel + maand (optioneel, samen uniek), status (open / deels / betaald / kwijtgescholden), Tikkie-link, notitie |
 | owed\_payments | transactie, persoon, post (leeg = tegoed), bedrag\_cent — vervangt betaald-via-transactie, zodat één betaling meerdere posten dekt en andersom |
 | people | naam, actief; IBANs in `people_ibans` (persoon, iban), elke IBAN bij hooguit één persoon en nooit een eigen rekening |
-| recurring\_shares | vaste last, persoon, soort (vast / percentage), bedrag\_cent of basispunten, verwachte ontvangstdag, vanaf maand, tot maand (optioneel) |
+| recurring\_shares | vaste last, persoon, soort (vast / percentage), bedrag\_cent of basispunten, verwachte ontvangstdag, vanaf maand, tot maand (optioneel) — een ander bedrag vanaf een maand is een nieuw aandeel; het oude krijgt een eindmaand |
+| share\_dismissals | vaste last, tegen-IBAN (samen uniek) — een afgewezen voorstel voor een aandeel komt niet terug |
 | sessions, passkeys | apparaat, laatst gebruikt, ingetrokken |
 | balance\_anchors | rekening (uniek), datum, bedrag\_cent, bron (import / handmatig), import — het startsaldo voor de saldocheck: het saldo aan het eind van die dag |
 | balance\_checks | rekening, datum (samen uniek), bedrag\_cent — het echte saldo volgens de bank; het verschil rekent de app steeds opnieuw uit |
@@ -260,6 +261,7 @@ Het startscherm toont één getal, wat je deze maand nog vrij hebt, met daaronde
 - een bon is gelezen, of heeft je controle nodig;
 - een categorie zit op 90% van de limiet (gemeten op het deel buiten geplande vaste lasten en reserveringen);
 - een Tikkie staat 14 dagen open;
+- een aandeel in een gedeelde vaste last is een week na de ontvangstdag niet volledig binnen;
 - de maand is voorbij en de afsluiting staat klaar.
 
 Op het vergrendelscherm staan standaard geen bedragen of namen, tenzij je dat aanzet.
@@ -499,18 +501,19 @@ Elk scherm staat in deze tabel. Een nieuw scherm krijgt eerst een regel hier, in
 
 | Scherm | Route | Bovenaan | Hoofdactie | Verder |
 | --- | --- | --- | --- | --- |
-| Overzicht | `/` | Nog vrij deze maand, daaronder de snelinvoer | Uitgave invoeren | Te bevestigen vaste lasten (met "gemist of opgezegd?" na 7 dagen), Recent (8 posten), aantal te controleren, balken per categorie |
+| Overzicht | `/` | Nog vrij deze maand, daaronder de snelinvoer | Uitgave invoeren | Te bevestigen vaste lasten (met "gemist of opgezegd?" na 7 dagen) en terugbetalingen op hun ontvangstdag (één tik "ontvangen"), Recent (8 posten), aantal te controleren, balken per categorie |
 | Transacties | `/transacties` | Zoekveld met filters op maand en categorie, die direct filteren | Zoeken | Lijst per dag met dagsaldo, aantal en totalen voor het hele filter, pagina's van 50 |
 | Transactie | `/transacties/[id]` | Tegenpartij en bedrag, groot | Opslaan | Bedrag, richting, datum, categorie, tegenpartij, notitie; voorgeschoten (gelijk of per persoon); bij een betaling de koppellijst met open posten; verwijderen met bevestiging |
 | Budget | `/budget` | Maand met vorige en volgende, totalen | Limiet instellen | Per groep een balk met tempo en een limietveld; link naar categorieën |
-| Vaste lasten | `/vaste-lasten` | Totaal per maand en per jaar | Voorstel bevestigen | Voorstellen ("Is Vattenfall een vaste last?") met volgende datum, categorie en uitsmeren; lijst met bedrag per maand, ritme, stand van de reservering en signalen; gestopt ingeklapt. Bereikbaar via Budget en Meer; de tab Budget blijft actief |
-| Vaste last | `/vaste-lasten/[id]` | Tegenpartij en bedrag per keer, groot | Opslaan | Naam, verwacht bedrag, vast of wisselend, ritme, volgende afschrijving, categorie, uitsmeren; afschrijvingen; stoppen met bevestiging |
+| Vaste lasten | `/vaste-lasten` | Totaal per maand en per jaar | Voorstel bevestigen | Voorstellen ("Is Vattenfall een vaste last?") met volgende datum, categorie en uitsmeren; lijst met bedrag per maand, ritme, stand van de reservering, signalen en bij een gedeelde last jouw deel; gestopt ingeklapt. Bereikbaar via Budget en Meer; de tab Budget blijft actief |
+| Vaste last | `/vaste-lasten/[id]` | Tegenpartij en bedrag per keer, groot | Opslaan | Naam, verwacht bedrag, vast of wisselend, ritme, volgende afschrijving, categorie, uitsmeren; Gedeeld: aandelen per persoon (vast of percentage, ontvangstdag, van en tot), jouw deel, een ander bedrag vanaf een maand, bij een prijsverhoging een voorstel per persoon, onderaan "Aandeel toevoegen"; afschrijvingen; stoppen met bevestiging |
 | Categorieën | `/categorieen` | Tabs Categorieën en Regels | Nieuwe categorie | Per groep een kaart; bewerken in de rij (naam, groep, telt mee); gearchiveerd ingeklapt |
 | Regels | `/regels` | Tabs Categorieën en Regels | Nieuwe regel | Lijst als zin ("Tegenpartij bevat … → categorie") met filter; nieuwe regel als "Als … dan …", prioriteit ingeklapt; onderaan "Regels opnieuw toepassen" |
 | Import | `/import` | Sleepvak voor het bankbestand | Importeren | Overzicht na import, tegenpartijen zonder categorie met één klik een regel, eerdere imports |
-| Te krijgen | `/te-krijgen` | Tabs Te krijgen en Personen; totaal nog te krijgen | — | Per persoon een kaart met de open posten (waarvoor, sinds wanneer, hoe lang open, deels betaald), Tikkie-link en notitie; herinnering na 14 dagen; aanpassen en kwijtschelden in de post; onderaan "Nieuwe post" (ook te betalen). Bereikbaar via het startscherm en Meer |
+| Te krijgen | `/te-krijgen` | Tabs Te krijgen en Personen; totaal nog te krijgen | — | Link naar Terugbetalingen; per persoon een kaart met de open posten (waarvoor, sinds wanneer, hoe lang open, deels betaald), Tikkie-link en notitie; herinnering na 14 dagen; aanpassen en kwijtschelden in de post; onderaan "Nieuwe post" (ook te betalen). Bereikbaar via het startscherm en Meer |
+| Terugbetalingen | `/terugbetalingen` | Terug naar Te krijgen; totale achterstand, met het tegoed eronder | Ontvangen | Klaar om te bevestigen (één tik "ontvangen"); voorstellen uit de historie ("Krijg je van S. elke maand €20 voor Ziggo?"); per persoon zes maanden als vakjes met icoon en tekst (binnen, deels, open, te laat, kwijtgescholden), verwacht tegenover ontvangen en de achterstand; tik op een maand voor de betalingen, loskoppelen en kwijtschelden; tegoed als post te betalen; per gedeelde last bruto, aandelen en jouw deel. Eigen scherm en geen derde tab naast Te krijgen en Personen, omdat die op 375 px niet past. Bereikbaar via Te krijgen, het startscherm, de import en Meer |
 | Personen | `/personen` | Tabs Te krijgen en Personen | — | Lijst met wat ieder nog moet of krijgt; naam, actief en IBANs bewerken in de rij; onderaan "Nieuwe persoon" |
-| Meer | `/instellingen` | Passkeys | — | Herstelcode, actieve apparaten, rekeningen, links naar Te krijgen, personen, saldocheck, meldingen, categorieën en regels, uitloggen |
+| Meer | `/instellingen` | Passkeys | — | Herstelcode, actieve apparaten, rekeningen, links naar Te krijgen, personen, terugbetalingen, saldocheck, meldingen, categorieën en regels, uitloggen |
 | Saldocheck | `/saldocheck` | Per rekening het verwachte saldo van vandaag en de uitkomst van de laatste check | Saldo invullen | Bij een verschil links naar de transacties van die rekening in die periode en naar de import; eerdere checks; startsaldo aanpassen. Bereikbaar via Meer en de herinnering op het startscherm |
 | Meldingen | `/instellingen/meldingen` | Dit apparaat: meldingen aan of uit | Meldingen aanzetten | Schakelaar per soort (geld, server, beveiliging), bedragen en namen op het vergrendelscherm, apparaten met meldingen, testmelding |
 | Status | `/instellingen/status` | Of alles werkt, en anders wat aandacht vraagt | — | Backups (Litestream, restic), server (database, schijf, starts en herstarts), fouten in 24 uur en 7 dagen, web-vitals p75 per week; bereikbaar via Meer, geen eigen tab; alleen cijfers en tijden |

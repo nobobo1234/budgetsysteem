@@ -29,6 +29,7 @@ import { INTERNAL_TRANSFER } from './db/seed.ts';
 import { ValidationError } from './errors.ts';
 import { log } from './log.ts';
 import { dropSourcePosts, MY_SHARE, syncShareSplits } from './owed.ts';
+import { applySharedSplit, isShared, myShareCents, removeSharedFor } from './shares.ts';
 import { describeError } from './telemetry/index.ts';
 
 /** Niet bevestigd zoveel dagen na de verwachte dag: "gemist of opgezegd?" (spec: Verwachte posten). */
@@ -341,8 +342,9 @@ export function generateMonth(
 				if (existing) reservationId = existing.id;
 				else {
 					const balance = reserveBalance(tx, r.id, shiftMonth(month, -1));
+					// Bij een gedeelde last wordt alleen jouw deel gereserveerd
 					const amountCents = reservationFor({
-						expectedCents: r.medianCents,
+						expectedCents: myShareCents(tx, r.id, r.medianCents, debitMonth),
 						reservedCents: balance,
 						month,
 						debitMonth
@@ -386,6 +388,8 @@ export function generateMonth(
 					})
 					.returning({ id: transactions.id })
 					.get();
+				// Gedeeld: een post per persoon voor die maand, en splits met jouw deel
+				applySharedSplit(tx, row.id);
 				if (reservationId && date.slice(0, 7) === month)
 					tx.update(reservations)
 						.set({ transactionId: row.id })
@@ -435,7 +439,9 @@ export function confirmExpected(
 			.where(eq(transactions.id, t.id))
 			.returning()
 			.get();
-		// Gedeeld met anderen: hun deel blijft staan, jouw deel neemt het verschil
+		// Gedeeld via aandelen: een percentage volgt het echte bedrag, een vast aandeel blijft
+		// staan. Voorgeschoten: hun deel blijft staan, jouw deel neemt het verschil.
+		applySharedSplit(tx, t.id);
 		syncShareSplits(tx, t.id);
 
 		const previous = r.lastCents;
@@ -482,6 +488,9 @@ export function skipExpected(
 ): void {
 	const recurringId = db.transaction((tx) => {
 		const { t, r } = expectedPost(tx, transactionId);
+		// Maandaandelen vervallen en wat al binnen was wordt tegoed; van een voorgeschoten
+		// verdeling vervallen alleen de onbetaalde posten
+		removeSharedFor(tx, t.id);
 		dropSourcePosts(tx, t.id);
 		tx.delete(transactions).where(eq(transactions.id, t.id)).run();
 		recordChange(tx, reason, 'transactions', t.id, t, null);
@@ -512,7 +521,10 @@ export function stopRecurring(db: DB, id: string, today = toIsoDate(new Date()))
 			.where(and(eq(transactions.recurringId, id), eq(transactions.status, 'verwacht')))
 			.all()
 			.map((t) => t.id);
-		for (const t of open) dropSourcePosts(tx, t);
+		for (const t of open) {
+			removeSharedFor(tx, t);
+			dropSourcePosts(tx, t);
+		}
 		if (open.length > 0) tx.delete(transactions).where(inArray(transactions.id, open)).run();
 		if (isSpread(before) && reserveBalance(tx, id, today.slice(0, 7)) > 0)
 			drawReserve(tx, id, today.slice(0, 7));
@@ -598,6 +610,7 @@ export function updateRecurring(
 				t.date.slice(0, 7) >= month
 			) {
 				// Verschoven naar een andere maand: de post komt in die maand opnieuw
+				removeSharedFor(tx, t.id);
 				tx.delete(transactions).where(eq(transactions.id, t.id)).run();
 				continue;
 			}
@@ -619,6 +632,8 @@ export function updateRecurring(
 						and(eq(transactionSplits.transactionId, t.id), eq(transactionSplits.note, MY_SHARE))
 					)
 					.run();
+			// Gedeeld: posten en splits bij het nieuwe bedrag
+			applySharedSplit(tx, t.id);
 		}
 		// Een andere categorie geldt vanaf deze maand; afgesloten maanden blijven zoals ze waren
 		if (after.categoryId !== before.categoryId)
@@ -840,7 +855,8 @@ export function reserveStatuses(db: DB, month: string): ReserveStatus[] {
 			counterparty: r.counterparty,
 			categoryId: r.categoryId,
 			reservedCents: reserveBalance(db, r.id, month),
-			expectedCents: r.medianCents,
+			// Gedeeld: alleen jouw deel gaat opzij
+			expectedCents: myShareCents(db, r.id, r.medianCents, (r.nextDate ?? month).slice(0, 7)),
 			nextDate: r.nextDate
 		}));
 }
@@ -868,6 +884,8 @@ export interface RecurringItem {
 	perMonthCents: number;
 	perYearCents: number;
 	reservedCents: number;
+	/** Bij een gedeelde last jouw deel van het bedrag per keer; anders null */
+	mineCents: number | null;
 }
 
 /** Alle vaste lasten met bedrag per maand en per jaar, plus de open voorstellen. */
@@ -902,7 +920,10 @@ export function recurringOverview(db: DB, today = toIsoDate(new Date())) {
 		stoppedAt: r.stoppedAt,
 		perMonthCents: perMonthCents(r.medianCents, r.interval),
 		perYearCents: perYearCents(r.medianCents, r.interval),
-		reservedCents: isSpread(r) ? reserveBalance(db, r.id, month) : 0
+		reservedCents: isSpread(r) ? reserveBalance(db, r.id, month) : 0,
+		mineCents: isShared(db, r.id)
+			? myShareCents(db, r.id, r.medianCents, (r.nextDate ?? today).slice(0, 7))
+			: null
 	}));
 	const active = items.filter((i) => i.status === 'actief');
 	const perYear = active.reduce((s, i) => s + i.perYearCents, 0);

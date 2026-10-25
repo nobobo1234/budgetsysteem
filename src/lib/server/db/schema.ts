@@ -275,9 +275,62 @@ export const peopleIbans = sqliteTable(
 	(t) => [index('people_ibans_person_idx').on(t.personId)]
 );
 
+// Aandeel van een persoon in een gedeelde vaste last (spec: Gedeelde vaste lasten). Vast in
+// centen of een percentage in hele basispunten (2500 = 25%), met een ontvangstdag en een
+// periode. Een ander bedrag vanaf een maand is een nieuw aandeel; het oude krijgt een eindmaand.
+export const recurringShares = sqliteTable(
+	'recurring_shares',
+	{
+		id: id(),
+		recurringId: text('recurring_id')
+			.notNull()
+			.references(() => recurring.id, { onDelete: 'cascade' }),
+		personId: text('person_id')
+			.notNull()
+			.references(() => people.id),
+		kind: text('kind', { enum: ['vast', 'percentage'] }).notNull(),
+		amountCents: integer('amount_cents'),
+		basisPoints: integer('basis_points'),
+		receiveDay: integer('receive_day').notNull(),
+		startMonth: text('start_month').notNull(),
+		endMonth: text('end_month'),
+		createdAt: createdAt(),
+		updatedAt: text('updated_at')
+	},
+	(t) => [
+		index('recurring_shares_recurring_idx').on(t.recurringId),
+		index('recurring_shares_person_idx').on(t.personId),
+		check(
+			'recurring_shares_amount',
+			sql`(${t.kind} = 'vast' AND ${t.amountCents} > 0 AND ${t.basisPoints} IS NULL) OR (${t.kind} = 'percentage' AND ${t.basisPoints} BETWEEN 1 AND 10000 AND ${t.amountCents} IS NULL)`
+		),
+		check('recurring_shares_receive_day', sql`${t.receiveDay} BETWEEN 1 AND 31`),
+		check(
+			'recurring_shares_months',
+			sql`${t.startMonth} GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]' AND (${t.endMonth} IS NULL OR (${t.endMonth} GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]' AND ${t.endMonth} >= ${t.startMonth}))`
+		)
+	]
+);
+
+// Een voorstel voor een aandeel uit de historie dat je afwees: komt niet terug. Op tegen-IBAN,
+// zodat een voorstel ook kan gaan over iemand die nog geen persoon is.
+export const shareDismissals = sqliteTable(
+	'share_dismissals',
+	{
+		id: id(),
+		recurringId: text('recurring_id')
+			.notNull()
+			.references(() => recurring.id, { onDelete: 'cascade' }),
+		counterIban: text('counter_iban').notNull(),
+		createdAt: createdAt()
+	},
+	(t) => [uniqueIndex('share_dismissals_idx').on(t.recurringId, t.counterIban)]
+);
+
 // Een openstaande post: wat iemand jou nog moet (te krijgen) of jij iemand (te betalen).
 // Zonder persoon als je `voor 3` typte zonder namen; die kies je later op het overzicht.
-// Betaald is wat in `owed_payments` staat; de status volgt daaruit.
+// Betaald is wat in `owed_payments` staat; de status volgt daaruit. Een maandaandeel van een
+// gedeelde vaste last is ook een post, met `share_id` en `month` (samen uniek).
 export const owed = sqliteTable(
 	'owed',
 	{
@@ -296,11 +349,15 @@ export const owed = sqliteTable(
 			.default('open'),
 		tikkieUrl: text('tikkie_url'),
 		note: text('note').notNull().default(''),
+		shareId: text('share_id').references(() => recurringShares.id),
+		month: text('month'),
 		createdAt: createdAt()
 	},
 	(t) => [
 		index('owed_person_status_idx').on(t.personId, t.status),
 		index('owed_source_idx').on(t.sourceTransactionId),
+		uniqueIndex('owed_share_month_idx').on(t.shareId, t.month),
+		check('owed_share_month', sql`(${t.shareId} IS NULL) = (${t.month} IS NULL)`),
 		check('owed_amount_positive', sql`${t.amountCents} > 0`),
 		check('owed_date_format', sql`${t.date} GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'`)
 	]

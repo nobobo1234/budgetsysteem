@@ -163,6 +163,14 @@
 					</div>
 				{/if}
 			</dl>
+			{#if summary.linkedCount > 0}
+				<p>
+					<a href="/terugbetalingen"
+						>{summary.linkedCount}
+						{summary.linkedCount === 1 ? 'terugbetaling' : 'terugbetalingen'} automatisch gekoppeld</a
+					>; los te koppelen bij de transactie.
+				</p>
+			{/if}
 			{#if form && 'proposals' in form && form.proposals}
 				<p>
 					<a href="/vaste-lasten"

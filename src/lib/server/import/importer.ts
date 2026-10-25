@@ -19,6 +19,7 @@ import {
 } from '../db/schema.ts';
 import { INTERNAL_TRANSFER } from '../db/seed.ts';
 import { personByIban } from '../people.ts';
+import { autoLinkPayment, findReceiptToMerge } from '../shares.ts';
 import { mccCategory, parseCardPayment } from './card.ts';
 import { ImportError, type ImportFormat, type ImportRecord, type OpeningBalance } from './types.ts';
 
@@ -43,6 +44,8 @@ export interface ImportSummary {
 	uncategorized: UncategorizedGroup[];
 	/** Startsaldo's die deze import vastlegde, voor de saldocheck */
 	anchors: { accountName: string; date: string; amountCents: number }[];
+	/** Inkomende overboekingen die automatisch aan een openstaande post zijn gekoppeld */
+	linkedCount: number;
 	/** Storno's (`RvslInd`): automatisch verrekend, of op te controleren met de koppellijst */
 	reversals: {
 		linked: {
@@ -200,6 +203,8 @@ export function importRecords(
 		const reversalIds: string[] = [];
 		let periodStart: string | null = null;
 		let periodEnd: string | null = null;
+		// Nieuwe inkomende boekingen met een tegen-IBAN: na de import automatisch koppelen
+		const incoming: { id: string; date: string }[] = [];
 
 		for (const r of records) {
 			const reference = r.bankReference && !bad.has(r.bankReference) ? r.bankReference : null;
@@ -215,6 +220,53 @@ export function importRecords(
 				r.internal === true || (r.counterIban !== null && ownIbans.has(r.counterIban));
 			const rule = internal ? null : matchRule(sortedRules, r);
 			const categoryId = internal ? internalId : (rule?.categoryId ?? null);
+
+			// Een al met één tik bevestigde ontvangst krijgt de gegevens van de bank, in plaats
+			// van een tweede boeking (spec: Gedeelde vaste lasten)
+			const incomingFromOther =
+				r.amountCents > 0 && r.counterIban !== null && !internal && !r.reversal;
+			if (incomingFromOther) {
+				const known = tx
+					.select({ id: transactions.id })
+					.from(transactions)
+					.where(
+						reference
+							? eq(transactions.bankReference, reference)
+							: eq(transactions.dedupeHash, hash!)
+					)
+					.get();
+				const merge = known ? null : findReceiptToMerge(tx, r);
+				if (merge) {
+					const before = tx
+						.select({ date: transactions.date, source: transactions.source })
+						.from(transactions)
+						.where(eq(transactions.id, merge))
+						.get();
+					tx.update(transactions)
+						.set({
+							date: r.date,
+							counterparty: r.counterparty,
+							counterIban: r.counterIban,
+							description: r.description,
+							accountId: accountIds.get(accountKey(r))!,
+							source: 'import',
+							bankReference: reference,
+							dedupeHash: hash,
+							importBatchId: batch.id,
+							updatedAt: new Date().toISOString()
+						})
+						.where(eq(transactions.id, merge))
+						.run();
+					// Zonder IBAN: dat is een persoonsgegeven van een ander
+					recordChange(tx, 'ontdubbeld', 'transactions', merge, before, {
+						date: r.date,
+						source: 'import',
+						importBatchId: batch.id
+					});
+					duplicateCount++;
+					continue;
+				}
+			}
 
 			const inserted = tx
 				.insert(transactions)
@@ -246,6 +298,7 @@ export function importRecords(
 
 			if (inserted.length === 1) {
 				newCount++;
+				if (incomingFromOther) incoming.push({ id: inserted[0]!.id, date: r.date });
 				if (!periodStart || r.date < periodStart) periodStart = r.date;
 				if (!periodEnd || r.date > periodEnd) periodEnd = r.date;
 				if (r.reversal && !internal) reversalIds.push(inserted[0]!.id);
@@ -296,6 +349,11 @@ export function importRecords(
 			else reversals.reviewCount++;
 		}
 
+		// Oudste eerst, zodat een betaling de oudste open post dekt
+		incoming.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+		let linkedCount = 0;
+		for (const t of incoming) if (autoLinkPayment(tx, t.id)) linkedCount++;
+
 		tx.update(importBatches)
 			.set({ newCount, duplicateCount, periodStart, periodEnd })
 			.where(eq(importBatches.id, batch.id))
@@ -331,6 +389,7 @@ export function importRecords(
 			periodEnd,
 			uncategorized: uncategorizedGroups(tx),
 			anchors,
+			linkedCount,
 			reversals
 		};
 	});

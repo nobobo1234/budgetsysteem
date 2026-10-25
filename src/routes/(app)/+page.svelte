@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { enhance, type SubmitFunction } from '$app/forms';
 	import { refreshAll } from '$app/navigation';
 	import { fly } from 'svelte/transition';
 	import BudgetBar from '#lib/components/BudgetBar.svelte';
@@ -7,7 +8,7 @@
 	import QuickEntry from '#lib/components/QuickEntry.svelte';
 	import Toast from '#lib/components/Toast.svelte';
 	import TransactionItem from '#lib/components/TransactionItem.svelte';
-	import { formatMonth } from '#lib/dates.ts';
+	import { formatMonth, formatShortDate } from '#lib/dates.ts';
 	import { formatCents } from '#lib/money.ts';
 	import { flush, type QueuedTransaction } from '#lib/offline/queue.ts';
 	import { sync } from '#lib/offline/sync.svelte.ts';
@@ -26,7 +27,26 @@
 
 	let toast = $state<{ text: string; error: boolean; key: number } | null>(null);
 	const notify = (text: string, error = false) => (toast = { text, error, key: Date.now() });
-	const showFixed = $derived(data.expected.length > 0 || data.upcoming > 0 || data.proposals > 0);
+	const showFixed = $derived(
+		data.expected.length > 0 || data.receipts.length > 0 || data.upcoming > 0 || data.proposals > 0
+	);
+
+	// Eén tik "ontvangen" voor een aandeel in een gedeelde vaste last
+	let receiving = $state<string | null>(null);
+	const receive: SubmitFunction = ({ formData }) => {
+		receiving = String(formData.get('id'));
+		const item = data.receipts.find((r) => r.id === receiving);
+		return async ({ result, update }) => {
+			receiving = null;
+			if (result.type === 'success') {
+				notify(`${item?.personName ?? 'Betaling'} ontvangen.`);
+				await update();
+				return;
+			}
+			const message = result.type === 'failure' ? result.data?.message : undefined;
+			notify(typeof message === 'string' ? message : 'Dat lukte niet. Probeer het opnieuw.', true);
+		};
+	};
 
 	async function saved(_item: QueuedTransaction) {
 		await sync.refreshPending();
@@ -63,7 +83,9 @@
 	{#if showFixed}
 		<section class="fixed" aria-labelledby="fixed-title">
 			<div class="head">
-				<h2 id="fixed-title">{data.expected.length > 0 ? 'Te bevestigen' : 'Vaste lasten'}</h2>
+				<h2 id="fixed-title">
+					{data.expected.length > 0 || data.receipts.length > 0 ? 'Te bevestigen' : 'Vaste lasten'}
+				</h2>
 				<a href="/vaste-lasten">Alle vaste lasten</a>
 			</div>
 			{#if data.expected.length > 0}
@@ -71,6 +93,32 @@
 					{#each data.expected as item (item.id)}
 						<li out:fly={{ x: 32, duration: motion(220) }}>
 							<ExpectedItem {item} ondone={notify} />
+						</li>
+					{/each}
+				</ul>
+			{/if}
+			{#if data.receipts.length > 0}
+				<ul class="card expected" aria-label="Terugbetalingen om te bevestigen">
+					{#each data.receipts as item (item.id)}
+						<li class="receipt" out:fly={{ x: 32, duration: motion(220) }}>
+							<a class="who" href="/terugbetalingen">
+								<span class="name">{item.personName}</span>
+								<span class="muted small">
+									{item.counterparty} · verwacht {formatShortDate(item.dueDate)}{item.late
+										? ' · te laat'
+										: ''}
+								</span>
+							</a>
+							<span class="num in">+{formatCents(item.outstandingCents)}</span>
+							<form method="POST" action="?/received" use:enhance={receive}>
+								<input type="hidden" name="id" value={item.id} />
+								<button
+									class="button secondary small"
+									disabled={receiving === item.id}
+									aria-label="{formatCents(item.outstandingCents)} van {item.personName} ontvangen"
+									>Ontvangen</button
+								>
+							</form>
 						</li>
 					{/each}
 				</ul>
@@ -246,6 +294,44 @@
 
 	.expected {
 		padding: 0 16px;
+	}
+
+	.receipt {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		min-height: var(--tap);
+		padding: 10px 0;
+	}
+
+	.receipt .who {
+		flex: 1;
+		min-width: 0;
+		display: grid;
+		gap: 2px;
+		color: inherit;
+		text-decoration: none;
+		overflow-wrap: anywhere;
+	}
+
+	.receipt .name {
+		font-weight: 550;
+	}
+
+	.receipt .in {
+		color: var(--accent-strong);
+		font-weight: 600;
+		white-space: nowrap;
+	}
+
+	.small {
+		font-size: 0.88rem;
+	}
+
+	.button.small {
+		min-height: var(--tap);
+		padding: 0 14px;
+		font-size: 0.92rem;
 	}
 
 	.bars {

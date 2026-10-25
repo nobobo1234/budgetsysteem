@@ -22,6 +22,7 @@ import {
 	shareFromNames,
 	unlinkPayment
 } from './owed.ts';
+import { applySharedSplit, hasSharePosts, removeSharedFor } from './shares.ts';
 import { dateInRange, type NewTransaction, type TransactionPatch } from './validation.ts';
 
 export { ValidationError };
@@ -148,7 +149,14 @@ export function updateTransaction(
 				.from(transactionSplits)
 				.where(eq(transactionSplits.transactionId, id))
 				.get() !== undefined;
-		if (hasSplits && patch.amountCents !== undefined && patch.amountCents !== before.amountCents) {
+		// Een gedeelde vaste last rekent zijn aandelen opnieuw uit; een voorgeschoten uitgave niet
+		const shared = hasSharePosts(tx, id);
+		if (
+			hasSplits &&
+			!shared &&
+			patch.amountCents !== undefined &&
+			patch.amountCents !== before.amountCents
+		) {
 			throw new ValidationError('Het bedrag van een gedeelde uitgave pas je aan via de verdeling');
 		}
 		const status =
@@ -179,6 +187,7 @@ export function updateTransaction(
 		// Een retour telt in de categorie van het origineel en verhuist mee
 		if (patch.categoryId !== undefined && patch.categoryId !== before.categoryId)
 			moveCorrections(tx, id, before.categoryId, patch.categoryId);
+		if (shared) applySharedSplit(tx, id);
 		// Een gekoppelde betaling met een ander bedrag wordt opnieuw over de posten verdeeld
 		if (patch.amountCents !== undefined && patch.amountCents !== before.amountCents) {
 			const links = tx
@@ -250,6 +259,8 @@ export function deleteTransaction(db: DB, id: string): boolean {
 		// Retouren op deze boeking worden gewone boekingen op te controleren, vóór het opruimen
 		// van de posten: hun deel staat als betaling op die posten
 		releaseCorrectionsOf(tx, id);
+		// Maandaandelen van een gedeelde vaste last vervallen; wat betaald was wordt tegoed
+		removeSharedFor(tx, id);
 		dropSourcePosts(tx, id);
 		// Was dit een betaling, dan gaan de posten die hij dekte weer open
 		const covered = unlinkPayment(tx, id);

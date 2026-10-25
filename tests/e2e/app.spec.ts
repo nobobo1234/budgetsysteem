@@ -109,6 +109,7 @@ for (const path of [
 	'/regels',
 	'/instellingen',
 	'/te-krijgen',
+	'/terugbetalingen',
 	'/personen',
 	'/instellingen/status',
 	'/saldocheck',
