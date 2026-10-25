@@ -198,3 +198,18 @@ export function monthsFrom(from: string, to: string): string[] {
 	const n = monthsBetween(from, to);
 	return n < 0 ? [] : Array.from({ length: n + 1 }, (_, i) => shiftMonth(from, i));
 }
+
+/**
+ * Melding na een nieuw IBAN: "3 betalingen van Sanne gekoppeld · 1 paste niet, koppel die zelf".
+ * Niets gevonden: geen melding over betalingen.
+ */
+export function ibanLinkText(name: string, linked: number, unmatched: number): string | null {
+	const payments = (n: number) => `${n} ${n === 1 ? 'betaling' : 'betalingen'} van ${name}`;
+	const rest = (n: number) =>
+		n === 1 ? 'paste niet, koppel die zelf' : 'pasten niet, koppel ze zelf';
+	if (linked > 0 && unmatched > 0)
+		return `${payments(linked)} gekoppeld · ${unmatched} ${rest(unmatched)}`;
+	if (linked > 0) return `${payments(linked)} gekoppeld`;
+	if (unmatched > 0) return `${payments(unmatched)} ${rest(unmatched)}`;
+	return null;
+}

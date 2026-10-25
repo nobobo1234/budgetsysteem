@@ -24,7 +24,7 @@ import {
 	settlePayment,
 	unlinkPayment
 } from '../../src/lib/server/owed.ts';
-import { addIban, createPerson } from '../../src/lib/server/people.ts';
+import { createPerson } from '../../src/lib/server/people.ts';
 import {
 	confirmExpected,
 	generateMonth,
@@ -36,6 +36,7 @@ import {
 } from '../../src/lib/server/recurring.ts';
 import {
 	acceptProposal,
+	addIban,
 	changeShareAmount,
 	confirmReceived,
 	createShare,
@@ -599,6 +600,147 @@ describe('terugwerkend en voorstellen', () => {
 			'geen'
 		]);
 		expect(shareProposals(db, '2026-10-05')).toEqual([]);
+	});
+});
+
+describe('IBAN later koppelen', () => {
+	/** Tim deelt sinds augustus, maar zonder IBAN koppelde de import zijn overboekingen niet. */
+	function withoutIban(payments: [string, number][]) {
+		const ids = db
+			.insert(transactions)
+			.values([
+				...['2026-07-01', '2026-08-01', '2026-09-01'].map((date) => ({
+					amountCents: -6000,
+					date,
+					counterparty: 'Ziggo',
+					counterIban: IBAN_ZIGGO,
+					accountId: sns,
+					source: 'import' as const
+				})),
+				...payments.map(([date, amountCents]) => ({
+					amountCents,
+					date,
+					counterparty: 'T BAKKER',
+					counterIban: IBAN_TIM,
+					accountId: sns,
+					source: 'import' as const
+				}))
+			])
+			.returning({ id: transactions.id, date: transactions.date })
+			.all();
+		generateMonth(db, '2026-10');
+		share(tim, { startMonth: '2026-08' }, '2026-10-05');
+		expect(sharePosts().map((p) => p.status)).toEqual(['open', 'open', 'open']);
+		return (date: string) => ids.find((t) => t.date === date)!.id;
+	}
+
+	const linksOf = (transactionId: string) =>
+		db
+			.select({ owedId: owedPayments.owedId, amountCents: owedPayments.amountCents })
+			.from(owedPayments)
+			.where(eq(owedPayments.transactionId, transactionId))
+			.all();
+
+	it('koppelt de oude overboekingen oudste eerst; een afwijkend bedrag blijft los', () => {
+		const tx = withoutIban([
+			['2026-06-28', 2000],
+			['2026-07-28', 2000],
+			['2026-08-28', 2000],
+			['2026-09-15', 1234],
+			['2026-09-28', 2000]
+		]);
+		expect(addIban(db, tim, IBAN_TIM, '2026-10-05')).toEqual({ linked: 3, unmatched: 1 });
+		expect(sharePosts().map((p) => [p.month, p.status])).toEqual([
+			['2026-08', 'betaald'],
+			['2026-09', 'betaald'],
+			['2026-10', 'betaald']
+		]);
+		expect(linksOf(tx('2026-07-28'))).toEqual([
+			{ owedId: postOf(tim, '2026-08')!.id, amountCents: 2000 }
+		]);
+		expect(linksOf(tx('2026-08-28'))).toEqual([
+			{ owedId: postOf(tim, '2026-09')!.id, amountCents: 2000 }
+		]);
+		expect(linksOf(tx('2026-09-28'))).toEqual([
+			{ owedId: postOf(tim, '2026-10')!.id, amountCents: 2000 }
+		]);
+		// Het afwijkende bedrag blijft voor de koppellijst; juni ligt voor de oudste open post
+		expect(linksOf(tx('2026-09-15'))).toEqual([]);
+		expect(linksOf(tx('2026-06-28'))).toEqual([]);
+
+		const audit = db.select().from(auditLog).where(eq(auditLog.action, 'auto_gekoppeld')).all();
+		expect(audit.map((a) => a.entityId).sort()).toEqual(
+			[tx('2026-07-28'), tx('2026-08-28'), tx('2026-09-28')].sort()
+		);
+		// Geen IBAN in het audit-log
+		const all = db.select().from(auditLog).all();
+		expect(JSON.stringify(all)).not.toContain(IBAN_TIM);
+		// Ongedaan maken met één tik: loskoppelen
+		unlinkPayment(db, tx('2026-09-28'));
+		expect(postOf(tim, '2026-10')?.status).toBe('open');
+	});
+
+	it("al gekoppelde transacties, storno's en dubbele ontvangsten blijven ongemoeid", () => {
+		const tx = withoutIban([
+			['2026-07-28', 2000],
+			['2026-08-30', 2000],
+			['2026-09-10', 2000],
+			['2026-09-28', 2000]
+		]);
+		// Oktober zelf gekoppeld; september met één tik bevestigd, terwijl de bank die al had
+		settlePayment(db, tx('2026-09-28'), { owedId: postOf(tim, '2026-10')!.id });
+		const tapped = confirmReceived(db, postOf(tim, '2026-09')!.id, '2026-09-01');
+		// Een storno staat op te controleren tot hij aan het origineel gekoppeld is
+		db.update(transactions)
+			.set({ status: 'te_controleren' })
+			.where(eq(transactions.id, tx('2026-09-10')))
+			.run();
+		const before = linksOf(tx('2026-09-28'));
+
+		// De overboeking van 30 augustus lijkt de bevestigde ontvangst en telt niet dubbel
+		expect(addIban(db, tim, IBAN_TIM, '2026-10-05')).toEqual({ linked: 1, unmatched: 1 });
+		expect(linksOf(tx('2026-07-28'))).toEqual([
+			{ owedId: postOf(tim, '2026-08')!.id, amountCents: 2000 }
+		]);
+		expect(linksOf(tx('2026-08-30'))).toEqual([]);
+		expect(linksOf(tx('2026-09-10'))).toEqual([]);
+		expect(linksOf(tapped)).toEqual([{ owedId: postOf(tim, '2026-09')!.id, amountCents: 2000 }]);
+		expect(linksOf(tx('2026-09-28'))).toEqual(before);
+		expect(sharePosts().map((p) => p.status)).toEqual(['betaald', 'betaald', 'betaald']);
+		expect(credit(tim)).toBe(0);
+	});
+
+	it('een IBAN van iemand anders of een eigen rekening wordt geweigerd en koppelt niets', () => {
+		withoutIban([['2026-09-28', 2000]]);
+		db.update(accounts).set({ iban: IBAN_OWN }).where(eq(accounts.id, sns)).run();
+		expect(() => addIban(db, tim, IBAN_SANNE, '2026-10-05')).toThrow(/iemand anders/);
+		expect(() => addIban(db, tim, IBAN_OWN, '2026-10-05')).toThrow(/eigen rekening/);
+		expect(db.select().from(owedPayments).all()).toEqual([]);
+		expect(sharePosts().map((p) => p.status)).toEqual(['open', 'open', 'open']);
+
+		expect(addIban(db, tim, IBAN_TIM, '2026-10-05')).toEqual({ linked: 1, unmatched: 0 });
+		// Hetzelfde IBAN nog een keer: niets nieuws
+		expect(addIban(db, tim, IBAN_TIM, '2026-10-05')).toEqual({ linked: 0, unmatched: 0 });
+	});
+
+	it('zonder open posten: een recente overboeking van het maandaandeel wordt tegoed', () => {
+		db.insert(transactions)
+			.values(
+				['2026-08-28', '2026-09-28'].map((date) => ({
+					amountCents: 2000,
+					date,
+					counterparty: 'T BAKKER',
+					counterIban: IBAN_TIM,
+					accountId: sns,
+					source: 'import' as const
+				}))
+			)
+			.run();
+		share(tim, {}, '2026-10-01');
+		expect(sharePosts()).toEqual([]);
+		// Alleen vanaf 15 dagen voor vandaag; de oudere overboeking blijft buiten beschouwing
+		expect(addIban(db, tim, IBAN_TIM, '2026-10-05')).toEqual({ linked: 1, unmatched: 0 });
+		expect(credit(tim)).toBe(2000);
 	});
 });
 

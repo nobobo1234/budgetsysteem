@@ -26,13 +26,13 @@ import {
 	updateOwed
 } from '../../src/lib/server/owed.ts';
 import {
-	addIban,
 	createPerson,
 	deletePerson,
 	findOrCreatePerson,
 	removeIban,
 	updatePerson
 } from '../../src/lib/server/people.ts';
+import { addIban } from '../../src/lib/server/shares.ts';
 import {
 	createTransaction,
 	deleteTransaction,

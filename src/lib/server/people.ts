@@ -95,26 +95,29 @@ export function ibansOf(db: Conn, personId: string): string[] {
 		.map((r) => r.iban);
 }
 
-/** Een IBAN hoort bij hooguit één persoon en is nooit een eigen rekening. */
-export function addIban(db: DB, personId: string, raw: string): void {
+/**
+ * Een IBAN hoort bij hooguit één persoon en is nooit een eigen rekening. Geeft het IBAN als het
+ * nieuw is bij deze persoon, `null` als hij het al had. Binnen een transactie; `addIban` in
+ * shares.ts koppelt daarna de betalingen die al binnen zijn.
+ */
+export function insertIban(db: Conn, personId: string, raw: string): string | null {
 	const iban = normalizeIban(raw);
 	if (!isValidIban(iban)) throw new ValidationError('Dat IBAN klopt niet');
-	db.transaction((tx) => {
-		if (!tx.select({ id: people.id }).from(people).where(eq(people.id, personId)).get())
-			throw new ValidationError('Onbekende persoon');
-		if (tx.select({ id: accounts.id }).from(accounts).where(eq(accounts.iban, iban)).get())
-			throw new ValidationError('Dat is een eigen rekening');
-		const other = tx
-			.select({ personId: peopleIbans.personId })
-			.from(peopleIbans)
-			.where(eq(peopleIbans.iban, iban))
-			.get();
-		if (other?.personId === personId) return;
-		if (other) throw new ValidationError('Dat IBAN hoort al bij iemand anders');
-		const row = tx.insert(peopleIbans).values({ personId, iban }).returning().get();
-		// Alleen het ID in het audit-log; het IBAN zelf blijft in people_ibans
-		recordChange(tx, 'iban_toegevoegd', 'people', personId, null, { ibanId: row.id });
-	});
+	if (!db.select({ id: people.id }).from(people).where(eq(people.id, personId)).get())
+		throw new ValidationError('Onbekende persoon');
+	if (db.select({ id: accounts.id }).from(accounts).where(eq(accounts.iban, iban)).get())
+		throw new ValidationError('Dat is een eigen rekening');
+	const other = db
+		.select({ personId: peopleIbans.personId })
+		.from(peopleIbans)
+		.where(eq(peopleIbans.iban, iban))
+		.get();
+	if (other?.personId === personId) return null;
+	if (other) throw new ValidationError('Dat IBAN hoort al bij iemand anders');
+	const row = db.insert(peopleIbans).values({ personId, iban }).returning().get();
+	// Alleen het ID in het audit-log; het IBAN zelf blijft in people_ibans
+	recordChange(db, 'iban_toegevoegd', 'people', personId, null, { ibanId: row.id });
+	return iban;
 }
 
 export function removeIban(db: DB, personId: string, raw: string): void {

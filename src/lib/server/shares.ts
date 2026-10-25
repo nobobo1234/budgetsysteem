@@ -1,5 +1,19 @@
 import { createHash } from 'node:crypto';
-import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lte, ne, or, sql } from 'drizzle-orm';
+import {
+	and,
+	asc,
+	desc,
+	eq,
+	gte,
+	inArray,
+	isNotNull,
+	isNull,
+	lte,
+	ne,
+	notInArray,
+	or,
+	sql
+} from 'drizzle-orm';
 import { addDays, shiftMonth, toIsoDate } from '../dates.ts';
 import { occurrenceMonth } from '../recurring.ts';
 import {
@@ -43,7 +57,7 @@ import {
 	refundCategory,
 	settlePayment
 } from './owed.ts';
-import { findOrCreatePerson, ibansOf, personByIban } from './people.ts';
+import { findOrCreatePerson, ibansOf, insertIban, personByIban } from './people.ts';
 
 // Gedeelde vaste lasten (spec: Gedeelde vaste lasten). Een aandeel per persoon per vaste last;
 // elke maand met een afschrijving krijgt ieder met een actief aandeel een openstaande post
@@ -424,19 +438,39 @@ function activeRecurring(db: Conn, id: string) {
 	return r;
 }
 
-/** Voor terugwerkend en voor betalingen die al binnen zijn: één keer koppelen. */
-function linkHistoricPayments(db: Conn, personId: string, fromMonth: string, today: string) {
-	const ibans = ibansOf(db, personId);
-	if (ibans.length === 0) return 0;
+/** Hoeveel betalingen er terugwerkend gekoppeld zijn, en hoeveel er niet pasten. */
+export type HistoricLinks = { linked: number; unmatched: number };
+
+/**
+ * Betalingen die al binnen zijn één keer koppelen, oudste eerst en met de regels van de import:
+ * voor een terugwerkend aandeel en voor een IBAN dat je later aan een persoon koppelt. Storno's
+ * en terugboekingen blijven erbuiten (een ongekoppelde storno staat op te controleren), en ook
+ * een overboeking die bij een al met één tik bevestigde ontvangst lijkt te horen: die zou dan
+ * dubbel tellen. Wat niet past blijft voor de koppellijst.
+ */
+function linkHistoricPayments(
+	db: Conn,
+	ibans: string[],
+	from: string,
+	today: string
+): HistoricLinks {
+	if (ibans.length === 0) return { linked: 0, unmatched: 0 };
 	const rows = db
-		.select({ id: transactions.id })
+		.select({
+			id: transactions.id,
+			amountCents: transactions.amountCents,
+			date: transactions.date,
+			counterIban: transactions.counterIban
+		})
 		.from(transactions)
 		.where(
 			and(
 				inArray(transactions.counterIban, ibans),
 				sql`${transactions.amountCents} > 0`,
-				ne(transactions.status, 'verwacht'),
-				gte(transactions.date, addDays(`${fromMonth}-01`, -15)),
+				notInArray(transactions.status, ['verwacht', 'te_controleren']),
+				isNull(transactions.correctionOf),
+				or(isNull(transactions.categorySource), ne(transactions.categorySource, 'correctie')),
+				gte(transactions.date, from),
 				lte(transactions.date, today),
 				sql`NOT EXISTS (SELECT 1 FROM owed_payments op WHERE op.transaction_id = ${transactions.id})`
 			)
@@ -444,8 +478,52 @@ function linkHistoricPayments(db: Conn, personId: string, fromMonth: string, tod
 		.orderBy(asc(transactions.date), asc(transactions.createdAt))
 		.all();
 	let linked = 0;
-	for (const t of rows) if (autoLinkPayment(db, t.id)) linked++;
-	return linked;
+	for (const t of rows) if (!findReceiptToMerge(db, t) && autoLinkPayment(db, t.id)) linked++;
+	return { linked, unmatched: rows.length - linked };
+}
+
+/**
+ * Een IBAN dat je later aan een persoon koppelt: de inkomende betalingen van dat IBAN één keer
+ * koppelen, vanaf 15 dagen voor de oudste open post (een maandaandeel telt vanaf de 1e van zijn
+ * maand, net als bij een terugwerkend aandeel) of voor vandaag als er niets openstaat.
+ */
+export function linkPaymentsOfIban(
+	db: Conn,
+	personId: string,
+	iban: string,
+	today = toIsoDate(new Date())
+): HistoricLinks {
+	const starts = db
+		.select({ date: owed.date, month: owed.month })
+		.from(owed)
+		.where(
+			and(
+				eq(owed.personId, personId),
+				eq(owed.direction, 'te_krijgen'),
+				inArray(owed.status, ['open', 'deels'])
+			)
+		)
+		.all()
+		.map((p) => (p.month ? `${p.month}-01` : p.date));
+	const oldest = [today, ...starts].sort()[0]!;
+	return linkHistoricPayments(db, [iban], addDays(oldest, -15), today);
+}
+
+/**
+ * Een IBAN aan een persoon koppelen (zie `insertIban`), en in dezelfde transactie de betalingen
+ * van dat IBAN die al binnen zijn terugwerkend koppelen met de regels van de import. Geeft
+ * hoeveel er gekoppeld zijn en hoeveel er niet pasten.
+ */
+export function addIban(
+	db: DB,
+	personId: string,
+	raw: string,
+	today = toIsoDate(new Date())
+): HistoricLinks {
+	return db.transaction((tx) => {
+		const iban = insertIban(tx, personId, raw);
+		return iban ? linkPaymentsOfIban(tx, personId, iban, today) : { linked: 0, unmatched: 0 };
+	});
 }
 
 function insertShare(db: Conn, input: NewShare, today: string): string {
@@ -472,7 +550,13 @@ function insertShare(db: Conn, input: NewShare, today: string): string {
 	const month = today.slice(0, 7);
 	if (input.startMonth < month) linkHistoricDebits(db, r, input.startMonth, today);
 	syncShared(db, r.id, input.startMonth);
-	if (input.startMonth <= month) linkHistoricPayments(db, input.personId, input.startMonth, today);
+	if (input.startMonth <= month)
+		linkHistoricPayments(
+			db,
+			ibansOf(db, input.personId),
+			addDays(`${input.startMonth}-01`, -15),
+			today
+		);
 	return row.id;
 }
 

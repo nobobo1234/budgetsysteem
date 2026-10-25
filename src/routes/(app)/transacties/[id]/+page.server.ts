@@ -2,6 +2,7 @@ import { error, fail, redirect } from '@sveltejs/kit';
 import { asc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { parseAmount } from '#lib/money.ts';
+import { ibanLinkText } from '#lib/shares.ts';
 import { db } from '#lib/server/db/index.ts';
 import {
 	accounts,
@@ -24,7 +25,8 @@ import {
 	linkCorrection,
 	unlinkCorrection
 } from '#lib/server/corrections.ts';
-import { addIban, findOrCreatePerson, listPeople, personByIban } from '#lib/server/people.ts';
+import { findOrCreatePerson, listPeople, personByIban } from '#lib/server/people.ts';
+import { addIban } from '#lib/server/shares.ts';
 import { deleteTransaction, updateTransaction, ValidationError } from '#lib/server/transactions.ts';
 import { personName, transactionPatchSchema } from '#lib/server/validation.ts';
 import type { Actions, PageServerLoad } from './$types';
@@ -223,12 +225,17 @@ export const actions: Actions = {
 		const suggestion = tx ? ibanSuggestion(tx.id, tx.counterIban) : null;
 		if (!suggestion) return fail(400, { linkMessage: 'Er is geen IBAN om te bewaren.' });
 		try {
-			addIban(db(), suggestion.personId, suggestion.iban);
+			// Andere betalingen van dit IBAN die al binnen zijn worden meteen gekoppeld
+			const { linked, unmatched } = addIban(db(), suggestion.personId, suggestion.iban);
+			return {
+				ibanSaved: true,
+				ibanMessage:
+					ibanLinkText(suggestion.name, linked, unmatched) ?? `IBAN bewaard bij ${suggestion.name}`
+			};
 		} catch (e) {
 			if (e instanceof ValidationError) return fail(400, { linkMessage: `${e.message}.` });
 			throw e;
 		}
-		return { ibanSaved: true };
 	},
 	delete: async ({ params }) => {
 		deleteTransaction(db(), params.id);

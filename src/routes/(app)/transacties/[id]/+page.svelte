@@ -3,6 +3,7 @@
 	import Select, { type SelectOption } from '#lib/components/Select.svelte';
 	import ShareForm from '#lib/components/ShareForm.svelte';
 	import Switch from '#lib/components/Switch.svelte';
+	import Toast from '#lib/components/Toast.svelte';
 	import { groupColor } from '#lib/categoryColor.ts';
 	import { formatMonth, formatShortDate } from '#lib/dates.ts';
 	import { centsToInput, formatCents } from '#lib/money.ts';
@@ -100,6 +101,10 @@
 </svelte:head>
 
 <div class="page">
+	{#if form && 'ibanMessage' in form && form.ibanMessage}
+		{#key form}<Toast text={form.ibanMessage} />{/key}
+	{/if}
+
 	<a class="back" href="/transacties">
 		<svg viewBox="0 0 20 20" aria-hidden="true">
 			<path

@@ -4,7 +4,6 @@ import { db } from '#lib/server/db/index.ts';
 import { ValidationError } from '#lib/server/errors.ts';
 import { openPosts } from '#lib/server/owed.ts';
 import {
-	addIban,
 	createPerson,
 	deletePerson,
 	ibansOf,
@@ -12,7 +11,9 @@ import {
 	removeIban,
 	updatePerson
 } from '#lib/server/people.ts';
+import { addIban } from '#lib/server/shares.ts';
 import { personName } from '#lib/server/validation.ts';
+import { ibanLinkText } from '#lib/shares.ts';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = () => {
@@ -82,8 +83,10 @@ export const actions: Actions = {
 		const parsed = ibanSchema.safeParse(fromForm(await request.formData()));
 		if (!parsed.success) return fail(400, { message: 'Dat IBAN klopt niet.' });
 		return guarded(() => {
-			addIban(db(), parsed.data.id, parsed.data.iban);
-			return { ibanAdded: true };
+			// Betalingen van dit IBAN die al binnen zijn worden meteen gekoppeld
+			const { linked, unmatched } = addIban(db(), parsed.data.id, parsed.data.iban);
+			const name = listPeople(db()).find((p) => p.id === parsed.data.id)?.name ?? '';
+			return { ibanAdded: true, ibanMessage: ibanLinkText(name, linked, unmatched) };
 		});
 	},
 	removeIban: async ({ request }) => {
