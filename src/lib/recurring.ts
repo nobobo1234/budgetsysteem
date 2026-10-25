@@ -479,3 +479,15 @@ export function signalFor(opts: {
 	}
 	return opts.amountCents * 100 > opts.maxCents * 120 ? 'uitschieter' : null;
 }
+
+/**
+ * Per afschrijving (oudste eerst) hoeveel centen hij duurder is dan de vorige, als dat een
+ * prijsverhoging is (2% of meer, zoals bij Signalen); anders null. Voor het staafdiagram op de
+ * detailpagina, waar een verhoging zichtbaar moet worden.
+ */
+export function priceSteps(amounts: readonly number[]): (number | null)[] {
+	return amounts.map((cents, i) => {
+		const prev = amounts[i - 1];
+		return prev !== undefined && prev > 0 && cents * 100 >= prev * 102 ? cents - prev : null;
+	});
+}

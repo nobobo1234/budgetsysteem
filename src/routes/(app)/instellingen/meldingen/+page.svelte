@@ -1,10 +1,12 @@
 <script lang="ts">
+	import * as icons from '#lib/icons-extra.ts';
 	import { onMount } from 'svelte';
 	import { enhance, type SubmitFunction } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
 	import { postJson, sendJson } from '#lib/api.ts';
 	import { currentSubscription, pushSupported, syncSubscription } from '#lib/push.ts';
 	import BackLink from '#lib/components/BackLink.svelte';
+	import EmptyState from '#lib/components/EmptyState.svelte';
 	import Toast from '#lib/components/Toast.svelte';
 	import {
 		LOCKSCREEN_SETTING,
@@ -282,7 +284,13 @@
 			<p class="muted">Telefoon kwijt of weg? Haal hem hier weg.</p>
 		</div>
 		{#if data.devices.length === 0}
-			<p class="card muted">Nog geen apparaten. Zet meldingen aan op je telefoon.</p>
+			<div class="card">
+				<EmptyState
+					icon={icons.meldingen}
+					text="Nog geen apparaten. Zet meldingen aan op je telefoon."
+					compact
+				/>
+			</div>
 		{:else}
 			<ul class="card list">
 				{#each data.devices as d (d.id)}

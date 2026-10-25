@@ -1,13 +1,28 @@
 <script lang="ts">
+	import * as icons from '#lib/icons-extra.ts';
 	import { tick } from 'svelte';
+	import { deserialize } from '$app/forms';
+	import { invalidateAll } from '$app/navigation';
 	import { navigating } from '$app/state';
+	import Bars from '#lib/components/Bars.svelte';
+	import EmptyState from '#lib/components/EmptyState.svelte';
 	import LinkThreads, { threadGutter } from '#lib/components/LinkThreads.svelte';
 	import Select, { type SelectOption } from '#lib/components/Select.svelte';
+	import Sheet from '#lib/components/Sheet.svelte';
+	import SwipeRow from '#lib/components/SwipeRow.svelte';
+	import Toast from '#lib/components/Toast.svelte';
 	import TransactionItem from '#lib/components/TransactionItem.svelte';
 	import { groupColor } from '#lib/categoryColor.ts';
-	import { formatDayHeading, formatMonth, formatShortDate } from '#lib/dates.ts';
+	import {
+		daysInMonth,
+		formatDayHeading,
+		formatDayMonth,
+		formatMonth,
+		formatShortDate
+	} from '#lib/dates.ts';
 	import { formatCents } from '#lib/money.ts';
 	import { threadLayout } from '#lib/refund.ts';
+	import { displayName } from '#lib/text.ts';
 
 	let { data } = $props();
 
@@ -70,7 +85,7 @@
 		}))
 	]);
 
-	// Per dag, met het saldo van die dag ernaast
+	// Per dag, met het saldo van die dag ernaast en de grootste uitgave
 	const days = $derived.by(() => {
 		const out: { date: string; net: number; items: typeof data.transactions }[] = [];
 		for (const tx of data.transactions) {
@@ -80,7 +95,52 @@
 				last.net += tx.amountCents;
 			} else out.push({ date: tx.date, net: tx.amountCents, items: [tx] });
 		}
-		return out;
+		return out.map((d) => {
+			const biggest = d.items.reduce<(typeof d.items)[number] | null>(
+				(max, t) => (t.amountCents < 0 && (!max || t.amountCents < max.amountCents) ? t : max),
+				null
+			);
+			return { ...d, biggest: d.items.length > 1 ? biggest : null };
+		});
+	});
+
+	// Uitgaven per dag in de gekozen maand (of deze maand); een tik filtert op die dag
+	const chartDays = $derived(daysInMonth(data.chart.month));
+	const chartTotal = $derived(data.chart.days.reduce((s, d) => s + d.outCents, 0));
+	const filterHref = (extra: [string, string][]) => {
+		const parts: [string, string][] = [
+			['q', data.filter.q],
+			['maand', data.filter.month],
+			['categorie', data.filter.categoryId],
+			['status', data.filter.status ?? ''],
+			['rekening', data.filter.accountId],
+			['van', data.filter.from],
+			['tot', data.filter.to],
+			...extra
+		];
+		const q = parts
+			.filter(([, v]) => v)
+			.map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
+			.join('&');
+		return q ? `?${q}` : '/transacties';
+	};
+	const chartBars = $derived.by(() => {
+		const byDate = new Map(data.chart.days.map((d) => [d.date, d.outCents]));
+		return Array.from({ length: chartDays }, (_, i) => {
+			const date = `${data.chart.month}-${String(i + 1).padStart(2, '0')}`;
+			const cents = byDate.get(date) ?? 0;
+			const active = data.filter.day === date;
+			// 1, 8, 15, 22, 29, en de laatste dag als die niet tegen 29 aan staat
+			const tick = (i + 1) % 7 === 1 || (i + 1 === chartDays && chartDays % 7 >= 4);
+			return {
+				key: date,
+				cents,
+				label: active || tick ? String(i + 1) : '',
+				title: `${formatDayMonth(date)}: ${cents > 0 ? formatCents(cents) : 'niets'} uitgegeven`,
+				href: filterHref([['dag', active ? '' : date]]),
+				active
+			};
+		});
 	});
 
 	// Draden tussen terugbetalingen en hun uitgave op deze pagina
@@ -95,6 +155,7 @@
 			['rekening', data.filter.accountId],
 			['van', data.filter.from],
 			['tot', data.filter.to],
+			['dag', data.filter.day],
 			['pagina', p > 0 ? String(p) : '']
 		];
 		const q = parts
@@ -118,6 +179,54 @@
 			.join('&');
 		return q ? `?${q}` : '/transacties';
 	});
+
+	// Swipen: naar rechts bevestigen, naar links een andere categorie kiezen
+	let toast = $state<{ text: string; error: boolean; key: number } | null>(null);
+	const notify = (text: string, error = false) => (toast = { text, error, key: Date.now() });
+	let picking = $state(false);
+	let pickFor = $state<(typeof data.transactions)[number] | null>(null);
+	const categoryGroups = $derived(Map.groupBy(data.categories, (c) => c.group));
+
+	async function act(action: 'confirm' | 'category', fields: Record<string, string>) {
+		const body = new FormData();
+		for (const [k, v] of Object.entries(fields)) body.append(k, v);
+		try {
+			const response = await fetch(`/transacties?/${action}`, {
+				method: 'POST',
+				body,
+				headers: { 'x-sveltekit-action': 'true' }
+			});
+			const result = deserialize(await response.text());
+			if (result.type === 'success') {
+				await invalidateAll();
+				return true;
+			}
+			const message = result.type === 'failure' ? result.data?.message : undefined;
+			notify(typeof message === 'string' ? message : 'Dat lukte niet. Probeer het opnieuw.', true);
+		} catch {
+			notify('Geen verbinding. Probeer het zo opnieuw.', true);
+		}
+		return false;
+	}
+
+	async function confirmRow(tx: (typeof data.transactions)[number]) {
+		if (await act('confirm', { id: tx.id })) notify(`${displayName(tx.counterparty)} bevestigd.`);
+	}
+
+	function pickCategory(tx: (typeof data.transactions)[number]) {
+		pickFor = tx;
+		picking = true;
+	}
+
+	async function setCategory(id: string, name: string) {
+		const tx = pickFor;
+		picking = false;
+		if (tx && (await act('category', { id: tx.id, categoryId: id })))
+			notify(`${displayName(tx.counterparty)}: ${name}.`);
+	}
+
+	const canConfirm = (tx: (typeof data.transactions)[number]) =>
+		tx.status === 'verwacht' || (tx.status === 'te_controleren' && tx.amountCents !== 0);
 
 	async function submit() {
 		// Eerst de nieuwe waarde in het verborgen veld laten landen
@@ -210,6 +319,16 @@
 		{#if data.filter.to}<input type="hidden" name="tot" value={data.filter.to} />{/if}
 	</form>
 
+	{#if chartTotal > 0}
+		<section class="chart card" aria-labelledby="chart-title">
+			<div class="chart-head">
+				<h2 id="chart-title">Per dag in {formatMonth(data.chart.month).split(' ')[0]}</h2>
+				<span class="muted num">{formatCents(chartTotal, { whole: true })} uit</span>
+			</div>
+			<Bars bars={chartBars} label="Uitgaven per dag; kies een dag om te filteren" height={64} />
+		</section>
+	{/if}
+
 	{#if data.transactions.length > 0 || hasFilter}
 		<div class="summary" aria-live="polite">
 			<p>
@@ -234,6 +353,19 @@
 					</svg>
 				</a>
 			{/if}
+			{#if data.filter.day}
+				<a
+					class="tag"
+					href={filterHref([])}
+					aria-label="Filter {formatDayMonth(data.filter.day)} weghalen"
+					data-sveltekit-noscroll
+				>
+					{formatDayMonth(data.filter.day)}
+					<svg viewBox="0 0 16 16" aria-hidden="true">
+						<path d="M4.5 4.5l7 7M11.5 4.5l-7 7" stroke="currentColor" stroke-width="1.6" />
+					</svg>
+				</a>
+			{/if}
 			{#if rangeFilter}
 				<a class="tag range" href={rangeOffHref} aria-label="Filter {rangeLabel} weghalen">
 					{rangeLabel}
@@ -247,30 +379,32 @@
 	{/if}
 
 	{#if data.transactions.length === 0}
-		<div class="empty card">
+		<div class="card">
 			{#if rangeFilter && !data.filter.q}
-				<h2>Geen boekingen in deze periode</h2>
-				<p class="muted">
-					Mis je een uitgave, voer hem dan in op het overzicht of importeer een export van de bank.
-				</p>
-				<div class="actions">
+				<EmptyState
+					icon={icons.transacties}
+					text="Geen boekingen in deze periode. Mis je een uitgave, voer hem dan in of importeer een export van de bank."
+				>
 					<a class="button" href="/">Uitgave invoeren</a>
 					<a class="button secondary" href="/import">Export importeren</a>
-				</div>
+				</EmptyState>
 			{:else if hasFilter}
-				<h2>Niets gevonden{data.filter.q ? ` voor "${data.filter.q}"` : ''}.</h2>
-				<p class="muted">Probeer een ander woord, of zoek in alle maanden en categorieën.</p>
-				<a class="button secondary" href="/transacties">Filters wissen</a>
+				<EmptyState
+					icon={icons.zoeken}
+					text="Niets gevonden{data.filter.q
+						? ` voor "${data.filter.q}"`
+						: ''}. Probeer een ander woord, of zoek in alle maanden en categorieën."
+				>
+					<a class="button secondary" href="/transacties">Filters wissen</a>
+				</EmptyState>
 			{:else}
-				<h2>Nog geen transacties</h2>
-				<p class="muted">
-					Importeer je SNS-historie, of voer een uitgave in op het overzicht, zoals
-					<strong>12,50 ah</strong>.
-				</p>
-				<div class="actions">
+				<EmptyState
+					icon={icons.transacties}
+					text="Nog geen transacties. Importeer je SNS-historie, of typ op het overzicht een uitgave zoals 12,50 ah."
+				>
 					<a class="button" href="/import">Historie importeren</a>
 					<a class="button secondary" href="/">Naar het overzicht</a>
-				</div>
+				</EmptyState>
 			{/if}
 		</div>
 	{:else}
@@ -283,7 +417,15 @@
 			{#each days as day (day.date)}
 				<section class="day" aria-labelledby="day-{day.date}">
 					<header>
-						<h2 id="day-{day.date}">{formatDayHeading(day.date, data.today)}</h2>
+						<span class="day-title">
+							<h2 id="day-{day.date}">{formatDayHeading(day.date, data.today)}</h2>
+							{#if day.biggest}
+								<span class="biggest"
+									>grootste: {displayName(day.biggest.counterparty) || 'Zonder naam'}
+									<span class="num">{formatCents(-day.biggest.amountCents)}</span></span
+								>
+							{/if}
+						</span>
 						<span class={['num', 'net', day.net > 0 && 'in']}>
 							{formatCents(day.net, { sign: true })}
 						</span>
@@ -291,7 +433,12 @@
 					<ul>
 						{#each day.items as tx (tx.id)}
 							<li data-tx-row={tx.id}>
-								<TransactionItem {tx} href="/transacties/{tx.id}" showDate={false} />
+								<SwipeRow
+									onright={canConfirm(tx) ? () => confirmRow(tx) : undefined}
+									onleft={() => pickCategory(tx)}
+								>
+									<TransactionItem {tx} href="/transacties/{tx.id}" showDate={false} />
+								</SwipeRow>
 							</li>
 						{/each}
 					</ul>
@@ -314,6 +461,34 @@
 				{/if}
 			</nav>
 		{/if}
+	{/if}
+
+	<Sheet
+		bind:open={picking}
+		title={pickFor ? displayName(pickFor.counterparty) || 'Categorie' : 'Categorie'}
+		focusField={false}
+	>
+		<p class="muted small">Kies een categorie. Een eigen keuze laten de regels staan.</p>
+		<div class="pick">
+			{#each categoryGroups as [group, cats] (group)}
+				<p class="pick-group">{group}</p>
+				{#each cats as c (c.id)}
+					<button
+						type="button"
+						class={['pick-option', pickFor?.categoryId === c.id && 'current']}
+						aria-current={pickFor?.categoryId === c.id ? 'true' : undefined}
+						onclick={() => setCategory(c.id, c.name)}
+					>
+						<span class="dot" style:--dot={groupColor(c.group)} aria-hidden="true"></span>
+						{c.name}
+					</button>
+				{/each}
+			{/each}
+		</div>
+	</Sheet>
+
+	{#if toast}
+		{#key toast.key}<Toast text={toast.text} error={toast.error} />{/key}
 	{/if}
 </div>
 
@@ -468,6 +643,30 @@
 		min-height: var(--tap);
 		display: inline-flex;
 		align-items: center;
+		color: var(--accent-strong);
+		font-weight: 600;
+		text-decoration: none;
+	}
+
+	.chart {
+		display: grid;
+		gap: 10px;
+		padding-bottom: 10px;
+	}
+
+	.chart-head {
+		display: flex;
+		justify-content: space-between;
+		align-items: baseline;
+		gap: 12px;
+	}
+
+	.chart-head h2 {
+		font-size: 1.1rem;
+	}
+
+	.chart-head span {
+		font-size: 0.9rem;
 	}
 
 	.days {
@@ -494,7 +693,7 @@
 
 	.day header {
 		position: sticky;
-		top: 0;
+		top: var(--sticky-top, 0px);
 		z-index: 2;
 		display: flex;
 		justify-content: space-between;
@@ -505,14 +704,21 @@
 		border-bottom: 1px solid var(--line);
 	}
 
-	@container (min-width: 900px) {
-		.day header {
-			top: 57px;
-		}
+	.day-title {
+		display: grid;
+		min-width: 0;
 	}
 
 	.day h2 {
 		font-size: 1.15rem;
+	}
+
+	.biggest {
+		overflow: hidden;
+		color: var(--muted);
+		font-size: 0.85rem;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	.net {
@@ -531,22 +737,51 @@
 		border-top: 1px solid var(--line);
 	}
 
-	.empty {
+	.small {
+		font-size: 0.9rem;
+	}
+
+	.pick {
 		display: grid;
-		gap: 10px;
-		justify-items: start;
-		padding: 24px;
+		gap: 2px;
 	}
 
-	.empty h2 {
-		font-size: 1.35rem;
+	.pick-group {
+		padding: 10px 4px 2px;
+		color: var(--muted);
+		font-size: 0.85rem;
+		font-weight: 600;
 	}
 
-	.actions {
+	.pick-option {
 		display: flex;
-		flex-wrap: wrap;
-		gap: 8px;
-		margin-top: 4px;
+		align-items: center;
+		gap: 10px;
+		min-height: var(--tap);
+		padding: 0 10px;
+		border: 0;
+		border-radius: var(--radius-sm);
+		background: none;
+		color: var(--text);
+		text-align: left;
+		cursor: pointer;
+	}
+
+	.pick-option:hover,
+	.pick-option.current {
+		background: var(--surface-2);
+	}
+
+	.pick-option.current {
+		font-weight: 600;
+	}
+
+	.dot {
+		flex: none;
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+		background: var(--dot);
 	}
 
 	.pager {

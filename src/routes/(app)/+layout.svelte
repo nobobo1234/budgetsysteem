@@ -1,7 +1,8 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { page } from '$app/state';
-	import { onNavigate, refreshAll } from '$app/navigation';
+	import { afterNavigate, onNavigate, refreshAll } from '$app/navigation';
+	import { budget, importeren, meer, overzicht, transacties } from '#lib/icons.ts';
 	import { activeTab } from '#lib/nav.ts';
 	import { nav } from '#lib/nav.svelte.ts';
 	import { flush } from '#lib/offline/queue.ts';
@@ -10,29 +11,31 @@
 
 	let { children, data } = $props();
 
-	// Eenvoudige lijn-iconen (24×24), zodat je de tabs ook herkent zonder te lezen
+	// Lijn-iconen uit icons.ts, zodat je de tabs ook herkent zonder te lezen; de actieve tab
+	// krijgt de gevulde vorm (spec: Navigatie)
 	const links = [
-		{ href: '/', label: 'Overzicht', icon: 'M4 10.5L12 4l8 6.5V20h-5v-6H9v6H4z' },
-		{
-			href: '/transacties',
-			label: 'Transacties',
-			icon: 'M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01'
-		},
-		{
-			href: '/budget',
-			label: 'Budget',
-			icon: 'M12 3a9 9 0 1 0 9 9h-9z M15 3.5A9 9 0 0 1 20.5 9H15z'
-		},
-		{ href: '/import', label: 'Import', icon: 'M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5M4 15v5h16v-5' },
-		{
-			href: '/instellingen',
-			label: 'Meer',
-			icon: 'M5 12h.01M12 12h.01M19 12h.01'
-		}
+		{ href: '/', label: 'Overzicht', icon: overzicht },
+		{ href: '/transacties', label: 'Transacties', icon: transacties },
+		{ href: '/budget', label: 'Budget', icon: budget },
+		{ href: '/import', label: 'Import', icon: importeren },
+		{ href: '/instellingen', label: 'Meer', icon: meer }
 	] as const;
 
 	// Een subpagina laat de tab van haar ouder actief, zoals Budget bij vaste lasten
 	const current = $derived(activeTab(page.url.pathname));
+
+	// Een indicator die tussen de tabs schuift (alleen CSS: de tabs zijn even breed)
+	const index = $derived(links.findIndex((l) => l.href === current));
+
+	// De compacte kop toont de titel van de pagina zodra de grote titel uit beeld schuift
+	let title = $state('');
+	const readTitle = () =>
+		(title = document.querySelector('main h1')?.textContent?.replace(/\s+/g, ' ').trim() ?? '');
+	afterNavigate(() => void tick().then(readTitle));
+	function toTop() {
+		const smooth = !matchMedia('(prefers-reduced-motion: reduce)').matches;
+		window.scrollTo({ top: 0, behavior: smooth ? 'smooth' : 'auto' });
+	}
 
 	// Voor de terugknop: de pagina waar je vandaan komt, met haar zoekopdracht
 	onNavigate(({ from }) => {
@@ -77,23 +80,35 @@
 		</p>
 	{/if}
 
+	{#if title}
+		<button type="button" class="compact" tabindex="-1" aria-hidden="true" onclick={toTop}>
+			<span>{title}</span>
+		</button>
+	{/if}
+
 	<main>
 		{@render children()}
 	</main>
 
 	<nav aria-label="Hoofdmenu">
+		{#if index >= 0}<span class="indicator" aria-hidden="true" style:--i={index}></span>{/if}
 		{#each links as link (link.href)}
-			<a href={link.href} aria-current={current === link.href ? 'page' : undefined}>
+			{@const on = current === link.href}
+			<a href={link.href} aria-current={on ? 'page' : undefined}>
 				<span class="icon">
 					<svg viewBox="0 0 24 24" aria-hidden="true">
-						<path
-							d={link.icon}
-							fill="none"
-							stroke="currentColor"
-							stroke-width={link.href === '/instellingen' ? 3 : 1.7}
-							stroke-linecap="round"
-							stroke-linejoin="round"
-						/>
+						{#if on}
+							<path d={link.icon.fill ?? link.icon.path} fill="currentColor" class="filled" />
+						{:else}
+							<path
+								d={link.icon.path}
+								fill="none"
+								stroke="currentColor"
+								stroke-width={link.href === '/instellingen' ? 3 : 1.7}
+								stroke-linecap="round"
+								stroke-linejoin="round"
+							/>
+						{/if}
 					</svg>
 					{#if link.href === '/instellingen' && data.meerAttention}
 						<span class="dot" aria-hidden="true"></span>
@@ -115,6 +130,65 @@
 		display: grid;
 		grid-template-rows: auto 1fr auto;
 		container-type: inline-size;
+	}
+
+	/* Compacte kop (spec: Beweging): verschijnt als de grote titel uit beeld schuift. Alleen
+	   waar scroll-driven animations werken; anders blijft hij weg en verandert er niets. */
+	.compact {
+		display: none;
+	}
+
+	@supports (animation-timeline: view()) and (timeline-scope: --a) {
+		.shell {
+			timeline-scope: --page-title;
+		}
+
+		.compact {
+			position: fixed;
+			inset: 0 0 auto 0;
+			z-index: 9;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			height: calc(48px + env(safe-area-inset-top));
+			padding: env(safe-area-inset-top) 56px 0;
+			border: 0;
+			border-bottom: 1px solid var(--line);
+			background: color-mix(in oklch, var(--bg) 95%, transparent);
+			backdrop-filter: blur(14px);
+			color: var(--text);
+			font-family: var(--font-display);
+			font-size: 1.05rem;
+			font-weight: 600;
+			font-variation-settings: 'opsz' 30;
+			cursor: pointer;
+			animation: compact-in linear both;
+			animation-timeline: --page-title;
+			animation-range: exit 40% exit 100%;
+		}
+
+		.compact span {
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
+
+		main {
+			--sticky-top: calc(48px + env(safe-area-inset-top));
+		}
+	}
+
+	@keyframes compact-in {
+		from {
+			opacity: 0;
+			transform: translateY(-100%);
+			visibility: hidden;
+		}
+		to {
+			opacity: 1;
+			transform: none;
+			visibility: visible;
+		}
 	}
 
 	main {
@@ -141,7 +215,8 @@
 		z-index: 10;
 		display: grid;
 		grid-template-columns: repeat(5, minmax(0, 1fr));
-		gap: 2px;
+		--gap: 2px;
+		gap: var(--gap);
 		padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
 		background: color-mix(in oklch, var(--bg) 88%, transparent);
 		backdrop-filter: blur(14px);
@@ -202,24 +277,67 @@
 		color: var(--accent-strong);
 	}
 
+	/* De gevulde vorm van de actieve tab veert in */
+	.filled {
+		transform-origin: center;
+		transform-box: fill-box;
+		animation: fill-in 300ms var(--ease-spring);
+	}
+
+	@keyframes fill-in {
+		from {
+			opacity: 0.4;
+			transform: scale(0.82);
+		}
+	}
+
+	/* De indicator beslaat de eerste kolom en schuift per tab een kolom op. Telefoon: een pil
+	   achter het icoon van de actieve tab */
+	.indicator {
+		position: absolute;
+		inset: 0;
+		grid-area: 1 / 1;
+		pointer-events: none;
+		transform: translateX(calc(var(--i) * (100% + var(--gap))));
+		transition: transform 360ms var(--ease-spring);
+	}
+
+	.indicator::before {
+		content: '';
+		position: absolute;
+		top: calc(50% - 25px);
+		left: 50%;
+		width: 56px;
+		height: 30px;
+		margin-left: -28px;
+		border-radius: 999px;
+		background: var(--accent-soft);
+	}
+
+	nav a {
+		position: relative;
+	}
+
 	@container (min-width: 900px) {
 		nav {
 			position: sticky;
 			top: 0;
 			inset: 0 0 auto 0;
 			grid-row: 1;
-			display: flex;
+			grid-template-columns: repeat(5, 9.5rem);
 			justify-content: center;
-			gap: 8px;
+			--gap: 8px;
+			padding: 0 6px;
 			border-top: 0;
 			border-bottom: 1px solid var(--line);
 		}
 
 		nav a {
 			display: flex;
+			justify-content: center;
 			gap: 8px;
 			min-height: var(--tap);
-			padding: 0 16px;
+			padding: 0 12px;
 			font-size: 0.95rem;
 		}
 
@@ -230,11 +348,25 @@
 
 		nav a[aria-current='page'] {
 			color: var(--text);
-			background: var(--surface-2);
+		}
+
+		/* Desktop: een streep onder de actieve tab */
+		.indicator::before {
+			inset: auto 16px 0;
+			width: auto;
+			height: 2px;
+			margin: 0;
+			border-radius: 0;
+			background: var(--accent);
 		}
 
 		main {
 			padding-bottom: 48px;
+			--sticky-top: 57px;
+		}
+
+		.compact {
+			display: none;
 		}
 	}
 </style>

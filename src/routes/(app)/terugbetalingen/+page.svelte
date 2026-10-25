@@ -1,7 +1,11 @@
 <script lang="ts">
+	import { initials } from '#lib/text.ts';
+	import { groupHue } from '#lib/categoryColor.ts';
+	import * as icons from '#lib/icons-extra.ts';
 	import { enhance, type SubmitFunction } from '$app/forms';
 	import { fly } from 'svelte/transition';
 	import BackLink from '#lib/components/BackLink.svelte';
+	import EmptyState from '#lib/components/EmptyState.svelte';
 	import HeroAmount from '#lib/components/HeroAmount.svelte';
 	import Select, { type SelectOption } from '#lib/components/Select.svelte';
 	import Toast from '#lib/components/Toast.svelte';
@@ -193,6 +197,9 @@
 		{#each o.persons as person (person.personId)}
 			<article class="card person" in:fly={{ y: 8, duration: 220 }}>
 				<header>
+					<span class="monogram hue" style:--h={groupHue(person.name)} aria-hidden="true"
+						>{initials(person.name)}</span
+					>
 					<h2>{person.name}</h2>
 					{#if person.arrearsCents > 0}
 						<span class="num late-sum">{formatCents(person.arrearsCents)} achter</span>
@@ -337,13 +344,13 @@
 				{/if}
 			</article>
 		{:else}
-			<div class="empty">
-				<h2>Nog geen gedeelde vaste lasten</h2>
-				<p class="muted">
-					Betaal je iets voor het hele huis, zoals de wifi? Geef huisgenoten een aandeel bij de
-					vaste last; hun maandelijkse overboekingen komen dan hier.
-				</p>
-				<a class="button secondary" href="/vaste-lasten">Naar vaste lasten</a>
+			<div class="card">
+				<EmptyState
+					icon={icons.terugbetalingen}
+					text="Nog geen gedeelde vaste lasten. Betaal je iets voor het hele huis, zoals de wifi? Geef huisgenoten een aandeel bij de vaste last."
+				>
+					<a class="button secondary" href="/vaste-lasten">Naar vaste lasten</a>
+				</EmptyState>
 			</div>
 		{/each}
 	</section>
@@ -539,9 +546,13 @@
 
 	.person header {
 		display: flex;
-		align-items: baseline;
-		justify-content: space-between;
+		align-items: center;
 		gap: 12px;
+	}
+
+	.person header h2 {
+		flex: 1;
+		min-width: 0;
 	}
 
 	.late-sum {
@@ -689,13 +700,6 @@
 		font: inherit;
 		font-weight: 550;
 		cursor: pointer;
-	}
-
-	.empty {
-		display: grid;
-		gap: 10px;
-		justify-items: start;
-		padding: 8px 0;
 	}
 
 	.legend {

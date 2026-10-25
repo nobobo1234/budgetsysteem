@@ -3,11 +3,13 @@
 	import BackLink from '#lib/components/BackLink.svelte';
 	import Select, { type SelectOption } from '#lib/components/Select.svelte';
 	import ShareForm from '#lib/components/ShareForm.svelte';
+	import StackedBar from '#lib/components/StackedBar.svelte';
 	import Switch from '#lib/components/Switch.svelte';
 	import Toast from '#lib/components/Toast.svelte';
-	import { groupColor } from '#lib/categoryColor.ts';
+	import { groupColor, groupHue } from '#lib/categoryColor.ts';
 	import { formatMonth, formatShortDate } from '#lib/dates.ts';
 	import { centsToInput, formatCents } from '#lib/money.ts';
+	import { displayName, initials } from '#lib/text.ts';
 
 	let { data, form } = $props();
 	const tx = $derived(data.tx);
@@ -34,11 +36,30 @@
 	);
 
 	let saving = $state(false);
+	// Eerst lezen, dan bewerken; alleen een post zonder eurobedrag opent meteen het formulier
+	// svelte-ignore state_referenced_locally
+	let editing = $state(data.tx.amountCents === 0);
 	let confirmDelete = $state(false);
+	const name = $derived(displayName(tx.counterparty) || 'Zonder naam');
+	const category = $derived(data.categories.find((c) => c.id === tx.categoryId) ?? null);
+	const color = $derived(category ? groupColor(category.group) : null);
 	let editingShare = $state(false);
 	let confirmUnshare = $state(false);
 
 	const myShare = $derived(data.splits.find((s) => s.note === 'Mijn deel'));
+	// Voorgeschoten als één balk: jouw deel en per persoon een deel, open gearceerd
+	const shareSegments = $derived([
+		...(myShare
+			? [{ key: 'mine', label: 'Jij', cents: -myShare.amountCents, color: 'var(--accent)' }]
+			: []),
+		...data.posts.map((p) => ({
+			key: p.id,
+			label: p.personName ?? 'Nog onbekend',
+			cents: p.amountCents,
+			color: p.personName ? (groupColor(p.personName) ?? undefined) : 'var(--muted)',
+			hatched: p.status === 'open' || p.status === 'deels'
+		}))
+	]);
 	const anyPaid = $derived(
 		data.posts.some((p) => p.paidCents > 0 || p.status === 'kwijtgescholden')
 	);
@@ -98,7 +119,7 @@
 </script>
 
 <svelte:head>
-	<title>{tx.counterparty || 'Transactie'} · Budget</title>
+	<title>{name} · Budget</title>
 </svelte:head>
 
 <div class="page">
@@ -109,7 +130,7 @@
 	<BackLink parents={['/transacties', '/']} />
 
 	<header>
-		<h1><span data-tx-name={tx.id}>{tx.counterparty || 'Zonder naam'}</span></h1>
+		<h1><span data-tx-name={tx.id}>{name}</span></h1>
 		<p class={['amount', 'num', tx.amountCents > 0 && 'in']}>
 			<span data-tx-amount={tx.id}>
 				{#if tx.amountCents === 0 && tx.origCurrency && tx.origAmountCents !== null}
@@ -125,6 +146,9 @@
 			{tx.date.slice(0, 4)}
 			{#if tx.description}· {tx.description}{/if}
 		</p>
+		{#if displayName(tx.counterparty) !== tx.counterparty.trim()}
+			<p class="muted small">Op je afschrift: {tx.counterparty}</p>
+		{/if}
 		{#if tx.status === 'te_controleren'}
 			<p class="review">
 				Te controleren{tx.amountCents === 0
@@ -136,86 +160,131 @@
 		{/if}
 	</header>
 
-	<form
-		method="POST"
-		action="?/save"
-		class="card form"
-		use:enhance={() => {
-			saving = true;
-			return async ({ update }) => {
-				await update({ reset: false });
-				saving = false;
-			};
-		}}
-	>
-		<div class="row">
-			<label class="field">
-				<span>Bedrag</span>
-				<span class="money">
-					<span class="prefix" aria-hidden="true">€</span>
-					<input
-						name="amount"
-						inputmode="decimal"
-						value={tx.amountCents === 0 ? '' : centsToInput(tx.amountCents)}
-						placeholder={tx.origCurrency ? 'Eurobedrag' : '0,00'}
-						class="num"
-						autocomplete="off"
-						required={tx.origCurrency === null}
-					/>
-				</span>
-			</label>
-			<fieldset class="field">
-				<legend>Richting</legend>
-				<div class="segmented">
-					<label>
-						<input type="radio" name="direction" value="uit" checked={tx.amountCents <= 0} />
-						<span>Uitgave</span>
-					</label>
-					<label>
-						<input type="radio" name="direction" value="in" checked={tx.amountCents > 0} />
-						<span>Inkomend</span>
-					</label>
-				</div>
-			</fieldset>
-		</div>
-		{#if tx.origCurrency && tx.origAmountCents !== null}
-			<p class="muted hint">
-				Oorspronkelijk {tx.origCurrency}
-				<span class="num">{centsToInput(tx.origAmountCents)}</span>
-			</p>
-		{/if}
-		<div class="row">
-			<label class="field">
-				<span>Datum</span>
-				<input type="date" name="date" value={tx.date} required />
-			</label>
-			<!-- Geen omhullend label: klikken in de lijst zou de knop opnieuw activeren -->
-			<div class="field">
-				<label for="tx-category">Categorie</label>
-				<Select
-					id="tx-category"
-					name="categoryId"
-					label="Categorie"
-					value={tx.categoryId ?? ''}
-					options={categoryOptions}
-				/>
-				{#if categoryHint}<p class="muted hint">{categoryHint}</p>{/if}
+	{#if editing}
+		<form
+			method="POST"
+			action="?/save"
+			class="card form"
+			use:enhance={() => {
+				saving = true;
+				return async ({ result, update }) => {
+					await update({ reset: false });
+					saving = false;
+					if (result.type === 'success') editing = false;
+				};
+			}}
+		>
+			<div class="row">
+				<label class="field">
+					<span>Bedrag</span>
+					<span class="money">
+						<span class="prefix" aria-hidden="true">€</span>
+						<input
+							name="amount"
+							inputmode="decimal"
+							value={tx.amountCents === 0 ? '' : centsToInput(tx.amountCents)}
+							placeholder={tx.origCurrency ? 'Eurobedrag' : '0,00'}
+							class="num"
+							autocomplete="off"
+							required={tx.origCurrency === null}
+						/>
+					</span>
+				</label>
+				<fieldset class="field">
+					<legend>Richting</legend>
+					<div class="segmented">
+						<label>
+							<input type="radio" name="direction" value="uit" checked={tx.amountCents <= 0} />
+							<span>Uitgave</span>
+						</label>
+						<label>
+							<input type="radio" name="direction" value="in" checked={tx.amountCents > 0} />
+							<span>Inkomend</span>
+						</label>
+					</div>
+				</fieldset>
 			</div>
-		</div>
-		<label class="field">
-			<span>Tegenpartij</span>
-			<input name="counterparty" value={tx.counterparty} maxlength="100" autocomplete="off" />
-		</label>
-		<label class="field">
-			<span>Notitie</span>
-			<textarea name="note" maxlength="500" rows="2" placeholder="Optioneel">{tx.note}</textarea>
-		</label>
-		<div class="save">
-			<button class="button" disabled={saving}>{saving ? 'Opslaan…' : 'Opslaan'}</button>
-			{#if form?.message}<p class="error-text" role="alert">{form.message}</p>{/if}
-			{#if form?.saved && !saving}<p class="saved" role="status">Opgeslagen</p>{/if}
-		</div>
-	</form>
+			{#if tx.origCurrency && tx.origAmountCents !== null}
+				<p class="muted hint">
+					Oorspronkelijk {tx.origCurrency}
+					<span class="num">{centsToInput(tx.origAmountCents)}</span>
+				</p>
+			{/if}
+			<div class="row">
+				<label class="field">
+					<span>Datum</span>
+					<input type="date" name="date" value={tx.date} required />
+				</label>
+				<!-- Geen omhullend label: klikken in de lijst zou de knop opnieuw activeren -->
+				<div class="field">
+					<label for="tx-category">Categorie</label>
+					<Select
+						id="tx-category"
+						name="categoryId"
+						label="Categorie"
+						value={tx.categoryId ?? ''}
+						options={categoryOptions}
+					/>
+					{#if categoryHint}<p class="muted hint">{categoryHint}</p>{/if}
+				</div>
+			</div>
+			<label class="field">
+				<span>Tegenpartij</span>
+				<input name="counterparty" value={tx.counterparty} maxlength="100" autocomplete="off" />
+			</label>
+			<label class="field">
+				<span>Notitie</span>
+				<textarea name="note" maxlength="500" rows="2" placeholder="Optioneel">{tx.note}</textarea>
+			</label>
+			<div class="save">
+				<button class="button" disabled={saving}>{saving ? 'Opslaan…' : 'Opslaan'}</button>
+				{#if tx.amountCents !== 0}
+					<button type="button" class="button secondary" onclick={() => (editing = false)}
+						>Annuleren</button
+					>
+				{/if}
+				{#if form?.message}<p class="error-text" role="alert">{form.message}</p>{/if}
+			</div>
+		</form>
+	{:else}
+		<section class="card details" aria-labelledby="details-title">
+			<div class="section-head">
+				<h2 id="details-title">Gegevens</h2>
+				<button type="button" class="button secondary small" onclick={() => (editing = true)}
+					>Bewerken</button
+				>
+			</div>
+			<dl>
+				<div>
+					<dt>Categorie</dt>
+					<dd>
+						<span class="category">
+							<span class={['dot', !color && 'none']} style:--dot={color} aria-hidden="true"></span>
+							{category?.name ?? 'Geen categorie'}
+						</span>
+						{#if categoryHint}<span class="muted hint">{categoryHint}</span>{/if}
+					</dd>
+				</div>
+				<div>
+					<dt>Datum</dt>
+					<dd>{formatShortDate(tx.date)} {tx.date.slice(0, 4)}</dd>
+				</div>
+				{#if tx.origCurrency && tx.origAmountCents !== null}
+					<div>
+						<dt>Oorspronkelijk</dt>
+						<dd class="num">{tx.origCurrency} {centsToInput(tx.origAmountCents)}</dd>
+					</div>
+				{/if}
+				{#if tx.note}
+					<div>
+						<dt>Notitie</dt>
+						<dd class="note">{tx.note}</dd>
+					</div>
+				{/if}
+			</dl>
+			{#if form?.saved}<p class="saved" role="status">Opgeslagen</p>{/if}
+		</section>
+	{/if}
 
 	{#if tx.amountCents < 0 && !original}
 		<section class="card section" aria-labelledby="share-title">
@@ -231,6 +300,7 @@
 					onclose={() => (editingShare = false)}
 				/>
 			{:else if data.posts.length > 0}
+				<StackedBar label="Verdeling" total={-tx.amountCents} segments={shareSegments} />
 				<ul class="lines">
 					{#if myShare}
 						<li class="mine">
@@ -244,7 +314,12 @@
 							{#if payment}
 								<!-- Naar de (laatste) betaling op deze post -->
 								<a class="row-link" href={`/transacties/${payment.transactionId}`}>
-									<span>
+									<span
+										class="monogram sm hue"
+										style:--h={groupHue(p.personName ?? '?')}
+										aria-hidden="true">{initials(p.personName ?? '?')}</span
+									>
+									<span class="person">
 										{p.personName ?? 'Nog onbekend'}
 										<span class="muted small"
 											>{postStatus(p)} · {formatShortDate(payment.date)}</span
@@ -253,7 +328,12 @@
 									<span class="num">{formatCents(p.amountCents)}</span>
 								</a>
 							{:else}
-								<span>
+								<span
+									class="monogram sm hue"
+									style:--h={groupHue(p.personName ?? '?')}
+									aria-hidden="true">{initials(p.personName ?? '?')}</span
+								>
+								<span class="person">
 									{p.personName ?? 'Nog onbekend'}
 									<span class="muted small">{postStatus(p)}</span>
 								</span>
@@ -378,7 +458,7 @@
 							<label class="option">
 								<input type="radio" name="target" value={`retour:${r.id}`} bind:group={chosen} />
 								<span class="who-what">
-									<strong>{r.counterparty || 'Zonder naam'}</strong>
+									<strong>{displayName(r.counterparty) || 'Zonder naam'}</strong>
 									<span class="muted small"
 										>{r.categoryName ?? 'Zonder categorie'} · {formatShortDate(r.date)}{r.shared
 											? ' · voorgeschoten'
@@ -444,7 +524,7 @@
 				<li>
 					<a class="row-link" href={`/transacties/${original.id}`}>
 						<span>
-							{original.counterparty || 'Zonder naam'}
+							{displayName(original.counterparty) || 'Zonder naam'}
 							<span class="muted small"
 								>{original.categoryName ?? 'Zonder categorie'} · {formatShortDate(
 									original.date
@@ -510,7 +590,7 @@
 					<li>
 						<a class="row-link" href={`/transacties/${c.id}`}>
 							<span>
-								{c.counterparty || 'Zonder naam'}
+								{displayName(c.counterparty) || 'Zonder naam'}
 								<span class="muted small">{formatShortDate(c.date)}</span>
 							</span>
 							<span class={['num', c.amountCents > 0 && 'in']}
@@ -766,6 +846,92 @@
 
 	.mine {
 		font-weight: 600;
+	}
+
+	.lines li > .person,
+	.row-link > .person {
+		flex: 1;
+		display: grid;
+		line-height: 1.3;
+	}
+
+	.section-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+	}
+
+	.details {
+		display: grid;
+		gap: 8px;
+	}
+
+	dl {
+		margin: 0;
+		display: grid;
+	}
+
+	dl > div {
+		display: flex;
+		justify-content: space-between;
+		align-items: baseline;
+		gap: 16px;
+		padding: 10px 0;
+	}
+
+	dl > div + div {
+		border-top: 1px solid var(--line);
+	}
+
+	dt {
+		flex: none;
+		color: var(--muted);
+	}
+
+	dd {
+		display: grid;
+		justify-items: end;
+		gap: 2px;
+		margin: 0;
+		min-width: 0;
+		text-align: right;
+		font-weight: 550;
+	}
+
+	dd .hint {
+		font-weight: 400;
+	}
+
+	.note {
+		font-weight: 400;
+		white-space: pre-wrap;
+		overflow-wrap: anywhere;
+	}
+
+	.category {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+	}
+
+	.dot {
+		flex: none;
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+		background: var(--dot);
+	}
+
+	.dot.none {
+		background: transparent;
+		box-shadow: inset 0 0 0 1.5px var(--muted);
+	}
+
+	.button.small {
+		min-height: var(--tap);
+		padding: 0 14px;
+		font-size: 0.92rem;
 	}
 
 	.row-link {

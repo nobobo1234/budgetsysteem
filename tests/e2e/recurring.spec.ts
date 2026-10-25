@@ -148,6 +148,10 @@ for (const path of ['/vaste-lasten']) {
 test('detailpagina van een vaste last past op een telefoonscherm', async ({ page }) => {
 	const { recurringId } = expectedPost(`Detail ${suffix()}`, 'vast', 1299);
 	await page.goto(`/vaste-lasten/${recurringId}`);
+	await page.waitForLoadState('networkidle');
+	// Eerst lezen, dan bewerken: het formulier opent via "Bewerken"
+	await expect(page.getByRole('heading', { name: 'Gegevens' })).toBeVisible();
+	await page.getByRole('button', { name: 'Bewerken' }).click();
 	await expect(page.getByRole('button', { name: 'Opslaan' })).toBeVisible();
 	const { inner, scroll } = await page.evaluate(() => ({
 		inner: document.documentElement.clientWidth,

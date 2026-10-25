@@ -1,10 +1,15 @@
 <script lang="ts">
+	import * as icons from '#lib/icons-extra.ts';
 	import { enhance } from '$app/forms';
+	import EmptyState from '#lib/components/EmptyState.svelte';
 	import Select, { type SelectOption } from '#lib/components/Select.svelte';
+	import Tile from '#lib/components/Tile.svelte';
 	import Toast from '#lib/components/Toast.svelte';
 	import { groupColor } from '#lib/categoryColor.ts';
 	import { formatShortDate } from '#lib/dates.ts';
 	import { formatCents } from '#lib/money.ts';
+	import { monthsBetween } from '#lib/recurring.ts';
+	import { displayName } from '#lib/text.ts';
 
 	let { data, form } = $props();
 	let uploading = $state(false);
@@ -25,6 +30,29 @@
 	);
 
 	const fullDate = (iso: string) => `${formatShortDate(iso)} ${iso.slice(0, 4)}`;
+	const categoryName = (id: string) => data.categories.find((c) => c.id === id);
+	// Voorgestelde categorieën als chips: het voorstel, dan wat je het vaakst gebruikt
+	const chipsFor = (g: { suggestedCategoryId: string | null; totalCents: number }) =>
+		[
+			...new Set([
+				...(g.suggestedCategoryId ? [g.suggestedCategoryId] : []),
+				...(g.totalCents < 0 ? data.topCategories : [])
+			])
+		]
+			.map(categoryName)
+			.filter((c) => !!c)
+			.slice(0, 3);
+
+	// De periode van de import als tijdlijn, met een streepje per maand
+	const timeline = $derived.by(() => {
+		if (!summary?.periodStart || !summary.periodEnd) return null;
+		const start = summary.periodStart.slice(0, 7);
+		const months = monthsBetween(start, summary.periodEnd.slice(0, 7)) + 1;
+		return {
+			months,
+			ticks: Array.from({ length: Math.max(0, months - 1) }, (_, i) => (i + 1) / months)
+		};
+	});
 	const kb = (bytes: number) =>
 		bytes < 1024 * 1024
 			? `${Math.max(1, Math.round(bytes / 1024))} kB`
@@ -141,44 +169,96 @@
 	{#if summary}
 		<section class="card result" role="status">
 			<h2>Import klaar</h2>
-			<dl>
+			<dl class="counters">
 				<div>
 					<dt>Nieuw</dt>
-					<dd class="num">{summary.newCount}</dd>
+					<dd class="num">
+						<span class="visually-hidden">{summary.newCount}</span><span
+							class="count-up"
+							style:--to={summary.newCount}
+							aria-hidden="true"
+						></span>
+					</dd>
 				</div>
 				<div>
 					<dt>Al bekend</dt>
-					<dd class="num">{summary.duplicateCount}</dd>
+					<dd class="num">
+						<span class="visually-hidden">{summary.duplicateCount}</span><span
+							class="count-up"
+							style:--to={summary.duplicateCount}
+							style:--delay="120ms"
+							aria-hidden="true"
+						></span>
+					</dd>
 				</div>
 				{#if summary.earlierCount > 0}
 					<div>
 						<dt>Van vóór de begindatum</dt>
-						<dd class="num">{summary.earlierCount}</dd>
-					</div>
-				{/if}
-				{#if summary.periodStart && summary.periodEnd}
-					<div class="period">
-						<dt>Periode</dt>
-						<dd>{fullDate(summary.periodStart)} tot {fullDate(summary.periodEnd)}</dd>
+						<dd class="num">
+							<span class="visually-hidden">{summary.earlierCount}</span><span
+								class="count-up"
+								style:--to={summary.earlierCount}
+								style:--delay="240ms"
+								aria-hidden="true"
+							></span>
+						</dd>
 					</div>
 				{/if}
 			</dl>
-			{#if summary.linkedCount > 0}
-				<p>
-					<a href="/terugbetalingen"
-						>{summary.linkedCount}
-						{summary.linkedCount === 1 ? 'terugbetaling' : 'terugbetalingen'} automatisch gekoppeld</a
-					>; los te koppelen bij de transactie.
-				</p>
+			{#if summary.periodStart && summary.periodEnd && timeline}
+				<div class="timeline">
+					<p class="tell">
+						{timeline.months === 1 ? 'Eén maand' : `${timeline.months} maanden`} historie
+					</p>
+					<div class="track" aria-hidden="true">
+						<span class="fill"></span>
+						{#each timeline.ticks as t (t)}<span class="tick" style:--at={t}></span>{/each}
+					</div>
+					<p class="ends muted num">
+						<span>{fullDate(summary.periodStart)}</span>
+						<span>{fullDate(summary.periodEnd)}</span>
+					</p>
+				</div>
 			{/if}
-			{#if form && 'proposals' in form && form.proposals}
-				<p>
-					<a href="/vaste-lasten"
-						>{form.proposals}
-						{form.proposals === 1 ? 'mogelijke vaste last' : 'mogelijke vaste lasten'} gevonden</a
-					>; bevestig welke het zijn.
-				</p>
-			{/if}
+			<ul class="found">
+				{#if form && 'proposals' in form && form.proposals}
+					<li>
+						<Tile
+							href="/vaste-lasten"
+							icon={icons.vasteLasten}
+							title={form.proposals === 1
+								? '1 vaste last gevonden'
+								: `${form.proposals} vaste lasten gevonden`}
+							value={form.proposals === 1 ? 'Bevestig of hij het is' : 'Bevestig welke het zijn'}
+						/>
+					</li>
+				{/if}
+				{#if summary.linkedCount > 0}
+					<li>
+						<Tile
+							href="/terugbetalingen"
+							icon={icons.terugbetalingen}
+							title={summary.linkedCount === 1
+								? '1 terugbetaling gekoppeld'
+								: `${summary.linkedCount} terugbetalingen gekoppeld`}
+							value="Automatisch; los te koppelen bij de transactie"
+						/>
+					</li>
+				{/if}
+				{#if summary.reversals.reviewCount > 0}
+					<li>
+						<Tile
+							href="/transacties?status=te_controleren"
+							icon={icons.controleren}
+							title={summary.reversals.reviewCount === 1
+								? '1 storno te controleren'
+								: `${summary.reversals.reviewCount} storno's te controleren`}
+							value="Kies bij welke boeking hij hoort"
+							warn
+						/>
+					</li>
+				{/if}
+			</ul>
 			{#if summary.reversals.linked.length > 0}
 				<div class="reversals">
 					<p>
@@ -190,9 +270,11 @@
 					<ul>
 						{#each summary.reversals.linked as r (r.id)}
 							<li>
-								<a href="/transacties/{r.id}">{r.counterparty || 'Zonder naam'}</a>
-								<span class="num">{formatCents(r.amountCents, { sign: true })}</span>
-								<span class="muted">bij {fullDate(r.originalDate)}</span>
+								<a class="reversal" href="/transacties/{r.id}">
+									<span class="rname">{displayName(r.counterparty) || 'Zonder naam'}</span>
+									<span class="num">{formatCents(r.amountCents, { sign: true })}</span>
+									<span class="muted">bij {fullDate(r.originalDate)}</span>
+								</a>
 								{#if undone.includes(r.id)}
 									<span class="muted">Losgemaakt</span>
 								{:else}
@@ -212,14 +294,6 @@
 						{/each}
 					</ul>
 				</div>
-			{/if}
-			{#if summary.reversals.reviewCount > 0}
-				<p>
-					<a href="/transacties?status=te_controleren"
-						>{summary.reversals.reviewCount}
-						{summary.reversals.reviewCount === 1 ? 'storno' : "storno's"} te controleren</a
-					>: kies bij welke boeking {summary.reversals.reviewCount === 1 ? 'hij' : 'ze'} horen.
-				</p>
 			{/if}
 			{#each summary.anchors as anchor (anchor.accountName)}
 				<p class="muted">
@@ -275,13 +349,34 @@
 			</div>
 			<ul>
 				{#each data.uncategorized as g (g.pattern)}
+					{@const chips = chipsFor(g)}
 					<li class="card">
 						<div class="who">
-							<strong>{g.example}</strong>
+							<strong>{displayName(g.example)}</strong>
 							<span class="muted num"
-								>{g.count}× · {formatCents(g.totalCents, { whole: true })}</span
+								>{g.count}× · {formatCents(g.totalCents, {
+									whole: true
+								})}{#if displayName(g.example) !== g.example}
+									· {g.example}{/if}</span
 							>
 						</div>
+						{#if chips.length > 0}
+							<form method="POST" action="?/rule" use:enhance class="chips">
+								<input type="hidden" name="pattern" value={g.pattern} />
+								<span class="visually-hidden">Voorgesteld voor {g.example}:</span>
+								{#each chips as c (c.id)}
+									<button
+										class={['chip', c.id === g.suggestedCategoryId && 'suggested']}
+										name="categoryId"
+										value={c.id}
+										style:--dot={groupColor(c.group)}
+										aria-label="Regel: {g.example} wordt {c.name}"
+									>
+										<span class="dot" aria-hidden="true"></span>{c.name}
+									</button>
+								{/each}
+							</form>
+						{/if}
 						<form method="POST" action="?/rule" use:enhance>
 							<input type="hidden" name="pattern" value={g.pattern} />
 							<Select
@@ -299,7 +394,13 @@
 			</ul>
 		</section>
 	{:else if data.batches.length > 0}
-		<p class="card done">Alle geïmporteerde transacties hebben een categorie.</p>
+		<div class="card">
+			<EmptyState
+				icon={icons.categorieen}
+				text="Alle geïmporteerde transacties hebben een categorie."
+				compact
+			/>
+		</div>
 	{/if}
 
 	{#if data.batches.length > 0}
@@ -346,6 +447,130 @@
 		align-items: center;
 		gap: 4px 10px;
 		min-height: var(--tap);
+	}
+
+	.reversal {
+		display: inline-flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 4px 10px;
+		min-height: var(--tap);
+		color: inherit;
+		text-decoration: none;
+	}
+
+	.reversal .rname {
+		font-weight: 550;
+	}
+
+	.result {
+		display: grid;
+		gap: 16px;
+	}
+
+	.counters {
+		margin: 0;
+	}
+
+	.timeline {
+		display: grid;
+		gap: 6px;
+	}
+
+	.track {
+		position: relative;
+		height: 12px;
+		border-radius: 999px;
+		background: var(--surface-2);
+		overflow: hidden;
+	}
+
+	.fill {
+		position: absolute;
+		inset: 0;
+		border-radius: 999px;
+		background: var(--accent);
+		transform-origin: left;
+		animation: grow 900ms var(--ease-out) 200ms both;
+	}
+
+	.tick {
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		left: 0;
+		width: 2px;
+		background: var(--surface);
+		opacity: 0.7;
+		transform: translateX(calc(var(--at) * 100cqw));
+	}
+
+	.timeline {
+		container-type: inline-size;
+	}
+
+	.ends {
+		display: flex;
+		justify-content: space-between;
+		gap: 12px;
+		font-size: 0.88rem;
+	}
+
+	@keyframes grow {
+		from {
+			transform: scaleX(0);
+		}
+	}
+
+	.found {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+		gap: 10px;
+	}
+
+	.found:empty {
+		display: none;
+	}
+
+	.chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+	}
+
+	.chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		min-height: 36px;
+		padding: 0 14px 0 10px;
+		border: 1px solid var(--line);
+		border-radius: 999px;
+		background: var(--surface);
+		color: var(--text);
+		font-weight: 550;
+		font-size: 0.92rem;
+		cursor: pointer;
+		transition: transform 160ms var(--ease-spring);
+	}
+
+	.chip:active {
+		transform: scale(0.95);
+	}
+
+	.chip.suggested {
+		border-color: color-mix(in oklch, var(--accent) 50%, transparent);
+		background: var(--accent-soft);
+	}
+
+	.chip .dot {
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+		background: var(--dot);
 	}
 
 	.reversals form {
@@ -446,14 +671,6 @@
 		margin: 14px 0 0;
 	}
 
-	.period {
-		grid-column: 1 / -1;
-	}
-
-	.result p {
-		margin-top: 12px;
-	}
-
 	dt {
 		color: var(--muted);
 		font-size: 0.92rem;
@@ -508,9 +725,8 @@
 		gap: 8px;
 	}
 
-	.done {
-		color: var(--accent-strong);
-		font-weight: 550;
+	.groups form.chips {
+		display: flex;
 	}
 
 	.history li {

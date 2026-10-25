@@ -5,6 +5,7 @@ import { isIsoDate, toIsoDate } from '#lib/dates.ts';
 import { db } from '#lib/server/db/index.ts';
 import { categories } from '#lib/server/db/schema.ts';
 import {
+	chargesThisMonth,
 	confirmProposal,
 	dismissSignal,
 	recurringOverview,
@@ -18,6 +19,7 @@ export const load: PageServerLoad = () => {
 	return {
 		today,
 		overview: recurringOverview(db(), today),
+		charges: chargesThisMonth(db(), today),
 		categories: db()
 			.select({ id: categories.id, name: categories.name, group: categories.group })
 			.from(categories)

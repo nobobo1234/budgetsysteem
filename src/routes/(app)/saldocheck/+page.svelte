@@ -1,6 +1,8 @@
 <script lang="ts">
+	import * as icons from '#lib/icons.ts';
 	import { enhance, type SubmitFunction } from '$app/forms';
 	import BackLink from '#lib/components/BackLink.svelte';
+	import EmptyState from '#lib/components/EmptyState.svelte';
 	import Toast from '#lib/components/Toast.svelte';
 	import { formatShortDate } from '#lib/dates.ts';
 	import { formatCents } from '#lib/money.ts';
@@ -81,42 +83,61 @@
 			{:else}
 				{#if !latest}
 					<p class="muted">Nog geen check gedaan.</p>
-				{:else if latest.differenceCents === 0}
-					<p class="verdict ok">
-						<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4.5 10.5l3.5 3.5 7.5-8" /></svg>
-						<span>
+				{:else}
+					{@const ok = latest.differenceCents === 0}
+					<!-- Verwacht en bank naast elkaar; het verschil is het punt in het midden -->
+					<div class={['compare', ok ? 'ok' : 'off']}>
+						<p class="side">
+							<span class="muted">App verwacht</span>
+							<strong class="num">{formatCents(latest.expectedCents)}</strong>
+						</p>
+						<div class="gap" aria-hidden="true">
+							<span class="line"></span>
+							<span class="point">
+								{#if ok}
+									<svg viewBox="0 0 24 24"><path d="M6 12.5l4 4 8-9" /></svg>
+								{:else}
+									<span class="num">{formatCents(latest.differenceCents, { sign: true })}</span>
+								{/if}
+							</span>
+						</div>
+						<p class="side bank">
+							<span class="muted">Bank</span>
+							<strong class="num">{formatCents(latest.amountCents)}</strong>
+						</p>
+					</div>
+					{#if ok}
+						<p class="verdict ok">
 							Klopt op {day(latest.date)}:
 							<span class="num">{formatCents(latest.amountCents)}</span>
-						</span>
-					</p>
-				{:else}
-					<div class="verdict off">
-						<p>
-							<strong class="num">{formatCents(latest.differenceCents, { sign: true })}</strong>
-							verschil op {day(latest.date)}
 						</p>
-						<p class="muted">
-							De bank heeft {formatCents(Math.abs(latest.differenceCents))}
-							{latest.differenceCents < 0 ? 'minder' : 'meer'} dan de app verwacht ({formatCents(
-								latest.expectedCents
-							)}).
-							{latest.differenceCents < 0
-								? 'Waarschijnlijk een vergeten uitgave.'
-								: 'Misschien een vergeten inkomst, of een uitgave die dubbel staat.'}
-						</p>
-						{#if a.reviewCount > 0}
-							<p class="muted">
-								<a href="/transacties?status=te_controleren">{a.reviewCount} te controleren</a>
-								{a.reviewCount === 1 ? 'telt' : 'tellen'} al mee met een bedrag dat nog kan veranderen.
+					{:else}
+						<div class="verdict off">
+							<p>
+								<strong class="num">{formatCents(latest.differenceCents, { sign: true })}</strong>
+								verschil op {day(latest.date)}
 							</p>
-						{/if}
-						<div class="links">
-							<a href={transactionsHref(a.account.id, latest.period)}>
-								Transacties {day(latest.period.from)} – {day(latest.period.to)}
-							</a>
-							<a href="/import">Export importeren</a>
+							<p class="muted">
+								De bank heeft {formatCents(Math.abs(latest.differenceCents))}
+								{latest.differenceCents < 0 ? 'minder' : 'meer'} dan de app verwacht.
+								{latest.differenceCents < 0
+									? 'Waarschijnlijk een vergeten uitgave.'
+									: 'Misschien een vergeten inkomst, of een uitgave die dubbel staat.'}
+							</p>
+							{#if a.reviewCount > 0}
+								<p class="muted">
+									<a href="/transacties?status=te_controleren">{a.reviewCount} te controleren</a>
+									{a.reviewCount === 1 ? 'telt' : 'tellen'} al mee met een bedrag dat nog kan veranderen.
+								</p>
+							{/if}
+							<div class="links">
+								<a class="more-link" href={transactionsHref(a.account.id, latest.period)}>
+									Transacties {day(latest.period.from)} – {day(latest.period.to)}
+								</a>
+								<a class="more-link" href="/import">Export importeren</a>
+							</div>
 						</div>
-					</div>
+					{/if}
 				{/if}
 
 				<details class="enter" bind:open={checkOpen[a.account.id]}>
@@ -168,10 +189,13 @@
 			{/if}
 		</section>
 	{:else}
-		<div class="card empty">
-			<h2>Nog geen rekeningen</h2>
-			<p class="muted">Importeer een export van de bank; de rekening komt er dan vanzelf bij.</p>
-			<a class="button" href="/import">Export importeren</a>
+		<div class="card">
+			<EmptyState
+				icon={icons.saldocheck}
+				text="Nog geen rekeningen. Importeer een export van de bank; de rekening komt er dan vanzelf bij."
+			>
+				<a class="button" href="/import">Export importeren</a>
+			</EmptyState>
 		</div>
 	{/each}
 
@@ -266,25 +290,128 @@
 	}
 
 	.verdict.ok {
-		display: flex;
-		align-items: center;
-		gap: 10px;
+		color: var(--accent-strong);
 		font-weight: 550;
+		text-align: center;
 	}
 
-	.verdict.ok svg {
-		flex: none;
-		width: 28px;
-		height: 28px;
-		padding: 5px;
+	/* Twee kolommen, en eronder een lijn van de ene naar de andere met het verschil als punt */
+	.compare {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+		gap: 6px 12px;
+	}
+
+	.side {
+		display: grid;
+		gap: 2px;
+	}
+
+	.side .muted {
+		font-size: 0.88rem;
+	}
+
+	.side strong {
+		font-size: 1.15rem;
+		font-weight: 650;
+	}
+
+	.bank {
+		justify-items: end;
+		text-align: right;
+		grid-column: 2;
+		grid-row: 1;
+	}
+
+	.gap {
+		position: relative;
+		grid-column: 1 / -1;
+		grid-row: 2;
+		display: grid;
+		place-items: center;
+		padding: 0 6px;
+	}
+
+	.line {
+		position: absolute;
+		inset: 50% 6px auto;
+		height: 2px;
+		margin-top: -1px;
+		background: var(--accent);
+	}
+
+	.line::before,
+	.line::after {
+		content: '';
+		position: absolute;
+		top: -4px;
+		width: 10px;
+		height: 10px;
+		border-radius: 50%;
+		background: inherit;
+	}
+
+	.line::before {
+		left: -5px;
+	}
+
+	.line::after {
+		right: -5px;
+	}
+
+	.off .line {
+		background: repeating-linear-gradient(90deg, var(--warn) 0 5px, transparent 5px 9px);
+	}
+
+	.off .line::before,
+	.off .line::after {
+		background: var(--warn);
+	}
+
+	.point {
+		position: relative;
+		display: grid;
+		place-items: center;
+		min-width: 44px;
+		height: 44px;
+		padding: 0 14px;
 		border-radius: 999px;
-		background: var(--accent-soft);
-		color: var(--accent-strong);
+		background: var(--accent);
+		color: var(--on-accent);
+		font-weight: 700;
+		white-space: nowrap;
+		box-shadow: 0 0 0 6px var(--surface);
+		animation: point-in 420ms var(--ease-spring) both;
+	}
+
+	.off .point {
+		background: var(--warn);
+		color: oklch(0.2 0.02 60);
+	}
+
+	.point svg {
+		width: 26px;
+		height: 26px;
 		fill: none;
 		stroke: currentColor;
-		stroke-width: 2;
+		stroke-width: 2.6;
 		stroke-linecap: round;
 		stroke-linejoin: round;
+		animation: tick-in 380ms var(--ease-spring) 180ms both;
+	}
+
+	@keyframes point-in {
+		from {
+			opacity: 0;
+			transform: scale(0.4);
+		}
+	}
+
+	@keyframes tick-in {
+		from {
+			opacity: 0;
+			transform: scale(0.3) rotate(-20deg);
+		}
 	}
 
 	.verdict.off {
@@ -301,13 +428,8 @@
 	.links {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 0 20px;
-	}
-
-	.links a {
-		display: inline-flex;
-		align-items: center;
-		min-height: var(--tap);
+		gap: 0 12px;
+		margin-left: -12px;
 	}
 
 	details > summary {
@@ -457,12 +579,5 @@
 	.edit {
 		color: var(--accent-strong);
 		font-weight: 550;
-	}
-
-	.empty {
-		display: grid;
-		gap: 10px;
-		justify-items: start;
-		padding: 24px;
 	}
 </style>

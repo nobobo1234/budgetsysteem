@@ -2,9 +2,10 @@
 	// Een verwachte vaste last op het startscherm. Eén tik bevestigt; bij een wisselende last
 	// vul je eerst het echte bedrag in. Een week na de verwachte dag: gemist of opgezegd?
 	import { enhance, type SubmitFunction } from '$app/forms';
-	import { groupColor } from '#lib/categoryColor.ts';
+	import { groupColor, groupHue } from '#lib/categoryColor.ts';
 	import { formatShortDate } from '#lib/dates.ts';
 	import { centsToInput, formatCents } from '#lib/money.ts';
+	import { displayName, initials } from '#lib/text.ts';
 
 	interface Item {
 		id: string;
@@ -36,6 +37,7 @@
 	let input = $state<HTMLInputElement>();
 
 	const color = $derived(item.categoryGroup ? groupColor(item.categoryGroup) : null);
+	const name = $derived(displayName(item.counterparty));
 
 	const submitting: SubmitFunction = ({ formData }) => {
 		busy = true;
@@ -47,10 +49,10 @@
 			if (result.type === 'success') {
 				ondone(
 					reason === null
-						? `${item.counterparty} bevestigd.`
+						? `${name} bevestigd.`
 						: reason === 'opgezegd'
-							? `${item.counterparty} gestopt.`
-							: `${item.counterparty} deze keer overgeslagen.`
+							? `${name} gestopt.`
+							: `${name} deze keer overgeslagen.`
 				);
 				await update();
 				return;
@@ -71,8 +73,15 @@
 
 <div class={['item', done && 'done']}>
 	<div class="row">
+		<span
+			class={['monogram', 'sm', item.categoryGroup && 'hue']}
+			style:--h={item.categoryGroup ? groupHue(item.categoryGroup) : null}
+			aria-hidden="true">{initials(item.counterparty)}</span
+		>
 		<a class="main" href="/vaste-lasten/{item.recurringId}">
-			<span class="who">{item.counterparty}</span>
+			<span class="who" data-morph-to="/vaste-lasten/{item.recurringId}" data-morph-part="titel"
+				>{name}</span
+			>
 			<span class="meta">
 				<span>verwacht {formatShortDate(item.date)}</span>
 				<span class="category">
@@ -86,7 +95,7 @@
 			<button
 				type="button"
 				class="check"
-				aria-label="Bedrag van {item.counterparty} invullen en bevestigen"
+				aria-label="Bedrag van {name} invullen en bevestigen"
 				onclick={startEdit}
 			>
 				<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
@@ -94,7 +103,7 @@
 		{:else if item.kind === 'vast'}
 			<form method="POST" action="?/confirmExpected" use:enhance={submitting}>
 				<input type="hidden" name="id" value={item.id} />
-				<button class="check" aria-label="Bevestig {item.counterparty}" disabled={busy || done}>
+				<button class="check" aria-label="Bevestig {name}" disabled={busy || done}>
 					<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
 				</button>
 			</form>
@@ -105,7 +114,7 @@
 		<form method="POST" action="?/confirmExpected" use:enhance={submitting} class="edit">
 			<input type="hidden" name="id" value={item.id} />
 			<label class="money">
-				<span class="visually-hidden">Bedrag {item.counterparty}</span>
+				<span class="visually-hidden">Bedrag {name}</span>
 				<span class="prefix" aria-hidden="true">€</span>
 				<input
 					bind:this={input}
@@ -164,7 +173,7 @@
 	.row {
 		display: flex;
 		align-items: center;
-		gap: 12px;
+		gap: 10px;
 		min-height: 48px;
 	}
 

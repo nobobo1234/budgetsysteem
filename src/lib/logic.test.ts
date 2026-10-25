@@ -7,6 +7,7 @@ import {
 	storySentence,
 	type BudgetLine
 } from './budget.ts';
+import { budgetSplit } from './budgetSplit.ts';
 import { groupColor, groupHue } from './categoryColor.ts';
 import { keyboardInset } from './viewport.ts';
 import { addDays, daysInMonth, formatDayHeading, isIsoDate, shiftMonth } from './dates.ts';
@@ -153,6 +154,66 @@ describe('balken op het startscherm', () => {
 	});
 });
 
+describe('vast, dagelijks en vrij op Budget', () => {
+	it('samen de som van de limieten', () => {
+		// Limieten 1000 + 400; huur 850 bevestigd, energie 100 nog te komen, 150 boodschappen
+		const lines = [
+			{ group: 'Vaste lasten', spentCents: 85000, plannedCents: 95000, plannedSpentCents: 85000 },
+			{ group: 'Dagelijks', spentCents: 15000, plannedCents: 0, plannedSpentCents: 0 }
+		];
+		const free = 140000 - 85000 - 15000;
+		const split = budgetSplit(lines, free);
+		expect(split).toEqual({
+			fixedCents: 95000,
+			fixedLeftCents: 10000,
+			dailyCents: 15000,
+			freeCents: 30000
+		});
+		expect(split.fixedCents + split.dailyCents + split.freeCents).toBe(140000);
+	});
+
+	it('uitgaven zonder categorie tellen als dagelijks', () => {
+		expect(budgetSplit([], 5000, 920).dailyCents).toBe(920);
+	});
+
+	it('boven de limieten is er niets vrij', () => {
+		const split = budgetSplit(
+			[{ group: 'Dagelijks', spentCents: 50000, plannedCents: 0, plannedSpentCents: 0 }],
+			-2000
+		);
+		expect(split.freeCents).toBe(0);
+		expect(split.dailyCents).toBe(50000);
+	});
+
+	it('een duurdere afschrijving dan gepland telt als vast', () => {
+		expect(
+			budgetSplit(
+				[{ group: 'Vrije tijd', spentCents: 12000, plannedCents: 10000, plannedSpentCents: 12000 }],
+				0
+			)
+		).toMatchObject({ fixedCents: 12000, fixedLeftCents: 0, dailyCents: 0 });
+	});
+
+	it('een afschrijving in Vaste lasten die nog niet gekoppeld is, telt als vast', () => {
+		// Huur uit de import, zonder vaste last erbij: geen gepland deel, wel vast
+		expect(
+			budgetSplit(
+				[{ group: 'Vaste lasten', spentCents: 85000, plannedCents: 0, plannedSpentCents: 0 }],
+				15000
+			)
+		).toEqual({ fixedCents: 85000, fixedLeftCents: 0, dailyCents: 0, freeCents: 15000 });
+	});
+
+	it('een reservering in een andere groep telt als vast, de rest als dagelijks', () => {
+		expect(
+			budgetSplit(
+				[{ group: 'Vrije tijd', spentCents: 2300, plannedCents: 1500, plannedSpentCents: 1500 }],
+				0
+			)
+		).toMatchObject({ fixedCents: 1500, dailyCents: 800 });
+	});
+});
+
 describe('datums', () => {
 	it('rekent met maanden en schrikkeljaren', () => {
 		expect(daysInMonth('2028-02')).toBe(29);
@@ -257,6 +318,21 @@ describe('kleur per categoriegroep', () => {
 			'Buiten budget'
 		];
 		expect(new Set(groups.map(groupHue)).size).toBe(groups.length);
+	});
+
+	it('geen startgroep in de tint van waarschuwen (oranje) of gevaar (rood)', () => {
+		const distance = (a: number, b: number) => Math.min(Math.abs(a - b), 360 - Math.abs(a - b));
+		for (const group of [
+			'Vaste lasten',
+			'Dagelijks',
+			'Onderweg',
+			'Vrije tijd',
+			'Overig',
+			'Buiten budget'
+		]) {
+			expect(distance(groupHue(group), 58), group).toBeGreaterThanOrEqual(30);
+			expect(distance(groupHue(group), 28), group).toBeGreaterThanOrEqual(30);
+		}
 	});
 
 	it('een onbekende groep krijgt steeds dezelfde tint binnen 0 tot 360', () => {

@@ -10,7 +10,7 @@
 	const target = $derived(backTarget(nav.previous, parents, labels));
 </script>
 
-<a class="back" href={target.href} onclick={() => (nav.back = true)}>
+<a class="back" data-back href={target.href} onclick={() => (nav.back = true)}>
 	<svg viewBox="0 0 20 20" aria-hidden="true">
 		<path
 			d="M12.5 4.5L7 10l5.5 5.5"

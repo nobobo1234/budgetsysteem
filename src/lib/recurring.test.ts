@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { pace, suggestedLimit } from './budget.ts';
 import {
+	priceSteps,
 	amountKind,
 	dateInMonth,
 	detectRecurring,
@@ -396,5 +397,23 @@ describe('tempo met vaste lasten (spec: Tempo met vaste lasten)', () => {
 		expect(r.freeLimitCents).toBe(-301);
 		expect(suggestedLimit(2301)).toBe(2400);
 		expect(suggestedLimit(2300)).toBe(2300);
+	});
+});
+
+describe('prijsverhoging in de reeks afschrijvingen', () => {
+	it('markeert alleen een stap van 2% of meer omhoog', () => {
+		expect(priceSteps([4500, 4500, 4800, 4800, 4850, 4700])).toEqual([
+			null,
+			null,
+			300,
+			null,
+			null,
+			null
+		]);
+	});
+
+	it('een lege of enkele reeks heeft geen verhoging', () => {
+		expect(priceSteps([])).toEqual([]);
+		expect(priceSteps([999])).toEqual([null]);
 	});
 });

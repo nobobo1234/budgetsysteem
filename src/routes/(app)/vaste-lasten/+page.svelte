@@ -1,13 +1,17 @@
 <script lang="ts">
+	import * as icons from '#lib/icons.ts';
 	import { enhance } from '$app/forms';
 	import BackLink from '#lib/components/BackLink.svelte';
+	import EmptyState from '#lib/components/EmptyState.svelte';
+	import MonthStrip from '#lib/components/MonthStrip.svelte';
 	import Select, { type SelectOption } from '#lib/components/Select.svelte';
 	import Switch from '#lib/components/Switch.svelte';
 	import Toast from '#lib/components/Toast.svelte';
-	import { groupColor } from '#lib/categoryColor.ts';
-	import { formatDayMonth, formatShortDate } from '#lib/dates.ts';
+	import { groupColor, groupHue } from '#lib/categoryColor.ts';
+	import { daysInMonth, formatDayMonth, formatMonth, formatShortDate } from '#lib/dates.ts';
 	import { formatCents } from '#lib/money.ts';
 	import { PER_INTERVAL, rhythmText } from '#lib/recurring.ts';
+	import { displayName, initials } from '#lib/text.ts';
 
 	let { data, form } = $props();
 	const o = $derived(data.overview);
@@ -27,6 +31,23 @@
 	]);
 
 	let busy = $state<string | null>(null);
+
+	// De maand als strook: een stip per afschrijving, gevuld als hij al is afgeschreven
+	const month = $derived(data.today.slice(0, 7));
+	const doneCents = $derived(
+		data.charges.filter((c) => c.done).reduce((s, c) => s + c.amountCents, 0)
+	);
+	const monthCents = $derived(data.charges.reduce((s, c) => s + c.amountCents, 0));
+	const dots = $derived(
+		data.charges.map((c, i) => ({
+			key: `${c.recurringId}-${i}`,
+			day: Number(c.date.slice(8, 10)),
+			cents: c.amountCents,
+			done: c.done,
+			color: c.categoryGroup ? groupColor(c.categoryGroup) : null,
+			label: displayName(c.counterparty)
+		}))
+	);
 </script>
 
 <svelte:head>
@@ -37,6 +58,20 @@
 	<div class="head">
 		<BackLink parents={['/budget', '/instellingen', '/']} />
 		<h1 data-morph-head="titel">Vaste lasten</h1>
+		{#if data.charges.length > 0}
+			<section class="month card" aria-labelledby="month-title">
+				<h2 id="month-title" class="visually-hidden">{formatMonth(month)}</h2>
+				<p class="lead">
+					<strong class="num">{formatCents(doneCents, { whole: true })}</strong>
+					<span class="muted"
+						>van <span class="num">{formatCents(monthCents, { whole: true })}</span> al afgeschreven
+						in
+						{formatMonth(month).split(' ')[0]}</span
+					>
+				</p>
+				<MonthStrip {dots} days={daysInMonth(month)} today={Number(data.today.slice(8, 10))} />
+			</section>
+		{/if}
 		<div class="totals card">
 			<div>
 				<span class="muted">Per maand</span>
@@ -61,7 +96,7 @@
 			</div>
 			{#each o.proposals as p (p.id)}
 				<article class="card proposal" aria-labelledby="p-{p.id}">
-					<h3 id="p-{p.id}">Is {p.counterparty} een vaste last?</h3>
+					<h3 id="p-{p.id}">Is {displayName(p.counterparty)} een vaste last?</h3>
 					<p class="muted">
 						{rhythmText(p.interval, p.expectedDay)} ·
 						<span class="num">{formatCents(p.medianCents)}</span>
@@ -76,7 +111,7 @@
 						action="?/confirm"
 						use:enhance={() => {
 							busy = p.id;
-							lastName = p.counterparty;
+							lastName = displayName(p.counterparty);
 							return async ({ update }) => {
 								await update();
 								busy = null;
@@ -94,7 +129,7 @@
 								<Select
 									id="cat-{p.id}"
 									name="categoryId"
-									label="Categorie voor {p.counterparty}"
+									label="Categorie voor {displayName(p.counterparty)}"
 									value={p.categoryId ?? ''}
 									options={categoryOptions}
 								/>
@@ -129,15 +164,19 @@
 	<section class="list" aria-labelledby="active-title">
 		<h2 id="active-title">Lopend</h2>
 		{#if active.length === 0}
-			<div class="empty card">
+			<div class="card">
 				{#if o.proposals.length > 0}
-					<p>Nog geen vaste lasten. Bevestig hierboven welke voorstellen het zijn.</p>
+					<EmptyState
+						icon={icons.vasteLasten}
+						text="Nog geen vaste lasten. Bevestig hierboven welke voorstellen het zijn."
+					/>
 				{:else}
-					<p>
-						Nog geen vaste lasten. Na een import van je bankhistorie stelt de app ze hier voor,
-						zoals huur, energie en abonnementen.
-					</p>
-					<a class="button secondary" href="/import">Historie importeren</a>
+					<EmptyState
+						icon={icons.vasteLasten}
+						text="Nog geen vaste lasten. Na een import van je bankhistorie stelt de app ze hier voor, zoals huur, energie en abonnementen."
+					>
+						<a class="button secondary" href="/import">Historie importeren</a>
+					</EmptyState>
 				{/if}
 			</div>
 		{:else}
@@ -145,8 +184,15 @@
 				{#each active as i (i.id)}
 					<li>
 						<a class="item" href="/vaste-lasten/{i.id}">
+							<span
+								class={['monogram', i.categoryGroup && 'hue']}
+								style:--h={i.categoryGroup ? groupHue(i.categoryGroup) : null}
+								aria-hidden="true">{initials(i.counterparty)}</span
+							>
 							<span class="main">
-								<span class="who">{i.counterparty}</span>
+								<span class="who" data-morph-to="/vaste-lasten/{i.id}" data-morph-part="titel"
+									>{displayName(i.counterparty)}</span
+								>
 								<span class="meta">
 									<span
 										class={['dot', !i.categoryName && 'none']}
@@ -212,10 +258,14 @@
 			<ul>
 				{#each o.stopped as s (s.id)}
 					<li>
-						<a href="/vaste-lasten/{s.id}">{s.counterparty}</a>
-						<span class="muted">
-							{#if s.stoppedAt}gestopt {formatShortDate(s.stoppedAt)} {s.stoppedAt.slice(0, 4)}{/if}
-						</span>
+						<a class="stopped-row" href="/vaste-lasten/{s.id}">
+							<span class="monogram sm" aria-hidden="true">{initials(s.counterparty)}</span>
+							<span class="who">{displayName(s.counterparty)}</span>
+							<span class="muted">
+								{#if s.stoppedAt}gestopt {formatShortDate(s.stoppedAt)}
+									{s.stoppedAt.slice(0, 4)}{/if}
+							</span>
+						</a>
 					</li>
 				{/each}
 			</ul>
@@ -246,6 +296,24 @@
 
 	.section-head {
 		gap: 4px;
+	}
+
+	.month {
+		display: grid;
+		gap: 14px;
+	}
+
+	.lead {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		gap: 4px 8px;
+	}
+
+	.lead strong {
+		font-size: 1.6rem;
+		font-weight: 650;
+		letter-spacing: -0.02em;
 	}
 
 	.totals {
@@ -309,12 +377,6 @@
 		gap: 8px;
 	}
 
-	.empty {
-		display: grid;
-		gap: 12px;
-		justify-items: start;
-	}
-
 	.items {
 		list-style: none;
 		margin: 0;
@@ -330,7 +392,7 @@
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		gap: 16px;
+		gap: 12px;
 		min-height: 64px;
 		margin-inline: -10px;
 		padding: 10px;
@@ -352,6 +414,7 @@
 
 	.main {
 		display: grid;
+		flex: 1;
 		gap: 3px;
 		min-width: 0;
 	}
@@ -451,11 +514,23 @@
 		gap: 4px;
 	}
 
-	.stopped li {
+	.stopped-row {
 		display: flex;
-		justify-content: space-between;
-		gap: 12px;
-		min-height: var(--tap);
 		align-items: center;
+		gap: 10px;
+		min-height: 52px;
+		color: inherit;
+		text-decoration: none;
+	}
+
+	.stopped-row .who {
+		flex: 1;
+		min-width: 0;
+		font-weight: 550;
+	}
+
+	.stopped-row .muted {
+		font-size: 0.9rem;
+		white-space: nowrap;
 	}
 </style>

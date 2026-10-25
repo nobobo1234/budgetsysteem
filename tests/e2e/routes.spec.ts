@@ -29,6 +29,8 @@ const closed = [
 	['GET', '/__data.json'],
 	['GET', '/bestaat-niet'],
 	['POST', '/api/transactions'],
+	['POST', '/transacties?/confirm'],
+	['POST', '/transacties?/category'],
 	['POST', '/api/vitals'],
 	['POST', '/?/confirmExpected'],
 	['POST', '/vaste-lasten?/confirm'],

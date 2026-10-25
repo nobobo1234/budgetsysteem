@@ -1,13 +1,21 @@
 <script lang="ts">
 	import { enhance, type SubmitFunction } from '$app/forms';
 	import BackLink from '#lib/components/BackLink.svelte';
+	import Bars from '#lib/components/Bars.svelte';
 	import Select, { type SelectOption } from '#lib/components/Select.svelte';
 	import Switch from '#lib/components/Switch.svelte';
 	import { groupColor } from '#lib/categoryColor.ts';
 	import { formatDayMonth, formatMonth, formatShortDate, shiftMonth } from '#lib/dates.ts';
 	import { centsToInput, formatCents } from '#lib/money.ts';
-	import { INTERVAL_LABEL, PER_INTERVAL, rhythmText, type Interval } from '#lib/recurring.ts';
+	import {
+		INTERVAL_LABEL,
+		PER_INTERVAL,
+		priceSteps,
+		rhythmText,
+		type Interval
+	} from '#lib/recurring.ts';
 	import { proposedShareCents } from '#lib/shares.ts';
+	import { displayName } from '#lib/text.ts';
 
 	let { data, form } = $props();
 	const item = $derived(data.item);
@@ -19,11 +27,34 @@
 	// svelte-ignore state_referenced_locally
 	let interval = $state<string>(data.item.interval);
 	let saving = $state(false);
+	// Eerst lezen, dan bewerken (spec: Vaste last): het formulier opent via "Bewerken"
+	let editing = $state(false);
 	let confirmStop = $state(false);
 	let addingShare = $state(false);
 	let shareKind = $state<'vast' | 'percentage'>('vast');
 	let sharePerson = $state('');
 	let confirmDelete = $state<string | null>(null);
+
+	const name = $derived(displayName(item.counterparty));
+	const color = $derived(item.categoryGroup ? groupColor(item.categoryGroup) : null);
+
+	// De laatste afschrijvingen als staafjes, oudste links; een prijsverhoging valt op
+	const monthShort = new Intl.DateTimeFormat('nl-NL', { month: 'short' });
+	const chargeBars = $derived.by(() => {
+		const list = [...item.history].reverse();
+		const steps = priceSteps(list.map((t) => t.amountCents));
+		return list.map((t, i) => ({
+			key: t.id,
+			cents: t.amountCents,
+			label: monthShort.format(new Date(`${t.date}T12:00:00`)).replace('.', ''),
+			title: `${formatShortDate(t.date)} ${t.date.slice(0, 4)}: ${formatCents(t.amountCents)}${
+				t.status === 'verwacht' ? ', verwacht' : ''
+			}${steps[i] ? `, ${formatCents(steps[i])} duurder` : ''}`,
+			tone: steps[i] ? ('up' as const) : t.status === 'verwacht' ? ('quiet' as const) : undefined,
+			note: steps[i] ? `+${formatCents(steps[i], { whole: steps[i] >= 1000 })}` : undefined
+		}));
+	});
+	const raised = $derived(chargeBars.filter((b) => b.tone === 'up').length);
 
 	const thisMonth = $derived(data.today.slice(0, 7));
 	const months = $derived(
@@ -79,21 +110,21 @@
 </script>
 
 <svelte:head>
-	<title>{item.counterparty} · Vaste lasten · Budget</title>
+	<title>{name} · Vaste lasten · Budget</title>
 </svelte:head>
 
 <div class="page">
 	<BackLink parents={['/vaste-lasten', '/', '/budget']} />
 
 	<header>
-		<h1>{item.counterparty}</h1>
+		<h1 data-morph-head="titel">{name}</h1>
 		<p class="amount num">
 			{formatCents(item.medianCents)}
 			<span class="per">{PER_INTERVAL[item.interval]}</span>
 		</p>
 		<p class="muted">
-			{rhythmText(item.interval, item.expectedDay)}{#if item.kind === 'wisselend'}
-				· wisselend, tot nu toe <span class="num">{formatCents(item.minCents)}</span> tot
+			{rhythmText(item.interval, item.expectedDay)}{#if item.kind === 'wisselend'}&nbsp;· wisselend,
+				tot nu toe <span class="num">{formatCents(item.minCents)}</span> tot
 				<span class="num">{formatCents(item.maxCents)}</span>{/if}
 		</p>
 		{#if running && item.spread && item.nextDate}
@@ -113,96 +144,182 @@
 		{/if}
 	</header>
 
-	{#if running}
-		<form
-			method="POST"
-			action="?/save"
-			class="card form"
-			use:enhance={() => {
-				saving = true;
-				return async ({ update }) => {
-					await update({ reset: false });
-					saving = false;
-				};
-			}}
-		>
-			<label class="field">
-				<span>Naam</span>
-				<input name="counterparty" value={item.counterparty} maxlength="100" required />
-			</label>
-			<div class="row">
-				<label class="field">
-					<span>Verwacht bedrag</span>
-					<span class="money">
-						<span class="prefix" aria-hidden="true">€</span>
-						<input
-							name="amount"
-							inputmode="decimal"
-							class="num"
-							value={centsToInput(item.medianCents)}
-							autocomplete="off"
-							required
-						/>
-					</span>
-				</label>
-				<fieldset class="field">
-					<legend>Soort</legend>
-					<div class="segmented">
-						<label>
-							<input type="radio" name="kind" value="vast" checked={item.kind === 'vast'} />
-							<span>Vast</span>
-						</label>
-						<label>
-							<input
-								type="radio"
-								name="kind"
-								value="wisselend"
-								checked={item.kind === 'wisselend'}
-							/>
-							<span>Wisselend</span>
-						</label>
-					</div>
-				</fieldset>
-			</div>
-			<div class="row">
-				<div class="field">
-					<label for="rec-interval">Ritme</label>
-					<Select
-						id="rec-interval"
-						name="interval"
-						label="Ritme"
-						bind:value={interval}
-						options={intervalOptions}
-					/>
-				</div>
-				<label class="field">
-					<span>Volgende afschrijving</span>
-					<input type="date" name="nextDate" value={item.nextDate} min={monthStart} required />
-				</label>
-			</div>
-			<div class="field">
-				<label for="rec-category">Categorie</label>
-				<Select
-					id="rec-category"
-					name="categoryId"
-					label="Categorie"
-					value={item.categoryId ?? ''}
-					options={categoryOptions}
-				/>
-			</div>
-			{#if (interval as Interval) !== 'maand'}
-				<Switch
-					name="spread"
-					checked={item.spread}
-					hint="Uit: de afschrijfmaand krijgt het hele bedrag in één keer">Uitsmeren</Switch
+	<section class="card history" aria-labelledby="history-title">
+		<div class="section-head">
+			<h2 id="history-title">Afschrijvingen</h2>
+			{#if raised > 0}
+				<span class="raise-tag"
+					>{raised === 1 ? 'Eén prijsverhoging' : `${raised} prijsverhogingen`}</span
 				>
 			{/if}
-			<div class="save">
-				<button class="button" disabled={saving}>{saving ? 'Opslaan…' : 'Opslaan'}</button>
-				{#if form?.message}<p class="error-text" role="alert">{form.message}</p>{/if}
-				{#if form?.saved && !saving}<p class="saved" role="status">Opgeslagen</p>{/if}
-			</div>
-		</form>
+		</div>
+		{#if chargeBars.length === 0}
+			<p class="tell">
+				Nog geen afschrijvingen gezien. Op de verwachte dag staat hij op je overzicht om te
+				bevestigen.
+			</p>
+		{:else}
+			{#if chargeBars.length > 1}
+				<Bars
+					bars={chargeBars}
+					zoom
+					{color}
+					label="De laatste {chargeBars.length} afschrijvingen{raised > 0
+						? ', met een prijsverhoging'
+						: ''}"
+				/>
+			{/if}
+			<ul class="charges">
+				{#each item.history.slice(0, 4) as t (t.id)}
+					<li>
+						<a class="charge" href="/transacties/{t.id}">
+							<span>{formatShortDate(t.date)} {t.date.slice(0, 4)}</span>
+							{#if t.status === 'verwacht'}<span class="badge">Verwacht</span>{/if}
+							<span class="num">{formatCents(t.amountCents)}</span>
+						</a>
+					</li>
+				{/each}
+			</ul>
+		{/if}
+	</section>
+
+	{#if running}
+		{#if editing}
+			<form
+				method="POST"
+				action="?/save"
+				class="card form"
+				use:enhance={() => {
+					saving = true;
+					return async ({ result, update }) => {
+						await update({ reset: false });
+						saving = false;
+						if (result.type === 'success') editing = false;
+					};
+				}}
+			>
+				<label class="field">
+					<span>Naam</span>
+					<input name="counterparty" value={item.counterparty} maxlength="100" required />
+				</label>
+				<div class="row">
+					<label class="field">
+						<span>Verwacht bedrag</span>
+						<span class="money">
+							<span class="prefix" aria-hidden="true">€</span>
+							<input
+								name="amount"
+								inputmode="decimal"
+								class="num"
+								value={centsToInput(item.medianCents)}
+								autocomplete="off"
+								required
+							/>
+						</span>
+					</label>
+					<fieldset class="field">
+						<legend>Soort</legend>
+						<div class="segmented">
+							<label>
+								<input type="radio" name="kind" value="vast" checked={item.kind === 'vast'} />
+								<span>Vast</span>
+							</label>
+							<label>
+								<input
+									type="radio"
+									name="kind"
+									value="wisselend"
+									checked={item.kind === 'wisselend'}
+								/>
+								<span>Wisselend</span>
+							</label>
+						</div>
+					</fieldset>
+				</div>
+				<div class="row">
+					<div class="field">
+						<label for="rec-interval">Ritme</label>
+						<Select
+							id="rec-interval"
+							name="interval"
+							label="Ritme"
+							bind:value={interval}
+							options={intervalOptions}
+						/>
+					</div>
+					<label class="field">
+						<span>Volgende afschrijving</span>
+						<input type="date" name="nextDate" value={item.nextDate} min={monthStart} required />
+					</label>
+				</div>
+				<div class="field">
+					<label for="rec-category">Categorie</label>
+					<Select
+						id="rec-category"
+						name="categoryId"
+						label="Categorie"
+						value={item.categoryId ?? ''}
+						options={categoryOptions}
+					/>
+				</div>
+				{#if (interval as Interval) !== 'maand'}
+					<Switch
+						name="spread"
+						checked={item.spread}
+						hint="Uit: de afschrijfmaand krijgt het hele bedrag in één keer">Uitsmeren</Switch
+					>
+				{/if}
+				<div class="save">
+					<button class="button" disabled={saving}>{saving ? 'Opslaan…' : 'Opslaan'}</button>
+					<button type="button" class="button secondary" onclick={() => (editing = false)}
+						>Annuleren</button
+					>
+					{#if form?.message}<p class="error-text" role="alert">{form.message}</p>{/if}
+				</div>
+			</form>
+		{:else}
+			<section class="card details" aria-labelledby="details-title">
+				<div class="section-head">
+					<h2 id="details-title">Gegevens</h2>
+					<button type="button" class="button secondary small" onclick={() => (editing = true)}
+						>Bewerken</button
+					>
+				</div>
+				<dl>
+					<div>
+						<dt>Verwacht bedrag</dt>
+						<dd class="num">
+							{formatCents(item.medianCents)}
+							<span class="muted">{item.kind === 'vast' ? 'vast' : 'wisselend'}</span>
+						</dd>
+					</div>
+					<div>
+						<dt>Ritme</dt>
+						<dd>{INTERVAL_LABEL[item.interval]}</dd>
+					</div>
+					<div>
+						<dt>Volgende afschrijving</dt>
+						<dd>{item.nextDate ? formatDayMonth(item.nextDate) : 'Onbekend'}</dd>
+					</div>
+					<div>
+						<dt>Categorie</dt>
+						<dd class="category">
+							<span class={['dot', !color && 'none']} style:--dot={color} aria-hidden="true"></span>
+							{item.categoryName ?? 'Geen categorie'}
+						</dd>
+					</div>
+					{#if item.interval !== 'maand'}
+						<div>
+							<dt>Uitsmeren</dt>
+							<dd>
+								{item.spread ? 'Elke maand een deel opzij' : 'Uit, de afschrijfmaand krijgt alles'}
+							</dd>
+						</div>
+					{/if}
+				</dl>
+				{#if form?.saved}<p class="saved" role="status">Opgeslagen</p>{/if}
+			</section>
+		{/if}
 	{/if}
 
 	{#if running}
@@ -219,8 +336,8 @@
 			{#if raise.length > 0}
 				<div class="raise">
 					<p>
-						{item.counterparty} is duurder geworden. Gaan de aandelen mee? Een voorstel naar verhouding,
-						vanaf volgende maand:
+						{name} is duurder geworden. Gaan de aandelen mee? Een voorstel naar verhouding, vanaf volgende
+						maand:
 					</p>
 					{#each raise as s (s.id)}
 						<form method="POST" action="?/changeShare" use:enhance={keepShare} class="inline">
@@ -496,30 +613,11 @@
 		</section>
 	{/if}
 
-	<section class="card">
-		<h2>Afschrijvingen</h2>
-		{#if item.history.length === 0}
-			<p class="muted">
-				Nog geen posten in de app. Op de verwachte dag staat hij op je overzicht om te bevestigen.
-			</p>
-		{:else}
-			<ul>
-				{#each item.history as t (t.id)}
-					<li>
-						<a href="/transacties/{t.id}">{formatShortDate(t.date)} {t.date.slice(0, 4)}</a>
-						{#if t.status === 'verwacht'}<span class="badge">Verwacht</span>{/if}
-						<span class="num">{formatCents(t.amountCents)}</span>
-					</li>
-				{/each}
-			</ul>
-		{/if}
-	</section>
-
 	{#if running}
 		<form method="POST" action="?/stop" use:enhance class="stop">
 			{#if confirmStop}
 				<p>
-					{item.counterparty} stoppen? Open verwachte posten vervallen{#if item.spread && item.reservedCents > 0},
+					{name} stoppen? Open verwachte posten vervallen{#if item.spread && item.reservedCents > 0},
 						en de <span class="num">{formatCents(item.reservedCents)}</span> die opzij staat valt deze
 						maand vrij{/if}.
 				</p>
@@ -741,6 +839,92 @@
 	li .num {
 		margin-left: auto;
 		font-weight: 600;
+	}
+
+	.section-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		flex-wrap: wrap;
+		gap: 8px 12px;
+	}
+
+	.raise-tag {
+		padding: 2px 10px;
+		border-radius: 999px;
+		background: color-mix(in oklch, var(--warn) 20%, transparent);
+		color: color-mix(in oklch, var(--warn) 60%, var(--text));
+		font-size: 0.85rem;
+		font-weight: 600;
+	}
+
+	.charges {
+		margin-top: 4px;
+	}
+
+	.charge {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		width: 100%;
+		min-height: var(--tap);
+		color: inherit;
+		text-decoration: none;
+	}
+
+	.charge .num {
+		margin-left: auto;
+		font-weight: 600;
+	}
+
+	dl {
+		margin: 0;
+		display: grid;
+	}
+
+	dl > div {
+		display: flex;
+		justify-content: space-between;
+		align-items: baseline;
+		gap: 16px;
+		padding: 10px 0;
+	}
+
+	dl > div + div {
+		border-top: 1px solid var(--line);
+	}
+
+	dt {
+		color: var(--muted);
+	}
+
+	dd {
+		margin: 0;
+		text-align: right;
+		font-weight: 550;
+	}
+
+	dd .muted {
+		font-weight: 400;
+	}
+
+	.category {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+	}
+
+	.dot {
+		flex: none;
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+		background: var(--dot);
+	}
+
+	.dot.none {
+		background: transparent;
+		box-shadow: inset 0 0 0 1.5px var(--muted);
 	}
 
 	.badge {

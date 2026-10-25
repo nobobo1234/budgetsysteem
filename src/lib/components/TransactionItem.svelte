@@ -1,8 +1,9 @@
 <script lang="ts">
-	import { groupColor } from '#lib/categoryColor.ts';
+	import { groupColor, groupHue } from '#lib/categoryColor.ts';
 	import { formatShortDate } from '#lib/dates.ts';
 	import { centsToInput, formatCents } from '#lib/money.ts';
 	import { describeRefund, type RefundInfo } from '#lib/refund.ts';
+	import { displayName, initials } from '#lib/text.ts';
 
 	interface Item {
 		/** Alleen nodig voor de overgang naar de detailpagina */
@@ -29,6 +30,8 @@
 	}: { tx: Item; pending?: boolean; error?: string; href?: string; showDate?: boolean } = $props();
 
 	const color = $derived(tx.categoryName ? groupColor(tx.categoryGroup ?? tx.categoryName) : null);
+	// Monogram in de tint van de groep; zonder categorie grijs
+	const monoHue = $derived(tx.categoryName ? groupHue(tx.categoryGroup ?? tx.categoryName) : null);
 	const refund = $derived(tx.refund ? describeRefund(tx.refund, tx.counterparty) : null);
 	const orig = $derived(
 		tx.origCurrency && tx.origAmountCents !== null
@@ -38,9 +41,12 @@
 </script>
 
 <svelte:element this={href ? 'a' : 'div'} {href} class={['item', href && 'link']}>
+	<span class={['monogram', monoHue !== null && 'hue']} style:--h={monoHue} aria-hidden="true"
+		>{initials(tx.counterparty || '?')}</span
+	>
 	<div class="main">
 		<span class="who" data-tx-name={href ? tx.id : undefined}
-			>{tx.counterparty || 'Zonder naam'}</span
+			>{displayName(tx.counterparty) || 'Zonder naam'}</span
 		>
 		<span class="meta">
 			{#if refund}
@@ -95,7 +101,7 @@
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		gap: 16px;
+		gap: 12px;
 		min-height: 64px;
 		padding: 10px 0;
 		color: inherit;
@@ -121,6 +127,7 @@
 
 	.main {
 		display: grid;
+		flex: 1;
 		gap: 3px;
 		min-width: 0;
 	}

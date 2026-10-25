@@ -159,6 +159,15 @@
 		if (mirror && input) mirror.scrollLeft = input.scrollLeft;
 	}
 
+	// Na opslaan is de knop even een vinkje (spec: Beweging), tegelijk met het opslaan
+	let done = $state(false);
+	let doneTimer: ReturnType<typeof setTimeout> | undefined;
+	function flashDone() {
+		done = true;
+		clearTimeout(doneTimer);
+		doneTimer = setTimeout(() => (done = false), 1200);
+	}
+
 	async function save(event: SubmitEvent) {
 		event.preventDefault();
 		if (!canSave || parsed.amountCents === null || !accountId) return;
@@ -187,6 +196,7 @@
 		};
 		try {
 			await enqueue(item);
+			flashDone();
 			onsaved(item);
 			reset();
 		} finally {
@@ -235,7 +245,17 @@
 			spellcheck="false"
 			aria-describedby="quick-chips"
 		/>
-		<button class="button save" disabled={!canSave} aria-label="Opslaan">Opslaan</button>
+		<button
+			class={['button', 'save', done && 'done']}
+			disabled={!canSave && !done}
+			aria-label="Opslaan"
+		>
+			<span class="label">Opslaan</span>
+			<svg class="tick" viewBox="0 0 24 24" aria-hidden="true"
+				><path d="M5.5 12.5l4.5 4.5 8.5-9.5" /></svg
+			>
+		</button>
+		<span class="visually-hidden" role="status">{done ? 'Opgeslagen' : ''}</span>
 	</div>
 
 	<div id="quick-chips" class="chips" aria-live="polite">
@@ -543,8 +563,56 @@
 	}
 
 	.save {
+		position: relative;
 		height: 56px;
 		padding: 0 20px;
+		transition: transform 160ms var(--ease-spring);
+	}
+
+	/* Uit: rustig en scherp, geen troebele doorschijnende accentkleur */
+	.save[disabled] {
+		opacity: 1;
+		background: var(--surface-2);
+		color: var(--muted);
+		box-shadow: inset 0 0 0 1px var(--line);
+	}
+
+	.save .label,
+	.save .tick {
+		transition:
+			opacity 160ms var(--ease-out),
+			transform 260ms var(--ease-spring);
+	}
+
+	.save .tick {
+		position: absolute;
+		inset: 0;
+		margin: auto;
+		width: 26px;
+		height: 26px;
+		fill: none;
+		stroke: currentColor;
+		stroke-width: 2.6;
+		stroke-linecap: round;
+		stroke-linejoin: round;
+		opacity: 0;
+		transform: scale(0.4);
+	}
+
+	.save.done {
+		background: var(--accent);
+		color: var(--on-accent);
+		box-shadow: none;
+	}
+
+	.save.done .label {
+		opacity: 0;
+		transform: scale(0.8);
+	}
+
+	.save.done .tick {
+		opacity: 1;
+		transform: scale(1);
 	}
 
 	.chips {

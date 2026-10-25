@@ -23,9 +23,11 @@ import { applyShare, shareFromNames } from '../../src/lib/server/owed.ts';
 import {
 	MONTHLY_JOB,
 	awaitingConfirmation,
+	chargesThisMonth,
 	confirmExpected,
 	confirmProposal,
 	generateMonth,
+	getRecurring,
 	onRecurringEvent,
 	recurringOverview,
 	refreshProposals,
@@ -729,5 +731,68 @@ describe('migratie', () => {
 		} finally {
 			rmSync(dir, { recursive: true, force: true });
 		}
+	});
+});
+
+// C12 en C13: de afschrijvingen uit de import tellen mee, ook al zijn ze niet gekoppeld
+describe('afschrijvingen op Vaste lasten en de detailpagina', () => {
+	it('de detailpagina toont ook de afschrijvingen uit de historie, met een prijsverhoging', () => {
+		history([
+			['2026-06-05', 4500, 'ZIGGO SERVICES BV', null],
+			['2026-07-05', 4500, 'ZIGGO SERVICES BV', null],
+			['2026-08-05', 4800, 'ZIGGO SERVICES BV', null],
+			['2026-09-05', 4800, 'ZIGGO SERVICES BV', null],
+			['2026-09-12', 1099, 'Spotify AB', null]
+		]);
+		refreshProposals(db, '2026-09-24');
+		const p = proposal('ZIGGO SERVICES BV');
+		confirmProposal(
+			db,
+			p.id,
+			{ nextDate: '2026-10-05', categoryId: null, spread: false },
+			'2026-09-24'
+		);
+		const item = getRecurring(db, p.id, '2026-09-24')!;
+		// Nieuwste eerst, positieve centen; Spotify hoort er niet bij
+		expect(item.history.map((h) => [h.date, h.amountCents])).toEqual([
+			['2026-09-05', 4800],
+			['2026-08-05', 4800],
+			['2026-07-05', 4500],
+			['2026-06-05', 4500]
+		]);
+		// Na de maandjob staat de verwachte post van oktober vooraan
+		generateMonth(db, '2026-10');
+		const later = getRecurring(db, p.id, '2026-10-02')!;
+		expect(later.history[0]).toMatchObject({ date: '2026-10-05', status: 'verwacht' });
+	});
+
+	it('de maandstrook: al afgeschreven uit de import, en wat nog komt', () => {
+		rentHistory();
+		history([
+			['2026-07-28', 9500, 'Vattenfall', null],
+			['2026-08-28', 10100, 'Vattenfall', null],
+			['2026-09-28', 9800, 'Vattenfall', null]
+		]);
+		refreshProposals(db, '2026-10-24');
+		const rent = proposal('Woonstichting');
+		const energy = proposal('Vattenfall');
+		confirmProposal(
+			db,
+			rent.id,
+			{ nextDate: '2026-11-01', categoryId: cat('Wonen'), spread: false },
+			'2026-10-24'
+		);
+		confirmProposal(
+			db,
+			energy.id,
+			{ nextDate: '2026-10-28', categoryId: null, spread: false },
+			'2026-10-24'
+		);
+		const charges = chargesThisMonth(db, '2026-10-24');
+		expect(charges.map((c) => [c.date, c.amountCents, c.done])).toEqual([
+			['2026-10-01', 85000, true],
+			['2026-10-28', 9800, false]
+		]);
+		expect(charges[0]).toMatchObject({ recurringId: rent.id, categoryGroup: 'Vaste lasten' });
 	});
 });
