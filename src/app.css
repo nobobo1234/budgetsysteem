@@ -246,6 +246,70 @@ textarea {
 	padding: var(--space);
 }
 
+.hue {
+	--ink: oklch(0.5 0.13 var(--h));
+	--wash: oklch(0.62 0.14 var(--h) / 0.14);
+}
+
+@media (prefers-color-scheme: dark) {
+	.hue {
+		--ink: oklch(0.8 0.11 var(--h));
+		--wash: oklch(0.7 0.12 var(--h) / 0.16);
+	}
+}
+
+/* Icoon in een getint vlak: tegels op Meer en signaalkaartjes (tint via --h, zie icons.ts) */
+.icon-badge {
+	display: grid;
+	place-items: center;
+	flex: none;
+	width: 40px;
+	height: 40px;
+	border-radius: 12px;
+	background: var(--wash);
+	color: var(--ink);
+	transition: transform 260ms var(--ease-spring);
+}
+
+.icon-badge svg {
+	width: 22px;
+	height: 22px;
+}
+
+/* Link naar een volledige lijst of pagina, naast een kop: een pil met een pijl */
+.more-link {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	min-height: var(--tap);
+	padding: 0 4px 0 12px;
+	border-radius: 999px;
+	color: var(--accent-strong);
+	font-weight: 600;
+	font-size: 0.95rem;
+	text-decoration: none;
+	white-space: nowrap;
+	transition: transform 160ms var(--ease-spring);
+}
+
+.more-link::after {
+	content: '';
+	width: 18px;
+	height: 18px;
+	background: currentColor;
+	mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M7.5 4.5 13 10l-5.5 5.5' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+		center / contain no-repeat;
+	transition: transform 200ms var(--ease-out);
+}
+
+.more-link:hover::after {
+	transform: translateX(2px);
+}
+
+.more-link:active {
+	transform: scale(0.96);
+}
+
 .visually-hidden {
 	position: absolute;
 	width: 1px;
@@ -308,6 +372,16 @@ textarea {
 [data-tx-name],
 [data-tx-amount] {
 	view-transition-class: tx;
+}
+
+[data-morph-to],
+[data-morph-head] {
+	view-transition-class: morph;
+}
+
+::view-transition-group(*.morph) {
+	animation-duration: 340ms;
+	animation-timing-function: var(--ease-out);
 }
 
 ::view-transition-group(*.tx) {

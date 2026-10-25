@@ -1,12 +1,14 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
-	import { refreshAll } from '$app/navigation';
+	import { onNavigate, refreshAll } from '$app/navigation';
+	import { activeTab } from '#lib/nav.ts';
+	import { nav } from '#lib/nav.svelte.ts';
 	import { flush } from '#lib/offline/queue.ts';
 	import { sync } from '#lib/offline/sync.svelte.ts';
 	import { refreshSubscription } from '#lib/push.ts';
 
-	let { children } = $props();
+	let { children, data } = $props();
 
 	// Eenvoudige lijn-iconen (24×24), zodat je de tabs ook herkent zonder te lezen
 	const links = [
@@ -29,12 +31,13 @@
 		}
 	] as const;
 
-	// Vaste lasten horen bij Budget: daar zit je via de link op de budgetpagina
-	const active = (href: string) =>
-		href === '/'
-			? page.url.pathname === '/'
-			: page.url.pathname.startsWith(href) ||
-				(href === '/budget' && page.url.pathname.startsWith('/vaste-lasten'));
+	// Een subpagina laat de tab van haar ouder actief, zoals Budget bij vaste lasten
+	const current = $derived(activeTab(page.url.pathname));
+
+	// Voor de terugknop: de pagina waar je vandaan komt, met haar zoekopdracht
+	onNavigate(({ from }) => {
+		nav.previous = from ? from.url.pathname + from.url.search : null;
+	});
 
 	async function trySync() {
 		const result = await flush();
@@ -80,18 +83,27 @@
 
 	<nav aria-label="Hoofdmenu">
 		{#each links as link (link.href)}
-			<a href={link.href} aria-current={active(link.href) ? 'page' : undefined}>
-				<svg viewBox="0 0 24 24" aria-hidden="true">
-					<path
-						d={link.icon}
-						fill="none"
-						stroke="currentColor"
-						stroke-width={link.href === '/instellingen' ? 3 : 1.7}
-						stroke-linecap="round"
-						stroke-linejoin="round"
-					/>
-				</svg>
-				<span>{link.label}</span>
+			<a href={link.href} aria-current={current === link.href ? 'page' : undefined}>
+				<span class="icon">
+					<svg viewBox="0 0 24 24" aria-hidden="true">
+						<path
+							d={link.icon}
+							fill="none"
+							stroke="currentColor"
+							stroke-width={link.href === '/instellingen' ? 3 : 1.7}
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						/>
+					</svg>
+					{#if link.href === '/instellingen' && data.meerAttention}
+						<span class="dot" aria-hidden="true"></span>
+					{/if}
+				</span>
+				<span
+					>{link.label}{#if link.href === '/instellingen' && data.meerAttention}<span
+							class="visually-hidden">, vraagt aandacht</span
+						>{/if}</span
+				>
 			</a>
 		{/each}
 	</nav>
@@ -159,6 +171,31 @@
 	nav svg {
 		width: 22px;
 		height: 22px;
+	}
+
+	.icon {
+		position: relative;
+		display: grid;
+	}
+
+	/* Stip op Meer: daar vraagt iets aandacht */
+	.dot {
+		position: absolute;
+		top: -1px;
+		right: -3px;
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+		background: var(--warn);
+		box-shadow: 0 0 0 2px var(--bg);
+		animation: dot-in 400ms var(--ease-spring) both;
+	}
+
+	@keyframes dot-in {
+		from {
+			opacity: 0;
+			transform: scale(0.3);
+		}
 	}
 
 	nav a[aria-current='page'] {

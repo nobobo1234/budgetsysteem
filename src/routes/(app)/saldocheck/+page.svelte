@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { enhance, type SubmitFunction } from '$app/forms';
+	import BackLink from '#lib/components/BackLink.svelte';
 	import Toast from '#lib/components/Toast.svelte';
 	import { formatShortDate } from '#lib/dates.ts';
 	import { formatCents } from '#lib/money.ts';
@@ -41,7 +42,8 @@
 
 <div class="page">
 	<div class="intro">
-		<h1>Saldocheck</h1>
+		<BackLink parents={['/instellingen', '/']} />
+		<h1 data-morph-head="titel">Saldocheck</h1>
 		<p class="muted">
 			Vul eens per maand het saldo van je rekeningen in. Wijkt het af van wat de app verwacht, dan
 			mist er waarschijnlijk een boeking.

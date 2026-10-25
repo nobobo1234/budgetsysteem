@@ -113,7 +113,9 @@ for (const path of [
 	'/personen',
 	'/instellingen/status',
 	'/saldocheck',
-	'/instellingen/meldingen'
+	'/instellingen/meldingen',
+	'/instellingen/beveiliging',
+	'/instellingen/rekeningen'
 ]) {
 	test(`${path} past op een telefoonscherm`, async ({ page }) => {
 		await page.goto(path);
@@ -169,6 +171,20 @@ for (const [size, viewport] of [
 		await expect(page.locator('.rules')).toContainText(pattern);
 	});
 }
+
+// Meer is een overzicht van tegels; een subpagina gaat met de terugknop terug naar waar je
+// vandaan kwam, en de tab Meer blijft actief (spec: Schermen, Navigatie)
+test('Meer: een tegel opent zijn pagina, de terugknop gaat terug', async ({ page }) => {
+	await page.goto('/instellingen');
+	await expect(page.getByRole('heading', { level: 1 })).toHaveText('Meer');
+	await page.waitForLoadState('networkidle');
+	await page.getByRole('link', { name: /^Rekeningen/ }).click();
+	await expect(page.getByRole('heading', { level: 1 })).toHaveText('Rekeningen');
+	const nav = page.getByRole('navigation', { name: 'Hoofdmenu' });
+	await expect(nav.getByRole('link', { name: /^Meer/ })).toHaveAttribute('aria-current', 'page');
+	await page.getByRole('main').getByRole('link', { name: 'Meer' }).click();
+	await expect(page.getByRole('heading', { level: 1 })).toHaveText('Meer');
+});
 
 // Schermwissel met View Transitions (spec: Beweging): de navigatie komt altijd aan, ook met
 // gedeelde elementen tussen de lijst en de detailpagina

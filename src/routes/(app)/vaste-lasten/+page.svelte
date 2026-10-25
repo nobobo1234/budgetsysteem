@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import BackLink from '#lib/components/BackLink.svelte';
 	import Select, { type SelectOption } from '#lib/components/Select.svelte';
 	import Switch from '#lib/components/Switch.svelte';
 	import Toast from '#lib/components/Toast.svelte';
@@ -34,7 +35,8 @@
 
 <div class="page">
 	<div class="head">
-		<h1>Vaste lasten</h1>
+		<BackLink parents={['/budget', '/instellingen', '/']} />
+		<h1 data-morph-head="titel">Vaste lasten</h1>
 		<div class="totals card">
 			<div>
 				<span class="muted">Per maand</span>

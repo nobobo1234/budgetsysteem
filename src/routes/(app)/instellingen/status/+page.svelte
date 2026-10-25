@@ -1,4 +1,5 @@
 <script lang="ts">
+	import BackLink from '#lib/components/BackLink.svelte';
 	import { invalidateAll } from '$app/navigation';
 	import { formatShortDate } from '#lib/dates.ts';
 	import {
@@ -33,20 +34,8 @@
 
 <div class="page" class:refreshing aria-busy={refreshing}>
 	<div class="intro">
-		<a class="back" href="/instellingen">
-			<svg viewBox="0 0 20 20" aria-hidden="true">
-				<path
-					d="M12.5 4.5L7 10l5.5 5.5"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="1.8"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-				/>
-			</svg>
-			Meer
-		</a>
-		<h1>Status</h1>
+		<BackLink parents={['/instellingen']} />
+		<h1 data-morph-head="titel">Status</h1>
 	</div>
 
 	<section
@@ -204,21 +193,6 @@
 		display: grid;
 		gap: 4px;
 		justify-items: start;
-	}
-
-	.back {
-		display: inline-flex;
-		align-items: center;
-		gap: 2px;
-		min-height: var(--tap);
-		margin-left: -6px;
-		text-decoration: none;
-		font-weight: 550;
-	}
-
-	.back svg {
-		width: 20px;
-		height: 20px;
 	}
 
 	section {

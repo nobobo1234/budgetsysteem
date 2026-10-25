@@ -45,7 +45,7 @@ import {
 	withRefunds
 } from '../../src/lib/server/transactions.ts';
 import { newTransactionSchema } from '../../src/lib/server/validation.ts';
-import { actions as settingsActions } from '../../src/routes/(app)/instellingen/+page.server.ts';
+import { actions as settingsActions } from '../../src/routes/(app)/instellingen/rekeningen/+page.server.ts';
 import { load as transactionsLoad } from '../../src/routes/(app)/transacties/+page.server.ts';
 import { ORIGIN, tempDatabase } from './helpers.ts';
 
@@ -620,7 +620,10 @@ describe('personen', () => {
 		const body = new FormData();
 		for (const [k, v] of Object.entries({ id: sns, name: 'SNS', alias: 'sns', iban: IBAN_SANNE }))
 			body.set(k, v);
-		const request = new Request(`${ORIGIN}/instellingen?/account`, { method: 'POST', body });
+		const request = new Request(`${ORIGIN}/instellingen/rekeningen?/account`, {
+			method: 'POST',
+			body
+		});
 		const result = await settingsActions.account!({
 			request,
 			locals: { session: { id: 'test' } }

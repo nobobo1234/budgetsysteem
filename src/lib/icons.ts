@@ -1,0 +1,34 @@
+// Lijn-iconen (24×24, stroke) in de stijl van de tabbalk, gedeeld door de tegels op Meer en de
+// signaalkaartjes op het startscherm. Elk onderwerp heeft een eigen tint (oklch-hue).
+
+export const ICONS = {
+	teKrijgen: { hue: 169, path: 'M20 12a8 8 0 1 1-8-8 M20 4l-6.5 6.5 M13 6v5h5' },
+	terugbetalingen: { hue: 200, path: 'M4 9h14l-3.5-3.5 M20 15H6l3.5 3.5' },
+	vasteLasten: {
+		hue: 58,
+		path: 'M5 5.5h14V20H5z M5 10h14 M9 3.5v4 M15 3.5v4 M8.5 14h2 M13.5 14h2'
+	},
+	saldocheck: {
+		hue: 250,
+		path: 'M12 4v16 M7 20h10 M5 7.5h14 M5 7.5 2.5 13a2.5 2.5 0 0 0 5 0z M19 7.5 16.5 13a2.5 2.5 0 0 0 5 0z'
+	},
+	controleren: {
+		hue: 30,
+		path: 'M10.5 17a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13z M15.5 15.5 20 20 M10.5 8v3.5 M10.5 14h.01'
+	},
+	categorieen: { hue: 300, path: 'M3.5 12V4h8l9 9-8 8z M8 8.5h.01' },
+	regels: { hue: 330, path: 'M4 6h16 M4 12h9 M4 18h6 M16 14l3.5 3.5L16 21' },
+	personen: {
+		hue: 20,
+		path: 'M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z M2.5 20a6.5 6.5 0 0 1 13 0 M16 4.3a3.5 3.5 0 0 1 0 6.4 M18.5 14.2A6.5 6.5 0 0 1 21.5 20'
+	},
+	meldingen: { hue: 80, path: 'M6 16v-5a6 6 0 1 1 12 0v5l1.5 2h-15z M10 20.5a2 2 0 0 0 4 0' },
+	rekeningen: { hue: 220, path: 'M3 6h18v12H3z M3 10.5h18 M7 15h4' },
+	beveiliging: {
+		hue: 150,
+		path: 'M12 3l8 3v6c0 4.4-3.4 7.9-8 9-4.6-1.1-8-4.6-8-9V6z M9 12l2.2 2.2L15.5 10'
+	},
+	status: { hue: 270, path: 'M3 12h4l2.5-6 5 12 2.5-6h4' }
+} as const;
+
+export type IconName = keyof typeof ICONS;

@@ -4,6 +4,7 @@
 	import { invalidateAll } from '$app/navigation';
 	import { postJson, sendJson } from '#lib/api.ts';
 	import { currentSubscription, pushSupported, syncSubscription } from '#lib/push.ts';
+	import BackLink from '#lib/components/BackLink.svelte';
 	import Toast from '#lib/components/Toast.svelte';
 	import {
 		LOCKSCREEN_SETTING,
@@ -192,7 +193,8 @@
 
 <div class="page">
 	<div class="intro">
-		<h1>Meldingen</h1>
+		<BackLink parents={['/instellingen']} />
+		<h1 data-morph-head="titel">Meldingen</h1>
 		<p class="muted">
 			Pushmeldingen via de app op je beginscherm. Elke soort staat apart aan of uit.
 		</p>

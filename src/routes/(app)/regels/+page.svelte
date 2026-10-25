@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { tick } from 'svelte';
 	import { enhance, type SubmitFunction } from '$app/forms';
+	import BackLink from '#lib/components/BackLink.svelte';
 	import ManageTabs from '#lib/components/ManageTabs.svelte';
 	import Select, { type SelectOption } from '#lib/components/Select.svelte';
 	import Toast from '#lib/components/Toast.svelte';
@@ -81,7 +82,8 @@
 
 <div class="page">
 	<div class="intro">
-		<h1>Regels</h1>
+		<BackLink parents={['/budget', '/instellingen']} />
+		<h1 data-morph-head="titel">Regels</h1>
 		<p class="muted">
 			Regels geven transacties automatisch een categorie, ook bestaande. Een categorie die je zelf
 			kiest, blijft staan.

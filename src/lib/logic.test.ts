@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { freeThisMonth, pace } from './budget.ts';
+import {
+	freeThisMonth,
+	homeBars,
+	monthStory,
+	pace,
+	storySentence,
+	type BudgetLine
+} from './budget.ts';
 import { groupColor, groupHue } from './categoryColor.ts';
 import { keyboardInset } from './viewport.ts';
 import { addDays, daysInMonth, formatDayHeading, isIsoDate, shiftMonth } from './dates.ts';
@@ -37,6 +44,112 @@ describe('tempo', () => {
 		];
 		expect(freeThisMonth(budgets)).toBe(17000);
 		expect(freeThisMonth(budgets, 2500)).toBe(14500);
+	});
+});
+
+describe('verhaal onder nog vrij', () => {
+	const line = (
+		limitCents: number,
+		spentCents: number,
+		plannedCents = 0,
+		plannedSpentCents = 0
+	) => ({
+		limitCents,
+		spentCents,
+		plannedCents,
+		plannedSpentCents
+	});
+
+	it('per dag: vrij min de vaste lasten die nog komen, gedeeld door de dagen incl. vandaag', () => {
+		// Huur €685 gepland en bevestigd, energie €90 nog te komen; boodschappen €100 van €350
+		const lines = [line(68500, 68500, 68500, 68500), line(9000, 0, 9000, 0), line(35000, 10000)];
+		const free = 68500 + 9000 + 35000 - 68500 - 10000; // 34000
+		const story = monthStory(lines, free, 25, 31);
+		expect(story.daysLeft).toBe(7);
+		expect(story.plannedLeftCents).toBe(9000);
+		expect(story.spendableCents).toBe(25000);
+		expect(story.perDayCents).toBe(Math.floor(25000 / 7));
+		expect(storySentence(story, free)).toMatch(
+			/^Nog 7 dagen, ongeveer €\s36 per dag\. Je houdt het rustig\.$/
+		);
+	});
+
+	it('de maandlijn telt op tot hooguit 1', () => {
+		const story = monthStory([line(10000, 9000, 5000, 0)], 1000, 10, 30);
+		expect(story.spentShare).toBeCloseTo(0.9);
+		expect(story.plannedShare).toBeCloseTo(0.1);
+		expect(story.spentShare + story.plannedShare).toBeLessThanOrEqual(1);
+	});
+
+	it('zegt het eerlijk als er niets meer vrij is', () => {
+		const lines = [line(10000, 9500, 1000, 0)];
+		expect(storySentence(monthStory(lines, 500, 20, 30), 500)).toMatch(/niets meer vrij/);
+		expect(storySentence(monthStory(lines, -2500, 20, 30), -2500)).toMatch(
+			/^Je zit €\s25 boven je limieten\.$/
+		);
+	});
+
+	it('op de laatste dag geen gemiddelde per dag', () => {
+		const story = monthStory([line(10000, 4000)], 6000, 31, 31);
+		expect(story.daysLeft).toBe(1);
+		expect(storySentence(story, 6000)).toMatch(/^Laatste dag van de maand, nog €\s60\.$/);
+	});
+
+	it('tempo over alle limieten samen, zonder geplande posten', () => {
+		// Op dag 15 van 30 al 80% van het vrije deel uitgegeven
+		const story = monthStory([line(10000, 8000), line(50000, 50000, 50000, 50000)], 2000, 15, 30);
+		expect(story.pace).toBe('snel');
+	});
+});
+
+describe('balken op het startscherm', () => {
+	const bar = (
+		name: string,
+		group: string,
+		limitCents: number,
+		spentCents: number,
+		plannedCents = 0
+	): BudgetLine => {
+		const r = pace({
+			spentCents,
+			limitCents,
+			plannedCents,
+			plannedSpentCents: plannedCents,
+			day: 20,
+			daysInMonth: 30
+		});
+		return {
+			categoryId: name,
+			name,
+			group,
+			limitCents,
+			spentCents,
+			plannedCents,
+			plannedSpentCents: plannedCents,
+			...r
+		};
+	};
+
+	it('vaste lasten samen, de rest op wat het dichtst bij de limiet zit', () => {
+		const lines = [
+			bar('Wonen', 'Vaste lasten', 68500, 68500, 68500),
+			bar('Energie', 'Vaste lasten', 9000, 8700, 8700),
+			bar('Boodschappen', 'Dagelijks', 35000, 5000),
+			bar('Uit eten', 'Dagelijks', 10000, 9500),
+			bar('Uitgaan', 'Vrije tijd', 8000, 9000),
+			bar('Vervoer', 'Onderweg', 6000, 3000),
+			bar('Kleding', 'Overig', 5000, 500),
+			bar('Sport', 'Vrije tijd', 0, 0)
+		];
+		const { fixed, top, more } = homeBars(lines, 20, 30);
+		expect(fixed).toMatchObject({ limitCents: 77500, spentCents: 77200, count: 2 });
+		expect(top.map((l) => l.name)).toEqual(['Uitgaan', 'Uit eten', 'Vervoer', 'Boodschappen']);
+		// Sport heeft geen limiet en geen uitgaven: telt niet mee
+		expect(more).toBe(1);
+	});
+
+	it('zonder vaste lasten geen samengevoegde balk', () => {
+		expect(homeBars([bar('Boodschappen', 'Dagelijks', 35000, 5000)], 20, 30).fixed).toBeNull();
 	});
 });
 

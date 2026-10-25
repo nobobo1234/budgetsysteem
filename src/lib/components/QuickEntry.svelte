@@ -16,13 +16,16 @@
 
 	let {
 		context,
-		onsaved
+		onsaved,
+		suggestions = []
 	}: {
 		context: Omit<ResolveContext, 'accounts' | 'categories'> & {
 			accounts: readonly (AccountRef & { name: string })[];
 			categories: readonly (CategoryRef & { group?: string })[];
 		};
 		onsaved: (item: QueuedTransaction) => void;
+		/** Tegenpartijen die je vaak zelf invoert: chips onder een leeg veld */
+		suggestions?: readonly string[];
 	} = $props();
 
 	let value = $state('');
@@ -145,6 +148,13 @@
 		input.focus();
 	}
 
+	// Een suggestie zet de naam in het veld; daarna typ je alleen het bedrag
+	function suggest(name: string) {
+		value = `${name} `;
+		input.focus();
+		requestAnimationFrame(() => input.setSelectionRange(value.length, value.length));
+	}
+
 	function syncScroll() {
 		if (mirror && input) mirror.scrollLeft = input.scrollLeft;
 	}
@@ -229,6 +239,18 @@
 	</div>
 
 	<div id="quick-chips" class="chips" aria-live="polite">
+		{#if value === '' && suggestions.length > 0}
+			<span class="visually-hidden">Vaak ingevoerd:</span>
+			{#each suggestions as name, i (name)}
+				<button
+					type="button"
+					class="chip suggestion"
+					style:--i={i}
+					aria-label="{name} invoeren"
+					onclick={() => suggest(name)}>{name}</button
+				>
+			{/each}
+		{/if}
 		{#if parsed.amountCents !== null}
 			<span class="chip bedrag">
 				<span class="visually-hidden">{kindLabel.bedrag}:</span>
@@ -543,6 +565,23 @@
 		background: var(--chip-bg);
 		font-size: 0.95rem;
 		animation: chip-in 160ms var(--ease-out);
+	}
+
+	.suggestion {
+		max-width: 14rem;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		border: 1px dashed var(--line);
+		background: transparent;
+		color: var(--muted);
+		animation-delay: calc(var(--i) * 40ms);
+		animation-fill-mode: both;
+		transition: transform 160ms var(--ease-spring);
+	}
+
+	.suggestion:active {
+		transform: scale(0.95);
 	}
 
 	button.chip {

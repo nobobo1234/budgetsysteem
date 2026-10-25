@@ -1,288 +1,301 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { enhance, type SubmitFunction } from '$app/forms';
-	import { page } from '$app/state';
-	import { refreshAll } from '$app/navigation';
-	import { startAuthentication, startRegistration } from '@simplewebauthn/browser';
-	import type {
-		PublicKeyCredentialCreationOptionsJSON,
-		PublicKeyCredentialRequestOptionsJSON
-	} from '@simplewebauthn/browser';
-	import { passkeyErrorMessage, postJson } from '#lib/api.ts';
+	import { ICONS, type IconName } from '#lib/icons.ts';
+	import { formatCents } from '#lib/money.ts';
 
-	let { data, form } = $props();
-	let message = $state('');
-	let busy = $state(false);
-	// Passkey-knoppen werken alleen met JavaScript: pas actief na hydratatie
-	let ready = $state(false);
-	onMount(() => {
-		ready = true;
-	});
+	let { data } = $props();
+	const t = $derived(data.tiles);
 
-	const fromRecovery = $derived(page.url.searchParams.has('herstel'));
-	const dateTime = new Intl.DateTimeFormat('nl-NL', { dateStyle: 'medium', timeStyle: 'short' });
-	const when = (iso: string | null) => (iso ? dateTime.format(new Date(iso)) : 'nooit');
+	const plural = (n: number, one: string, more: string) => `${n} ${n === 1 ? one : more}`;
+	const names = (list: string[]) =>
+		list.length <= 1 ? (list[0] ?? '') : `${list.slice(0, -1).join(', ')} en ${list.at(-1)}`;
 
-	/** Gevoelige acties vragen altijd opnieuw om je passkey (spec: Beveiliging, laag 3). */
-	async function reauth(): Promise<boolean> {
-		// Na inloggen met de herstelcode is er nog geen passkey; die sessie is net bevestigd
-		if (data.passkeys.length === 0) return data.reauthFresh;
-		const options = await postJson<PublicKeyCredentialRequestOptionsJSON>(
-			'/api/auth/reauth/options'
-		);
-		if (!options.ok) {
-			message = options.message;
-			return false;
-		}
-		try {
-			const response = await startAuthentication({ optionsJSON: options.data });
-			const result = await postJson('/api/auth/reauth/verify', response);
-			if (!result.ok) message = result.message;
-			return result.ok;
-		} catch (e) {
-			message = passkeyErrorMessage(e);
-			return false;
-		}
+	interface Tile {
+		href: string;
+		title: string;
+		value: string;
+		icon: IconName;
+		/** Vraagt aandacht: stip en waarschuwende waarde */
+		warn?: boolean;
 	}
 
-	async function addPasskey() {
-		busy = true;
-		message = '';
-		try {
-			if (!(await reauth())) return;
-			const options = await postJson<PublicKeyCredentialCreationOptionsJSON>(
-				'/api/auth/passkeys/options'
-			);
-			if (!options.ok) {
-				message = options.message;
-				return;
-			}
-			let response;
-			try {
-				response = await startRegistration({ optionsJSON: options.data });
-			} catch (e) {
-				message = passkeyErrorMessage(e);
-				return;
-			}
-			const result = await postJson('/api/auth/passkeys/verify', response);
-			message = result.ok ? 'Passkey toegevoegd.' : result.message;
-			await refreshAll();
-		} finally {
-			busy = false;
+	const groups = $derived<{ title: string; tiles: Tile[] }[]>([
+		{
+			title: 'Geld',
+			tiles: [
+				{
+					href: '/te-krijgen',
+					title: 'Te krijgen',
+					value:
+						t.owed.toReceiveCents > 0
+							? `${formatCents(t.owed.toReceiveCents)} van ${plural(t.owed.people, 'persoon', 'personen')}`
+							: 'Niets open',
+					icon: 'teKrijgen'
+				},
+				{
+					href: '/terugbetalingen',
+					title: 'Terugbetalingen',
+					value:
+						t.shares.arrearsCents > 0
+							? `${formatCents(t.shares.arrearsCents)} achterstand`
+							: t.shares.lasts > 0
+								? plural(t.shares.lasts, 'gedeelde last', 'gedeelde lasten')
+								: 'Nog niets gedeeld',
+					icon: 'terugbetalingen',
+					warn: t.shares.arrearsCents > 0
+				},
+				{
+					href: '/vaste-lasten',
+					title: 'Vaste lasten',
+					value:
+						t.fixed.proposals > 0
+							? plural(t.fixed.proposals, 'voorstel', 'voorstellen') + ' om te bekijken'
+							: t.fixed.active > 0
+								? `${formatCents(t.fixed.perMonthCents, { whole: true })} per maand`
+								: 'Nog geen',
+					icon: 'vasteLasten'
+				},
+				{
+					href: '/saldocheck',
+					title: 'Saldocheck',
+					value:
+						t.balanceDue.length > 0
+							? `Nog te doen voor ${names(t.balanceDue)}`
+							: 'Gedaan deze maand',
+					icon: 'saldocheck',
+					warn: t.balanceDue.length > 0
+				}
+			]
+		},
+		{
+			title: 'Ordenen',
+			tiles: [
+				{
+					href: '/categorieen',
+					title: 'Categorieën',
+					value: plural(t.categories, 'categorie', 'categorieën'),
+					icon: 'categorieen'
+				},
+				{
+					href: '/regels',
+					title: 'Regels',
+					value: t.rules > 0 ? plural(t.rules, 'regel', 'regels') : 'Nog geen regels',
+					icon: 'regels'
+				},
+				{
+					href: '/personen',
+					title: 'Personen',
+					value: t.people > 0 ? plural(t.people, 'persoon', 'personen') : 'Nog niemand',
+					icon: 'personen'
+				}
+			]
+		},
+		{
+			title: 'App',
+			tiles: [
+				{
+					href: '/instellingen/meldingen',
+					title: 'Meldingen',
+					value: t.devices > 0 ? `Aan op ${plural(t.devices, 'apparaat', 'apparaten')}` : 'Nog uit',
+					icon: 'meldingen'
+				},
+				{
+					href: '/instellingen/rekeningen',
+					title: 'Rekeningen',
+					value: t.accounts.length > 0 ? names(t.accounts) : 'Nog geen',
+					icon: 'rekeningen'
+				},
+				{
+					href: '/instellingen/beveiliging',
+					title: 'Beveiliging',
+					value: !t.recoveryCode
+						? 'Geen herstelcode'
+						: t.passkeys < 2
+							? '1 passkey, voeg er een toe'
+							: `${plural(t.passkeys, 'passkey', 'passkeys')} en een herstelcode`,
+					icon: 'beveiliging',
+					warn: !t.recoveryCode
+				},
+				{
+					href: '/instellingen/status',
+					title: 'Status',
+					value:
+						t.statusAttention > 0
+							? `${plural(t.statusAttention, 'punt vraagt', 'punten vragen')} aandacht`
+							: 'Alles werkt',
+					icon: 'status',
+					warn: t.statusAttention > 0
+				}
+			]
 		}
-	}
-
-	const sensitive: SubmitFunction = async ({ cancel }) => {
-		message = '';
-		if (!(await reauth())) cancel();
-	};
+	]);
 </script>
 
 <svelte:head>
-	<title>Instellingen · Budget</title>
+	<title>Meer · Budget</title>
 </svelte:head>
 
 <div class="page">
-	<h1>Instellingen</h1>
+	<h1>Meer</h1>
 
-	{#if fromRecovery && data.passkeys.length === 0}
-		<p class="card notice" role="status">
-			Je bent ingelogd met je herstelcode. Voeg nu een passkey toe en maak daarna een nieuwe
-			herstelcode; de oude werkt niet meer.
-		</p>
-	{/if}
-
-	{#if message}<p role="status">{message}</p>{/if}
-	{#if form && 'message' in form && form.message}<p class="error-text" role="alert">
-			{form.message}
-		</p>{/if}
-
-	<section>
-		<h2>Passkeys</h2>
-		<p class="muted">
-			Zorg voor een passkey op minstens twee apparaten, plus je herstelcode op papier.
-		</p>
-		<ul>
-			{#each data.passkeys as p (p.id)}
-				<li>
-					<div>
-						<strong>{p.deviceName}</strong>
-						<span class="muted">
-							Toegevoegd {when(p.createdAt)} · laatst gebruikt {when(p.lastUsedAt)}
-							{p.backedUp ? '· gesynchroniseerd' : ''}
-						</span>
-					</div>
-					<form method="POST" action="?/revokePasskey" use:enhance={sensitive}>
-						<input type="hidden" name="id" value={p.id} />
-						<button class="button danger" disabled={data.passkeys.length <= 1}>Verwijderen</button>
-					</form>
-				</li>
-			{/each}
-		</ul>
-		<button class="button" onclick={addPasskey} disabled={busy || !ready}>Passkey toevoegen</button>
-	</section>
-
-	<section>
-		<h2>Herstelcode</h2>
-		{#if form && 'recoveryCode' in form && form.recoveryCode}
-			<p>
-				Schrijf deze code op papier. Hij wordt maar één keer getoond; de vorige werkt niet meer.
-			</p>
-			<p class="code num">{form.recoveryCode}</p>
-		{:else}
-			<p class="muted">
-				{data.hasRecoveryCode ? 'Je hebt een herstelcode.' : 'Je hebt geen geldige herstelcode.'}
-			</p>
-		{/if}
-		<form method="POST" action="?/recoveryCode" use:enhance={sensitive}>
-			<button class="button secondary">Nieuwe herstelcode maken</button>
-		</form>
-	</section>
-
-	<section>
-		<h2>Actieve apparaten</h2>
-		<p class="muted">Telefoon kwijt? Trek die sessie hier in.</p>
-		<ul>
-			{#each data.sessions as s (s.idHash)}
-				<li>
-					<div>
-						<strong
-							>{s.deviceName}{s.idHash === data.currentSession ? ' (dit apparaat)' : ''}</strong
+	{#each groups as group (group.title)}
+		<section aria-labelledby="group-{group.title}">
+			<h2 id="group-{group.title}">{group.title}</h2>
+			<ul class="tiles">
+				{#each group.tiles as tile (tile.href)}
+					<li>
+						<a
+							class={['tile', 'hue', tile.warn && 'warn']}
+							href={tile.href}
+							style:--h={ICONS[tile.icon].hue}
 						>
-						<span class="muted">Ingelogd {when(s.createdAt)} · actief {when(s.lastUsedAt)}</span>
-					</div>
-					{#if s.idHash !== data.currentSession}
-						<form method="POST" action="?/revokeSession" use:enhance>
-							<input type="hidden" name="id" value={s.idHash} />
-							<button class="button danger">Intrekken</button>
-						</form>
-					{/if}
-				</li>
-			{/each}
-		</ul>
-	</section>
+							<span class="icon-badge" aria-hidden="true">
+								<svg viewBox="0 0 24 24">
+									<path
+										d={ICONS[tile.icon].path}
+										fill="none"
+										stroke="currentColor"
+										stroke-width="1.7"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+									/>
+								</svg>
+							</span>
+							<span class="title" data-morph-to={tile.href} data-morph-part="titel"
+								>{tile.title}</span
+							>
+							<span class="value num">
+								{#if tile.warn}<span class="visually-hidden"
+										>Vraagt aandacht:
+									</span>{/if}{tile.value}
+							</span>
+							{#if tile.warn}<span class="dot" aria-hidden="true"></span>{/if}
+						</a>
+					</li>
+				{/each}
+			</ul>
+		</section>
+	{/each}
 
-	<section>
-		<h2>Rekeningen</h2>
-		<p class="muted">
-			De alias gebruik je in de snelinvoer, zoals <strong>@rev</strong>. Met het IBAN worden
-			overboekingen tussen je eigen rekeningen herkend.
-		</p>
-		{#each data.accounts as a (a.id)}
-			<form method="POST" action="?/account" use:enhance class="card account">
-				<input type="hidden" name="id" value={a.id} />
-				<label><span>Naam</span><input name="name" value={a.name} maxlength="40" required /></label>
-				<label
-					><span>Alias</span><input name="alias" value={a.alias} maxlength="10" required /></label
-				>
-				<label><span>IBAN</span><input name="iban" value={a.iban ?? ''} maxlength="42" /></label>
-				<button class="button secondary">Opslaan</button>
-			</form>
-		{/each}
-	</section>
-
-	<section>
-		<h2>Overig</h2>
-		<a href="/te-krijgen">Te krijgen</a>
-		<a href="/personen">Personen</a>
-		<a href="/terugbetalingen">Terugbetalingen</a>
-		<a href="/vaste-lasten">Vaste lasten</a>
-		<a href="/saldocheck">Saldocheck</a>
-		<a href="/instellingen/meldingen">Meldingen</a>
-		<a href="/categorieen">Categorieën</a>
-		<a href="/regels">Regels</a>
-		<a href="/instellingen/status">Status</a>
-		<form method="POST" action="?/logout">
-			<button class="button secondary">Uitloggen</button>
-		</form>
-	</section>
+	<form method="POST" action="?/logout" class="logout">
+		<button class="button secondary">
+			<svg viewBox="0 0 24 24" aria-hidden="true">
+				<path
+					d="M14 4h5v16h-5 M10 8l-4 4 4 4 M6 12h10"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="1.7"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+				/>
+			</svg>
+			Uitloggen
+		</button>
+	</form>
 </div>
 
 <style>
 	.page {
 		display: grid;
 		grid-template-columns: minmax(0, 1fr);
-		gap: 32px;
-		max-width: 44rem;
+		gap: 28px;
+		max-width: 56rem;
 	}
 
 	section {
 		display: grid;
 		gap: 12px;
-		justify-items: start;
 	}
 
-	ul {
+	.tiles {
 		list-style: none;
 		margin: 0;
-		padding: 0 16px;
+		padding: 0;
 		display: grid;
-		width: 100%;
+		grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr));
+		gap: 10px;
+	}
+
+	.tile {
+		position: relative;
+		display: grid;
+		grid-template-rows: auto 1fr auto;
+		gap: 4px;
+		height: 100%;
+		min-height: 124px;
+		padding: 14px;
 		border-radius: var(--radius);
 		background: var(--surface);
 		box-shadow: var(--shadow);
+		color: var(--text);
+		text-decoration: none;
+		transition:
+			transform 220ms var(--ease-spring),
+			box-shadow 220ms var(--ease-out);
 	}
 
-	ul:empty {
-		display: none;
+	.tile:active {
+		transform: scale(0.97);
 	}
 
-	li {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		gap: 12px;
-		flex-wrap: wrap;
-		padding: 12px 0;
+	@media (hover: hover) {
+		.tile:hover {
+			transform: translateY(-2px);
+			box-shadow:
+				var(--shadow),
+				0 10px 28px oklch(0.2 0.01 85 / 0.08);
+		}
+
+		.tile:hover .icon-badge {
+			transform: rotate(-6deg) scale(1.06);
+		}
 	}
 
-	li + li {
-		border-top: 1px solid var(--line);
+	.icon-badge {
+		margin-bottom: 10px;
 	}
 
-	li div {
-		display: grid;
-		min-width: 0;
-	}
-
-	li .muted {
-		font-size: 0.9rem;
-	}
-
-	li .button {
-		min-height: 40px;
-		padding: 0 14px;
-		font-size: 0.92rem;
-	}
-
-	.notice {
-		border-left: 4px solid var(--warn);
-	}
-
-	.code {
-		font-size: 1.4rem;
+	.title {
+		align-self: end;
 		font-weight: 600;
-		letter-spacing: 0.06em;
-		user-select: all;
+		line-height: 1.25;
 	}
 
-	.account {
-		display: grid;
-		grid-template-columns: repeat(2, minmax(0, 1fr));
-		gap: 10px;
-		width: 100%;
+	.value {
+		color: var(--muted);
+		font-size: 0.9rem;
+		line-height: 1.35;
+		overflow-wrap: anywhere;
 	}
 
-	.account label {
-		display: grid;
-		gap: 4px;
+	.warn .value {
+		color: color-mix(in oklch, var(--warn) 70%, var(--text));
+		font-weight: 550;
 	}
 
-	.account label:nth-of-type(3) {
-		grid-column: 1 / -1;
+	.dot {
+		position: absolute;
+		top: 14px;
+		right: 14px;
+		width: 9px;
+		height: 9px;
+		border-radius: 50%;
+		background: var(--warn);
+		box-shadow: 0 0 0 4px color-mix(in oklch, var(--warn) 22%, transparent);
 	}
 
-	.account button {
-		grid-column: 1 / -1;
+	.logout {
+		padding-top: 4px;
+	}
+
+	.logout svg {
+		width: 18px;
+		height: 18px;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.tile:hover,
+		.tile:hover .icon-badge {
+			transform: none;
+		}
 	}
 </style>

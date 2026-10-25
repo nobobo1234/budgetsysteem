@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import BackLink from '#lib/components/BackLink.svelte';
 	import Select, { type SelectOption } from '#lib/components/Select.svelte';
 	import ShareForm from '#lib/components/ShareForm.svelte';
 	import Switch from '#lib/components/Switch.svelte';
@@ -105,19 +106,7 @@
 		{#key form}<Toast text={form.ibanMessage} />{/key}
 	{/if}
 
-	<a class="back" href="/transacties">
-		<svg viewBox="0 0 20 20" aria-hidden="true">
-			<path
-				d="M12.5 4.5L7 10l5.5 5.5"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="1.8"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-			/>
-		</svg>
-		Transacties
-	</a>
+	<BackLink parents={['/transacties', '/']} />
 
 	<header>
 		<h1><span data-tx-name={tx.id}>{tx.counterparty || 'Zonder naam'}</span></h1>
@@ -571,22 +560,6 @@
 		display: grid;
 		grid-template-columns: minmax(0, 1fr);
 		gap: 20px;
-	}
-
-	.back {
-		display: inline-flex;
-		align-items: center;
-		gap: 2px;
-		justify-self: start;
-		min-height: var(--tap);
-		margin-left: -6px;
-		text-decoration: none;
-		font-weight: 550;
-	}
-
-	.back svg {
-		width: 20px;
-		height: 20px;
 	}
 
 	header {
