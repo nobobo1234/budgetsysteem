@@ -4,6 +4,13 @@
 
 export const PUBLIC_GROUP = '/(public)';
 
+/**
+ * Het upload-endpoint voor het deelmenu. Geen sessie maar een upload-token, en dat token
+ * werkt alleen hier (spec: Uploaden via het deelmenu). Een eigen groep, zodat het niet onder
+ * de app-layout valt.
+ */
+export const INGEST_ROUTE = '/(ingest)/api/ingest';
+
 export function isPublicRoute(routeId: string | null): boolean {
 	return routeId !== null && (routeId === PUBLIC_GROUP || routeId.startsWith(`${PUBLIC_GROUP}/`));
 }

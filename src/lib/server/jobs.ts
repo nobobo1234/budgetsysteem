@@ -1,5 +1,5 @@
-import { and, asc, eq, lte } from 'drizzle-orm';
-import type { DB } from './db/index.ts';
+import { and, asc, eq, lte, notInArray } from 'drizzle-orm';
+import type { Conn, DB } from './db/index.ts';
 import { jobs } from './db/schema.ts';
 import { log } from './log.ts';
 import { describeError, recordError, telemetryDb } from './telemetry/index.ts';
@@ -13,11 +13,27 @@ const handlers = new Map<string, JobHandler>();
 const MAX_ATTEMPTS = 3;
 const TICK_MS = 60_000;
 
+const declared = new Set<string>();
+
 export function registerJob(kind: string, handler: JobHandler): void {
 	handlers.set(kind, handler);
 }
 
-export function enqueue(db: DB, kind: string, runAt: Date, payload: unknown = null): string {
+/**
+ * Een soort taak die al in de wachtrij mag voordat er een handler is, zoals het lezen van een
+ * bon (`bon_lezen`). Zulke taken blijven wachten tot `registerJob` hem invult, in plaats van
+ * na drie pogingen te mislukken. Een onbekende soort die niet gedeclareerd is, mislukt wel.
+ */
+export function declareJob(kind: string): void {
+	declared.add(kind);
+}
+
+/** Soorten die wel gedeclareerd zijn maar (nog) geen handler hebben: die slaan we over. */
+function waitingForHandler(): string[] {
+	return [...declared].filter((kind) => !handlers.has(kind));
+}
+
+export function enqueue(db: Conn, kind: string, runAt: Date, payload: unknown = null): string {
 	return db
 		.insert(jobs)
 		.values({ kind, payload, runAt: runAt.toISOString() })
@@ -41,10 +57,17 @@ export function ensureScheduled(db: DB, kind: string, runAt: Date): void {
  * gaat niet de database in, alleen de soort fout.
  */
 export function runDueJobs(db: DB, now = new Date()): number {
+	const skip = waitingForHandler();
 	const due = db
 		.select()
 		.from(jobs)
-		.where(and(eq(jobs.status, 'wachtend'), lte(jobs.runAt, now.toISOString())))
+		.where(
+			and(
+				eq(jobs.status, 'wachtend'),
+				lte(jobs.runAt, now.toISOString()),
+				skip.length > 0 ? notInArray(jobs.kind, skip) : undefined
+			)
+		)
 		.orderBy(asc(jobs.runAt))
 		.limit(20)
 		.all();

@@ -5,7 +5,8 @@ import { join, relative, sep } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { handle } from '../../src/hooks.server.ts';
 import { createSession, sessionCookieName } from '../../src/lib/server/auth/session.ts';
-import { isPublicRoute } from '../../src/lib/server/guard.ts';
+import { INGEST_ROUTE, isPublicRoute } from '../../src/lib/server/guard.ts';
+import { createUploadToken } from '../../src/lib/server/receipts/tokens.ts';
 import { fakeEvent, tempDatabase } from './helpers.ts';
 
 const ROUTES = join(process.cwd(), 'src', 'routes');
@@ -109,6 +110,28 @@ describe('standaard alles dicht', () => {
 					routeId: route.id,
 					method,
 					cookies: { [sessionCookieName()]: 'x'.repeat(43) },
+					body: method === 'GET' ? undefined : {}
+				});
+				expect((await handle({ event, resolve: neverResolve })).status).toBe(401);
+			});
+		}
+	}
+
+	it('vindt het upload-endpoint, en dat is niet publiek', () => {
+		expect(closed.map((r) => r.id)).toContain(INGEST_ROUTE);
+	});
+
+	// Het upload-token bereikt niets anders dan POST /api/ingest (spec: OWASP A01)
+	for (const route of closed.filter((r) => r.id !== INGEST_ROUTE)) {
+		for (const method of route.methods) {
+			it(`${method} ${route.id} met alleen een upload-token geeft 401`, async () => {
+				const { db } = await import('../../src/lib/server/db/index.ts');
+				const { token } = createUploadToken(db(), 'test');
+				const event = fakeEvent({
+					path: pathFor(route.id),
+					routeId: route.id,
+					method,
+					headers: { authorization: `Bearer ${token}` },
 					body: method === 'GET' ? undefined : {}
 				});
 				expect((await handle({ event, resolve: neverResolve })).status).toBe(401);

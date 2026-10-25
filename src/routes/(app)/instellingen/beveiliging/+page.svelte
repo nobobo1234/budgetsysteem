@@ -3,13 +3,11 @@
 	import { enhance, type SubmitFunction } from '$app/forms';
 	import { page } from '$app/state';
 	import { refreshAll } from '$app/navigation';
-	import { startAuthentication, startRegistration } from '@simplewebauthn/browser';
-	import type {
-		PublicKeyCredentialCreationOptionsJSON,
-		PublicKeyCredentialRequestOptionsJSON
-	} from '@simplewebauthn/browser';
+	import { startRegistration } from '@simplewebauthn/browser';
+	import type { PublicKeyCredentialCreationOptionsJSON } from '@simplewebauthn/browser';
 	import { passkeyErrorMessage, postJson } from '#lib/api.ts';
 	import BackLink from '#lib/components/BackLink.svelte';
+	import { reauth as confirmPasskey } from '#lib/reauth.ts';
 
 	let { data, form } = $props();
 	let message = $state('');
@@ -26,24 +24,12 @@
 
 	/** Gevoelige acties vragen altijd opnieuw om je passkey (spec: Beveiliging, laag 3). */
 	async function reauth(): Promise<boolean> {
-		// Na inloggen met de herstelcode is er nog geen passkey; die sessie is net bevestigd
-		if (data.passkeys.length === 0) return data.reauthFresh;
-		const options = await postJson<PublicKeyCredentialRequestOptionsJSON>(
-			'/api/auth/reauth/options'
-		);
-		if (!options.ok) {
-			message = options.message;
-			return false;
-		}
-		try {
-			const response = await startAuthentication({ optionsJSON: options.data });
-			const result = await postJson('/api/auth/reauth/verify', response);
-			if (!result.ok) message = result.message;
-			return result.ok;
-		} catch (e) {
-			message = passkeyErrorMessage(e);
-			return false;
-		}
+		const result = await confirmPasskey({
+			passkeys: data.passkeys.length,
+			reauthFresh: data.reauthFresh
+		});
+		if (!result.ok) message = result.message;
+		return result.ok;
 	}
 
 	async function addPasskey() {

@@ -126,6 +126,7 @@ for (const path of [
 	'/saldocheck',
 	'/instellingen/meldingen',
 	'/instellingen/beveiliging',
+	'/instellingen/apparaten',
 	'/instellingen/rekeningen'
 ]) {
 	test(`${path} past op een telefoonscherm`, async ({ page }) => {

@@ -83,7 +83,7 @@ export const NOTIFICATION_KINDS = {
 	beveiliging: {
 		group: 'beveiliging',
 		title: 'Beveiliging',
-		label: 'Nieuwe passkey of herstelcode gebruikt',
+		label: 'Nieuwe passkey, herstelcode of upload-token',
 		hint: 'Staat altijd aan, zodat je het merkt als iemand anders binnenkomt',
 		switchable: false
 	}
