@@ -7,6 +7,7 @@ import { parseAmount } from '#lib/money.ts';
 import { db } from '#lib/server/db/index.ts';
 import { transactions } from '#lib/server/db/schema.ts';
 import { ValidationError } from '#lib/server/errors.ts';
+import { mergeImported } from '#lib/server/import/koppellijst.ts';
 import { confirmExpected, skipExpected } from '#lib/server/recurring.ts';
 import { inboxCount, leaveInInbox, reviewInbox } from '#lib/server/review.ts';
 import { confirmReceived, creditToPayable } from '#lib/server/shares.ts';
@@ -25,7 +26,14 @@ export const load: PageServerLoad = ({ setHeaders }) => {
 		count: inboxCount(inbox),
 		inbox: {
 			missed: inbox.missed.map((i) => ({ ...i, hue: hue(i.categoryGroup) })),
-			transactions: inbox.transactions.map((t) => ({ ...t, hue: hue(t.categoryGroup) })),
+			transactions: inbox.transactions.map((t) => ({
+				...t,
+				hue: hue(t.categoryGroup),
+				own: t.own && {
+					preselect: t.own.preselect,
+					candidates: t.own.candidates.map((c) => ({ ...c, hue: hue(c.categoryGroup) }))
+				}
+			})),
 			late: inbox.late.map((l) => ({ ...l, hue: groupHue(l.personName) })),
 			credit: inbox.credit.map((c) => ({ ...c, hue: groupHue(c.personName) })),
 			reminders: inbox.reminders.map((r) => ({
@@ -40,6 +48,8 @@ const idSchema = z.object({ id: z.uuid() });
 const confirmSchema = z.object({ id: z.uuid(), amount: z.string().trim().max(16).optional() });
 const skipSchema = z.object({ id: z.uuid(), reason: z.enum(['gemist', 'opgezegd']) });
 const personSchema = z.object({ personId: z.uuid() });
+// Koppellijst: je eigen invoer, of `nieuw` als de boeking er los naast hoort
+const mergeSchema = z.object({ id: z.uuid(), target: z.union([z.literal('nieuw'), z.uuid()]) });
 const leaveSchema = z.object({ kind: z.enum(['te_laat', 'herinnering', 'tegoed']), id: z.uuid() });
 
 function fromForm(form: FormData) {
@@ -94,6 +104,27 @@ export const actions: Actions = {
 			updateTransaction(db(), parsed.data.id, { amountCents: t.amountCents });
 			return { confirmed: parsed.data.id };
 		});
+	},
+	// Koppellijst bij een import: samenvoegen met je eigen invoer, of een nieuwe transactie
+	merge: async ({ request }) => {
+		const parsed = mergeSchema.safeParse(fromForm(await request.formData()));
+		if (!parsed.success)
+			return fail(400, { message: 'Kies je eigen invoer of een nieuwe transactie.' });
+		const { id, target } = parsed.data;
+		if (target === 'nieuw') {
+			const t = db()
+				.select({ status: transactions.status, amountCents: transactions.amountCents })
+				.from(transactions)
+				.where(eq(transactions.id, id))
+				.get();
+			if (!t || t.status !== 'te_controleren')
+				return fail(400, { message: 'Deze boeking staat niet meer te controleren.' });
+			return guarded(() => {
+				updateTransaction(db(), id, { amountCents: t.amountCents });
+				return { merged: id, differenceCents: null };
+			});
+		}
+		return guarded(() => ({ merged: id, ...mergeImported(db(), id, target) }));
 	},
 	received: async ({ request }) => {
 		const parsed = idSchema.safeParse(fromForm(await request.formData()));
