@@ -5,7 +5,8 @@ test.beforeEach(async ({ context }) => {
 	await login(context);
 });
 
-// Chromium en WebKit delen één database: elk project zijn eigen namen
+// Chromium en WebKit delen één database: elk project zijn eigen namen. Alles op eergisteren,
+// zodat deze posten niet de "Recent"-lijst van andere tests vullen.
 const names = () => {
 	const p = test.info().project.name;
 	return { sanne: `sanne-${p}`, tim: `tim-${p}` };
@@ -18,7 +19,7 @@ test('voorschieten via de snelinvoer, en ontvangen met de koppellijst', async ({
 	const input = page.getByLabel('Snel invoeren');
 
 	// €10 met twee anderen: jij 3,33, de eerste 3,34, de tweede 3,33
-	await input.fill(`10 etentje met ${sanne} en ${tim}`);
+	await input.fill(`10 etentje met ${sanne} en ${tim} eergisteren`);
 	const chips = page.locator('#quick-chips');
 	await expect(chips).toContainText('Jouw deel');
 	await expect(chips).toContainText('3,33');
@@ -45,7 +46,7 @@ test('voorschieten via de snelinvoer, en ontvangen met de koppellijst', async ({
 	// Sanne betaalt: de koppellijst stelt haar post voor
 	await page.goto('/');
 	await page.waitForLoadState('networkidle');
-	await input.fill(`+3,34 tikkie ${sanne}`);
+	await input.fill(`+3,34 tikkie ${sanne} eergisteren`);
 	const match = page.getByRole('group', { name: 'Ontvangen voor' });
 	await expect(match).toBeVisible();
 	const option = match.getByRole('radio', { name: new RegExp(sanne, 'i') });
@@ -67,7 +68,7 @@ test('voor 3 zonder namen: wie nog meer, of later kiezen', async ({ page }) => {
 	const p = test.info().project.name;
 	await page.goto('/');
 	await page.waitForLoadState('networkidle');
-	await page.getByLabel('Snel invoeren').fill(`30 pizza-${p} voor 3`);
+	await page.getByLabel('Snel invoeren').fill(`30 pizza-${p} voor 3 eergisteren`);
 	await expect(page.getByLabel('Voorgeschoten')).toContainText('Nog onbekend');
 	await expect(page.getByText(/Wie nog meer\?/)).toBeVisible();
 	await page.getByRole('button', { name: 'Opslaan' }).click();
