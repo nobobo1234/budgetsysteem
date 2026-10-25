@@ -273,6 +273,38 @@ export function shortcutPlist(ingestUrl = INGEST_URL): string {
 	].join('\n');
 }
 
+/** Een maand voordat het certificaat verloopt, vraagt de app om opnieuw te ondertekenen. */
+export const RENEW_DAYS = 30;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+export type ShortcutStatus =
+	| { state: 'ok' | 'expiring' | 'expired'; validUntil: string }
+	| { state: 'other-host'; validUntil: string; host: string };
+
+/**
+ * Of de app de ondertekende opdracht kan aanbieden. Hij stuurt naar de host waarvoor hij
+ * ondertekend is; draait de app ergens anders (een eigen installatie, lokaal), dan zou de
+ * download bonnen en tokens naar die andere host sturen, dus dan niet. Na `validUntil`
+ * installeert iOS hem (waarschijnlijk) niet meer; een opdracht die al op een telefoon staat,
+ * blijft werken.
+ */
+export function shortcutStatus(
+	signed: { url: string; validUntil: string },
+	origin: string,
+	now = new Date()
+): ShortcutStatus {
+	const { validUntil } = signed;
+	const target = new URL(signed.url);
+	if (target.origin !== new URL(origin).origin) {
+		return { state: 'other-host', validUntil, host: target.host };
+	}
+	// Vanaf het begin van de dag (UTC) als verlopen rekenen: liever een dag te vroeg
+	const expires = Date.parse(`${validUntil}T00:00:00Z`);
+	if (now.getTime() >= expires) return { state: 'expired', validUntil };
+	if (now.getTime() >= expires - RENEW_DAYS * DAY_MS) return { state: 'expiring', validUntil };
+	return { state: 'ok', validUntil };
+}
+
 /** Hash van de bron, zodat een test ziet dat het ondertekende bestand bij deze definitie hoort. */
 export function shortcutSourceHash(ingestUrl = INGEST_URL): string {
 	return createHash('sha256').update(shortcutPlist(ingestUrl)).digest('hex');

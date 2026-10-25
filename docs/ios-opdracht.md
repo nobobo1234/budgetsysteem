@@ -35,6 +35,18 @@ In beide gevallen zit het token niet in het bestand: de tekstactie met het token
 importvraag, zodat Opdrachten er bij het toevoegen om vraagt. Deel je een opdracht met een importvraag,
 dan maakt iOS dat veld leeg; deel de opdracht toch nooit met het token erin.
 
+## Wanneer de app hem aanbiedt
+
+- **Juiste host.** De opdracht stuurt naar de host waarvoor hij ondertekend is. Draait de app op een
+  andere `ORIGIN` (een eigen installatie, lokaal, de e2e-tests), dan staat de download uit en
+  meldt Apparaten dat je hem voor je eigen domein moet ondertekenen. Zo stuurt een andere installatie
+  nooit bonnen en tokens naar `finance.mijndomein.nl`.
+- **Herinnering.** Vanaf 30 dagen voor `validUntil` staat er een melding op Apparaten, zegt de tegel
+  op Meer "Opdracht opnieuw ondertekenen" en krijgt de tab Meer een stip. De download blijft tot die
+  dag werken.
+- **Verlopen.** Vanaf `validUntil` staat de download uit. Een opdracht die al op een telefoon staat,
+  blijft werken; het certificaat telt alleen bij installeren.
+
 ## Opnieuw maken en ondertekenen
 
 Nodig bij een wijziging in `shortcut.ts`, een andere host, of vóór het certificaat verloopt

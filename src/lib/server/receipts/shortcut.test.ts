@@ -3,9 +3,11 @@ import {
 	INGEST_URL,
 	JPEG_QUALITY,
 	MAX_EDGE,
+	RENEW_DAYS,
 	shortcutDefinition,
 	shortcutPlist,
-	shortcutSourceHash
+	shortcutSourceHash,
+	shortcutStatus
 } from './shortcut.ts';
 import { SIGNED_SHORTCUT } from './shortcut-signed.ts';
 
@@ -99,5 +101,47 @@ describe('iOS-opdracht', () => {
 		expect(SIGNED_SHORTCUT.sourceHash).toBe(shortcutSourceHash());
 		const bytes = Buffer.from(SIGNED_SHORTCUT.base64, 'base64');
 		expect(bytes.subarray(0, 4).toString('latin1')).toBe('AEA1');
+	});
+});
+
+describe('status van de opdracht', () => {
+	const signed = { url: INGEST_URL, validUntil: '2027-11-16' };
+	const origin = 'https://finance.mijndomein.nl';
+	const at = (iso: string) => new Date(iso);
+
+	it('geldig tot een maand voor het verlopen', () => {
+		expect(shortcutStatus(signed, origin, at('2027-10-16T23:59:59Z')).state).toBe('ok');
+		expect(RENEW_DAYS).toBe(30);
+	});
+
+	it('herinnert vanaf een maand ervoor', () => {
+		expect(shortcutStatus(signed, origin, at('2027-10-17T00:00:00Z'))).toEqual({
+			state: 'expiring',
+			validUntil: '2027-11-16'
+		});
+		expect(shortcutStatus(signed, origin, at('2027-11-15T23:59:59Z')).state).toBe('expiring');
+	});
+
+	it('verlopen vanaf het begin van de laatste dag', () => {
+		expect(shortcutStatus(signed, origin, at('2027-11-16T00:00:00Z')).state).toBe('expired');
+		expect(shortcutStatus(signed, origin, at('2028-03-01T12:00:00Z')).state).toBe('expired');
+	});
+
+	it('niet aanbieden als de app op een andere host draait', () => {
+		const now = at('2026-11-01T12:00:00Z');
+		for (const other of [
+			'http://localhost:5173',
+			'https://budget.example.org',
+			'http://finance.mijndomein.nl',
+			'https://finance.mijndomein.nl:8443'
+		]) {
+			expect(shortcutStatus(signed, other, now)).toEqual({
+				state: 'other-host',
+				validUntil: '2027-11-16',
+				host: 'finance.mijndomein.nl'
+			});
+		}
+		// Een pad of slash aan het eind van ORIGIN maakt niet uit
+		expect(shortcutStatus(signed, `${origin}/`, now).state).toBe('ok');
 	});
 });

@@ -1,21 +1,52 @@
 import { eq } from 'drizzle-orm';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { newRecoveryCode } from '../../src/lib/server/auth/recovery.ts';
 import { createSession, type Session } from '../../src/lib/server/auth/session.ts';
+import { resetConfig } from '../../src/lib/server/config.ts';
+import type { DB } from '../../src/lib/server/db/index.ts';
 import { sessions } from '../../src/lib/server/db/schema.ts';
+import { meerNeedsAttention, meerTiles } from '../../src/lib/server/meer.ts';
 import { SIGNED_SHORTCUT } from '../../src/lib/server/receipts/shortcut-signed.ts';
 import { GET } from '../../src/routes/(app)/instellingen/apparaten/opdracht/+server.ts';
-import { fakeEvent, tempDatabase } from './helpers.ts';
+import { fakeEvent, tempDatabase, tempTelemetry } from './helpers.ts';
 
+// De testomgeving heeft geen backups of schijfinfo; die punten van de statuspagina tellen hier
+// niet mee, zodat de stip op Meer alleen van de opdracht afhangt
+vi.mock('../../src/lib/server/telemetry/status.ts', () => ({ attention: () => [] }));
+
+let db: DB;
 let cleanup: () => void;
+let cleanupTelemetry: () => void;
 let session: Session;
+const previousOrigin = process.env.ORIGIN;
+const signedOrigin = new URL(SIGNED_SHORTCUT.url).origin;
+const expires = new Date(`${SIGNED_SHORTCUT.validUntil}T00:00:00Z`).getTime();
+const DAY = 24 * 60 * 60 * 1000;
+
+function useOrigin(origin: string | undefined) {
+	if (origin === undefined) delete process.env.ORIGIN;
+	else process.env.ORIGIN = origin;
+	resetConfig();
+}
+
+beforeAll(() => useOrigin(signedOrigin));
+afterAll(() => useOrigin(previousOrigin));
 
 beforeEach(() => {
-	const temp = tempDatabase();
-	cleanup = temp.cleanup;
-	const { idHash } = createSession(temp.db, { passkeyId: null, deviceName: 'test' });
-	session = temp.db.select().from(sessions).where(eq(sessions.idHash, idHash)).get()!;
+	({ db, cleanup } = tempDatabase());
+	cleanupTelemetry = tempTelemetry().cleanup;
+	const { idHash } = createSession(db, { passkeyId: null, deviceName: 'test' });
+	session = db.select().from(sessions).where(eq(sessions.idHash, idHash)).get()!;
+	// Ruim binnen de geldigheid, tenzij een test de tijd verzet
+	vi.useFakeTimers({ toFake: ['Date'] });
+	vi.setSystemTime(expires - 200 * DAY);
 });
-afterEach(() => cleanup());
+afterEach(() => {
+	vi.useRealTimers();
+	useOrigin(signedOrigin);
+	cleanupTelemetry();
+	cleanup();
+});
 
 const download = (s: Session | null) =>
 	GET(
@@ -25,6 +56,15 @@ const download = (s: Session | null) =>
 			session: s
 		}) as never
 	);
+
+async function status(response: () => Response | Promise<Response>): Promise<number> {
+	try {
+		return (await response()).status;
+	} catch (e) {
+		// error() van SvelteKit gooit een HttpError met een status
+		return (e as { status: number }).status;
+	}
+}
 
 describe('GET /instellingen/apparaten/opdracht', () => {
 	it('geeft het ondertekende bestand als download', async () => {
@@ -40,12 +80,43 @@ describe('GET /instellingen/apparaten/opdracht', () => {
 	});
 
 	it('zonder sessie niet', async () => {
-		let status = 0;
-		try {
-			await download(null);
-		} catch (e) {
-			status = (e as { status: number }).status;
-		}
-		expect(status).toBe(401);
+		expect(await status(() => download(null))).toBe(401);
+	});
+
+	it('niet als de app op een andere host draait', async () => {
+		useOrigin('https://budget.example.org');
+		expect(await status(() => download(session))).toBe(409);
+	});
+
+	it('in de laatste maand nog wel, na het verlopen niet meer', async () => {
+		vi.setSystemTime(expires - DAY);
+		expect(await status(() => download(session))).toBe(200);
+		vi.setSystemTime(expires);
+		expect(await status(() => download(session))).toBe(410);
+	});
+});
+
+describe('herinnering op Meer', () => {
+	it('stip en tegeltekst vanaf een maand voor het verlopen', () => {
+		// Verder niets dat aandacht vraagt: een herstelcode, geen rekeningen met een saldocheck
+		newRecoveryCode(db);
+		const today = '2026-01-15';
+		vi.setSystemTime(expires - 31 * DAY);
+		expect(meerTiles(db, today).uploadTokens.renewShortcut).toBe(false);
+		expect(meerNeedsAttention(db, today)).toBe(false);
+
+		vi.setSystemTime(expires - 29 * DAY);
+		expect(meerTiles(db, today).uploadTokens.renewShortcut).toBe(true);
+		expect(meerNeedsAttention(db, today)).toBe(true);
+
+		vi.setSystemTime(expires + DAY);
+		expect(meerTiles(db, today).uploadTokens.renewShortcut).toBe(true);
+		expect(meerNeedsAttention(db, today)).toBe(true);
+	});
+
+	it('geen herinnering voor een opdracht van een ander domein', () => {
+		useOrigin('https://budget.example.org');
+		vi.setSystemTime(expires - DAY);
+		expect(meerTiles(db, '2026-01-15').uploadTokens.renewShortcut).toBe(false);
 	});
 });

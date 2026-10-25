@@ -29,6 +29,12 @@
 	const dateTime = new Intl.DateTimeFormat('nl-NL', { dateStyle: 'medium', timeStyle: 'short' });
 	const time = new Intl.DateTimeFormat('nl-NL', { timeStyle: 'short' });
 	const when = (iso: string) => dateTime.format(new Date(iso));
+	const longDate = new Intl.DateTimeFormat('nl-NL', { dateStyle: 'long', timeZone: 'UTC' });
+
+	// De meegeleverde iOS-opdracht: te downloaden, binnenkort opnieuw ondertekenen, verlopen,
+	// of ondertekend voor een ander domein (docs/ios-opdracht.md)
+	const until = $derived(longDate.format(new Date(`${data.shortcut.validUntil}T00:00:00Z`)));
+	const downloadable = $derived(data.shortcut.state === 'ok' || data.shortcut.state === 'expiring');
 
 	const create: SubmitFunction = async ({ cancel }) => {
 		message = '';
@@ -89,6 +95,32 @@
 		</p>
 	</header>
 
+	{#if data.shortcut.state !== 'ok'}
+		<section class="card notice" aria-labelledby="notice-title">
+			{#if data.shortcut.state === 'expiring'}
+				<h2 id="notice-title">Opdracht opnieuw ondertekenen</h2>
+				<p>
+					Het certificaat van de iOS-opdracht verloopt op {until}. Daarna is hij niet meer te
+					installeren; een opdracht die al op een telefoon staat, blijft werken. Onderteken hem vóór
+					die datum opnieuw op je Mac (zie docs/ios-opdracht.md).
+				</p>
+			{:else if data.shortcut.state === 'expired'}
+				<h2 id="notice-title">Opdracht verlopen</h2>
+				<p>
+					Het certificaat van de iOS-opdracht is op {until} verlopen, dus de download staat uit. Een opdracht
+					die al op een telefoon staat, blijft werken. Onderteken hem opnieuw op je Mac (zie docs/ios-opdracht.md).
+				</p>
+			{:else if data.shortcut.state === 'other-host'}
+				<h2 id="notice-title">Opdracht voor een ander domein</h2>
+				<p>
+					De meegeleverde opdracht stuurt bonnen naar {data.shortcut.host}, niet naar deze app.
+					Daarom staat de download uit. Onderteken hem voor je eigen domein (zie
+					docs/ios-opdracht.md).
+				</p>
+			{/if}
+		</section>
+	{/if}
+
 	{#if feedback}
 		{#key feedback}<Toast text={feedback.text} error={feedback.error} />{/key}
 	{/if}
@@ -115,17 +147,21 @@
 			</div>
 			<div class="install" role="group" aria-labelledby="install-title">
 				<h3 id="install-title">Opdracht voor het deelmenu</h3>
-				<ol class="steps">
-					<li>Download de opdracht op je iPhone en open hem in Opdrachten.</li>
-					<li>Tik op Voeg opdracht toe en plak het token als erom gevraagd wordt.</li>
-					<li>Deel een bon vanuit Foto's en kies Bon naar Budget.</li>
-				</ol>
-				<a class="button download" href="/instellingen/apparaten/opdracht" download>
-					<svg viewBox="0 0 24 24" aria-hidden="true"
-						><path d="M12 4v11m-5-5 5 5 5-5M5 20h14" /></svg
-					>
-					Opdracht downloaden
-				</a>
+				{#if downloadable}
+					<ol class="steps">
+						<li>Download de opdracht op je iPhone en open hem in Opdrachten.</li>
+						<li>Tik op Voeg opdracht toe en plak het token als erom gevraagd wordt.</li>
+						<li>Deel een bon vanuit Foto's en kies Bon naar Budget.</li>
+					</ol>
+					<a class="button download" href="/instellingen/apparaten/opdracht" download>
+						<svg viewBox="0 0 24 24" aria-hidden="true"
+							><path d="M12 4v11m-5-5 5 5 5-5M5 20h14" /></svg
+						>
+						Opdracht downloaden
+					</a>
+				{:else}
+					<p>De opdracht is nu niet te downloaden; zie de melding bovenaan.</p>
+				{/if}
 				<p class="warning small">
 					Deel de opdracht nooit met het token erin. Voor een nieuw apparaat maak je een nieuw token
 					aan.
@@ -230,6 +266,22 @@
 	.created h2,
 	.created p {
 		margin: 0;
+	}
+
+	.notice {
+		display: grid;
+		gap: 8px;
+		border-left: 4px solid var(--warn);
+	}
+
+	.notice h2,
+	.notice p,
+	.install p {
+		margin: 0;
+	}
+
+	.notice h2 {
+		font-size: 1.1rem;
 	}
 
 	.install {
