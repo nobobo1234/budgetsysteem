@@ -215,7 +215,8 @@ jobs:
         with:
           persist-credentials: false
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-      # Lagen-cache per branch; een PR leest ook de cache die de deploy op main vult
+      # Lagen-cache in de scope van de PR, voor volgende pushes. Dit image wordt nooit uitgerold;
+      # de deploy bouwt bewust zonder cache.
       - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
