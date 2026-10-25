@@ -126,6 +126,15 @@ export function alreadySent(db: DB, kind: NotificationKind, key: string): boolea
 		.get();
 }
 
+/** Legt sleutels vast als verstuurd, bijvoorbeeld omdat ze meegingen in één gebundelde melding. */
+export function markSent(db: DB, kind: NotificationKind, keys: readonly string[]): void {
+	if (keys.length === 0) return;
+	db.insert(notificationsSent)
+		.values(keys.map((key) => ({ kind, key })))
+		.onConflictDoNothing()
+		.run();
+}
+
 /** Bewaartermijn van de ontdubbel-sleutels. */
 export function pruneNotifications(db: DB, now = new Date()): void {
 	const cutoff = new Date(now.getTime() - SENT_RETENTION_DAYS * 86_400_000).toISOString();
