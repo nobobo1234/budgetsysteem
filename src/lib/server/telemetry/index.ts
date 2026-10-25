@@ -1,9 +1,10 @@
 import { config } from '../config.ts';
 import { db } from '../db/index.ts';
 import { log } from '../log.ts';
+import { startAlerts } from './alerts.ts';
 import { telemetryDb } from './db.ts';
 import { describeError, pruneTelemetry, recordError, recordStart } from './errors.ts';
-import { databaseOk } from './health.ts';
+import { databaseOk, healthPaths } from './health.ts';
 import { startPinger } from './ping.ts';
 
 const DAY = 86_400_000;
@@ -43,7 +44,17 @@ export function startTelemetry(version: string): void {
 
 	const url = config().HEALTHCHECK_PING_URL;
 	if (url) startPinger(url, () => databaseOk(db));
+
+	// Pushmeldingen bij een nieuw soort fout, een te oude backup en een volle schijf
+	startAlerts(() => ({
+		db: db(),
+		telemetry: telemetryDb(),
+		paths: healthPaths(config().DATABASE_PATH),
+		databasePath: config().DATABASE_PATH,
+		production: config().NODE_ENV === 'production'
+	}));
 }
 
 export { telemetryDb, useTelemetryDatabase } from './db.ts';
 export { describeError, recordError } from './errors.ts';
+export { alertSoon } from './alerts.ts';

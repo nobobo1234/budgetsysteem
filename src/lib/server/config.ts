@@ -19,6 +19,22 @@ const schema = z.object({
 	// Externe beschikbaarheidscheck: de app pingt deze URL elke paar minuten en de dienst
 	// slaat alarm als dat uitblijft. Bevat een geheim (staat alleen in de omgeving op de VPS).
 	HEALTHCHECK_PING_URL: z.url({ protocol: /^https$/ }).optional(),
+	// Web Push (VAPID, RFC 8292). Publieke sleutel: ongecomprimeerd P-256-punt (65 bytes),
+	// privésleutel: 32 bytes, beide base64url. De privésleutel is een geheim en staat alleen in
+	// de omgeving op de VPS. Zonder sleutels staan pushmeldingen uit.
+	VAPID_PUBLIC_KEY: z
+		.string()
+		.regex(/^[A-Za-z0-9_-]{87}$/)
+		.optional(),
+	VAPID_PRIVATE_KEY: z
+		.string()
+		.regex(/^[A-Za-z0-9_-]{43}$/)
+		.optional(),
+	// Contact voor de push-diensten (`mailto:` of `https:`); standaard ORIGIN
+	VAPID_SUBJECT: z
+		.string()
+		.regex(/^(mailto:|https:\/\/)\S+$/)
+		.optional(),
 	LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info')
 });
 
