@@ -9,4 +9,6 @@ playwright-report/
 docs/SPEC.md
 CLAUDE.md
 .e2e/
+.lhci/
+.lighthouseci/
 .claude/

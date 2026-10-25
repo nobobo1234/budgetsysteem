@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { index, integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
 // Telemetrie staat in een aparte database (spec: Telemetrie en monitoring) en wordt na
 // 90 dagen opgeruimd. Nooit persoonsgegevens: geen foutmeldingen, geen invoer, alleen soort
@@ -37,4 +37,23 @@ export const starts = sqliteTable(
 		version: text('version').notNull()
 	},
 	(t) => [index('starts_at_idx').on(t.at)]
+);
+
+/**
+ * Web-vitals uit de PWA (spec: Telemetrie en monitoring, Snelheid in de praktijk): alleen de
+ * naam van de meting en de waarde, geen pagina, apparaat of sessie.
+ */
+export const VITAL_NAMES = ['LCP', 'INP', 'CLS', 'FCP', 'TTFB'] as const;
+export type VitalName = (typeof VITAL_NAMES)[number];
+
+export const webVitals = sqliteTable(
+	'web_vitals',
+	{
+		id: integer('id').primaryKey({ autoIncrement: true }),
+		at: at(),
+		name: text('name', { enum: VITAL_NAMES }).notNull(),
+		// Milliseconden; CLS is een score zonder eenheid
+		value: real('value').notNull()
+	},
+	(t) => [index('web_vitals_at_idx').on(t.at)]
 );
