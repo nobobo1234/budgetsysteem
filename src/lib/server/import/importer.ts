@@ -16,6 +16,7 @@ import {
 	transactions
 } from '../db/schema.ts';
 import { INTERNAL_TRANSFER } from '../db/seed.ts';
+import { personByIban } from '../people.ts';
 import { autoLinkPayment, findReceiptToMerge } from '../shares.ts';
 import { mccCategory, parseCardPayment } from './card.ts';
 import { ImportError, type ImportFormat, type ImportRecord, type OpeningBalance } from './types.ts';
@@ -130,6 +131,11 @@ export function importRecords(
 		}
 		for (const iban of new Set(records.filter((r) => !r.accountKind).map((r) => r.accountIban))) {
 			let account = tx.select().from(accounts).where(eq(accounts.iban, iban)).get();
+			// Een IBAN van een persoon is nooit een eigen rekening (spec: Datamodel, people)
+			if (!account && personByIban(tx, iban))
+				throw new ImportError(
+					'Het rekeningnummer in dit bestand staat bij een persoon. Haal het daar eerst weg.'
+				);
 			if (!account) {
 				const unassigned = tx
 					.select()

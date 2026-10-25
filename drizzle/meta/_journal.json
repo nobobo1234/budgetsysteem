@@ -47,8 +47,15 @@
     {
       "idx": 6,
       "version": "6",
-      "when": 1792917580395,
-      "tag": "0006_gedeelde_vaste_lasten",
+      "when": 1792917557919,
+      "tag": "0006_reservering_categorie",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1792919367009,
+      "tag": "0007_gedeelde_vaste_lasten",
       "breakpoints": true
     }
   ]

@@ -224,6 +224,9 @@ export const reservations = sqliteTable(
 		transactionId: text('transaction_id').references(() => transactions.id, {
 			onDelete: 'set null'
 		}),
+		// De categorie van de vaste last in deze maand. Verandert die later, dan blijft een
+		// afgesloten maand staan zoals hij was.
+		categoryId: text('category_id').references(() => categories.id, { onDelete: 'set null' }),
 		createdAt: createdAt()
 	},
 	(t) => [

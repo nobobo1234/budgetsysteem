@@ -55,7 +55,10 @@ export function paidByOwed(db: Conn, ids: readonly string[]): Map<string, number
 	return new Map(rows.map((r) => [r.owedId!, r.paid]));
 }
 
-/** Zet de status van posten opnieuw uit wat erop betaald is. */
+/**
+ * Zet de status van posten opnieuw uit wat erop betaald is. Bij een kwijtgescholden post
+ * verandert dan ook wat voor jouw rekening komt, dus volgt de verdeling van de uitgave.
+ */
 export function recomputeStatus(db: Conn, ids: readonly string[]): void {
 	if (ids.length === 0) return;
 	const paid = paidByOwed(db, ids);
@@ -72,6 +75,81 @@ export function recomputeStatus(db: Conn, ids: readonly string[]): void {
 		);
 		if (status !== row.status) db.update(owed).set({ status }).where(eq(owed.id, row.id)).run();
 	}
+	const sources = new Set(
+		rows.flatMap((r) => (r.sourceTransactionId ? [r.sourceTransactionId] : []))
+	);
+	for (const source of sources) syncShareSplits(db, source);
+}
+
+/**
+ * Zet de verdeling van een gedeelde uitgave gelijk aan haar posten: voorgeschoten is wat de
+ * anderen moeten, min wat kwijtgescholden is (dat komt voor jouw rekening); jouw deel is de
+ * rest. Afgeleid in plaats van bijgehouden, zodat losmaken of terugdraaien in elke volgorde
+ * dezelfde uitkomst geeft.
+ */
+export function syncShareSplits(db: Conn, transactionId: string): void {
+	const row = db.select().from(transactions).where(eq(transactions.id, transactionId)).get();
+	if (!row) return;
+	const splits = db
+		.select()
+		.from(transactionSplits)
+		.where(
+			and(
+				eq(transactionSplits.transactionId, transactionId),
+				inArray(transactionSplits.note, [MY_SHARE, ADVANCED])
+			)
+		)
+		.all();
+	const mine = splits.find((s) => s.note === MY_SHARE);
+	const advanced = splits.find((s) => s.note === ADVANCED);
+	if (!mine || !advanced) return;
+	const posts = db
+		.select({ id: owed.id, amountCents: owed.amountCents, status: owed.status })
+		.from(owed)
+		.where(and(eq(owed.sourceTransactionId, transactionId), eq(owed.direction, 'te_krijgen')))
+		.all();
+	const paid = paidByOwed(
+		db,
+		posts.map((p) => p.id)
+	);
+	const advancedCents = posts.reduce(
+		(sum, p) =>
+			sum +
+			(p.status === 'kwijtgescholden'
+				? Math.min(p.amountCents, paid.get(p.id) ?? 0)
+				: p.amountCents),
+		0
+	);
+	const mineCents = -row.amountCents - advancedCents;
+	if (mineCents < 0) throw new ValidationError('Het bedrag is lager dan wat de anderen nog moeten');
+	// Splits zijn negatief, net als de uitgave
+	if (mine.amountCents !== -mineCents)
+		db.update(transactionSplits)
+			.set({ amountCents: -mineCents })
+			.where(eq(transactionSplits.id, mine.id))
+			.run();
+	if (advanced.amountCents !== -advancedCents)
+		db.update(transactionSplits)
+			.set({ amountCents: -advancedCents })
+			.where(eq(transactionSplits.id, advanced.id))
+			.run();
+}
+
+/**
+ * Een uitgave verdwijnt (verwijderd, overgeslagen of vaste last gestopt): posten waarop niets
+ * betaald is vervallen, betaalde blijven als historie.
+ */
+export function dropSourcePosts(db: Conn, transactionId: string): void {
+	const posts = db
+		.select({ id: owed.id })
+		.from(owed)
+		.where(eq(owed.sourceTransactionId, transactionId))
+		.all()
+		.map((p) => p.id);
+	if (posts.length === 0) return;
+	const paid = paidByOwed(db, posts);
+	const unpaid = posts.filter((p) => !paid.has(p));
+	if (unpaid.length > 0) db.delete(owed).where(inArray(owed.id, unpaid)).run();
 }
 
 /** Open posten van een persoon in één richting, oudste eerst, met wat er nog openstaat. */
@@ -179,7 +257,7 @@ export function settlePayment(db: Conn, transactionId: string, target: SettleTar
 	if (!personId) return false;
 	if (!db.select({ id: people.id }).from(people).where(eq(people.id, personId)).get()) return false;
 
-	const before = unlinkPayment(db, transactionId);
+	const { ids: before, people: unlinked } = unlink(db, transactionId);
 	const items = openItems(db, personId, direction, target.owedId);
 	const { allocations, creditCents } = allocatePayment(Math.abs(payment.amountCents), items);
 	db.insert(owedPayments)
@@ -201,21 +279,33 @@ export function settlePayment(db: Conn, transactionId: string, target: SettleTar
 		allocations,
 		creditCents
 	});
+	// Wat deze betaling eerder dekte staat weer open: daar mag tegoed van die personen heen
+	for (const p of new Set([...unlinked, personId])) applyCredit(db, p);
 	return true;
 }
 
-/** Maakt de koppeling van een betaling los; geeft de posten die geraakt werden. */
-export function unlinkPayment(db: Conn, transactionId: string): string[] {
+function unlink(db: Conn, transactionId: string): { ids: string[]; people: string[] } {
 	const rows = db
 		.select()
 		.from(owedPayments)
 		.where(eq(owedPayments.transactionId, transactionId))
 		.all();
-	if (rows.length === 0) return [];
+	if (rows.length === 0) return { ids: [], people: [] };
 	db.delete(owedPayments).where(eq(owedPayments.transactionId, transactionId)).run();
 	const ids = [...new Set(rows.flatMap((r) => (r.owedId ? [r.owedId] : [])))];
 	recomputeStatus(db, ids);
 	recordChange(db, 'losgemaakt', 'owed_payments', transactionId, rows, null);
+	return { ids, people: [...new Set(rows.map((r) => r.personId))] };
+}
+
+/**
+ * Maakt de koppeling van een betaling los; geeft de posten die geraakt werden. Die staan weer
+ * open, dus gaat tegoed van dezelfde persoon er meteen naartoe (spec: tegoed gaat naar de
+ * volgende post).
+ */
+export function unlinkPayment(db: Conn, transactionId: string): string[] {
+	const { ids, people } = unlink(db, transactionId);
+	for (const p of people) applyCredit(db, p);
 	return ids;
 }
 
@@ -371,6 +461,21 @@ export function updateOwed(db: DB, id: string, patch: OwedPatch): void {
 				throw new ValidationError('Onbekende persoon');
 			const paid = paidByOwed(tx, [id]).get(id) ?? 0;
 			if (paid > 0) throw new ValidationError('Op deze post is al betaald door iemand anders');
+			// Eén post per persoon per gedeelde uitgave, net als bij het verdelen zelf
+			if (
+				before.sourceTransactionId &&
+				tx
+					.select({ id: owed.id })
+					.from(owed)
+					.where(
+						and(
+							eq(owed.sourceTransactionId, before.sourceTransactionId),
+							eq(owed.personId, patch.personId)
+						)
+					)
+					.get()
+			)
+				throw new ValidationError('Die persoon staat al bij deze uitgave');
 		}
 		const after = tx.update(owed).set(patch).where(eq(owed.id, id)).returning().get();
 		recordChange(tx, 'gewijzigd', 'owed', id, before, after);
@@ -406,29 +511,15 @@ export function forgiveOwed(db: DB, id: string, undo = false): void {
 				undo ? 'Deze post is niet kwijtgescholden' : 'Deze post staat niet open'
 			);
 		const paid = paidByOwed(tx, [id]).get(id) ?? 0;
-		const rest = before.amountCents - paid;
 		const status = undo ? owedStatus(before.amountCents, paid) : 'kwijtgescholden';
 		tx.update(owed).set({ status }).where(eq(owed.id, id)).run();
-		if (before.sourceTransactionId && before.direction === 'te_krijgen' && rest > 0) {
-			// Splits zijn negatief: jouw deel wordt groter, het voorgeschoten deel kleiner
-			const delta = undo ? -rest : rest;
-			const shift = (note: string, cents: number) =>
-				tx
-					.update(transactionSplits)
-					.set({ amountCents: sql`${transactionSplits.amountCents} + ${cents}` })
-					.where(
-						and(
-							eq(transactionSplits.transactionId, before.sourceTransactionId!),
-							eq(transactionSplits.note, note)
-						)
-					)
-					.run();
-			shift(MY_SHARE, -delta);
-			shift(ADVANCED, delta);
-		}
+		// Wat openstaat schuift tussen jouw deel en het voorgeschoten deel
+		if (before.sourceTransactionId) syncShareSplits(tx, before.sourceTransactionId);
 		recordChange(tx, undo ? 'kwijtschelden_ongedaan' : 'kwijtgescholden', 'owed', id, before, {
 			status
 		});
+		// Weer open: tegoed van die persoon gaat er meteen naartoe
+		if (undo && before.personId) applyCredit(tx, before.personId);
 	});
 }
 
@@ -486,24 +577,38 @@ export interface PersonBalance {
 	toReceiveCents: number;
 	/** Wat jij deze persoon nog moet */
 	toPayCents: number;
-	/** Betaald zonder post: gaat naar de volgende post */
+	/** Van deze persoon binnengekomen zonder post: gaat naar de volgende post te krijgen */
 	creditCents: number;
+	/** Door jou vooruitbetaald zonder post: gaat naar de volgende post te betalen */
+	paidAheadCents: number;
 	oldestDate: string | null;
 	posts: (OpenPost & { daysOpen: number; remind: boolean })[];
 }
 
-/** Tegoed per persoon: betalingen zonder post, naar richting van de betaling. */
-function credits(db: Conn): Map<string, number> {
+/**
+ * Betalingen zonder post per persoon, naar richting: `in` is tegoed op wat iemand jou moet,
+ * `out` wat jij vooruit betaalde en naar een post te betalen gaat. Die twee tellen niet op.
+ */
+function credits(db: Conn): Map<string, { in: number; out: number }> {
 	const rows = db
 		.select({
 			personId: owedPayments.personId,
+			incoming: sql<number>`${transactions.amountCents} > 0`,
 			cents: sql<number>`sum(${owedPayments.amountCents})`
 		})
 		.from(owedPayments)
+		.innerJoin(transactions, eq(transactions.id, owedPayments.transactionId))
 		.where(isNull(owedPayments.owedId))
-		.groupBy(owedPayments.personId)
+		.groupBy(owedPayments.personId, sql`${transactions.amountCents} > 0`)
 		.all();
-	return new Map(rows.map((r) => [r.personId, r.cents]));
+	const out = new Map<string, { in: number; out: number }>();
+	for (const r of rows) {
+		const entry = out.get(r.personId) ?? { in: 0, out: 0 };
+		if (r.incoming) entry.in += r.cents;
+		else entry.out += r.cents;
+		out.set(r.personId, entry);
+	}
+	return out;
 }
 
 /** Overzicht Te krijgen: totalen, en per persoon de open posten met hoe lang ze openstaan. */
@@ -520,7 +625,8 @@ export function owedOverview(db: Conn, today: string) {
 				name: p.personName,
 				toReceiveCents: 0,
 				toPayCents: 0,
-				creditCents: p.personId ? (credit.get(p.personId) ?? 0) : 0,
+				creditCents: p.personId ? (credit.get(p.personId)?.in ?? 0) : 0,
+				paidAheadCents: p.personId ? (credit.get(p.personId)?.out ?? 0) : 0,
 				oldestDate: null,
 				posts: []
 			};
@@ -538,7 +644,7 @@ export function owedOverview(db: Conn, today: string) {
 	}
 	// Tegoed zonder open posten staat er ook
 	for (const [personId, cents] of credit) {
-		if (byPerson.has(personId)) continue;
+		if (byPerson.has(personId) || (cents.in === 0 && cents.out === 0)) continue;
 		const person = db
 			.select({ name: people.name })
 			.from(people)
@@ -549,7 +655,8 @@ export function owedOverview(db: Conn, today: string) {
 			name: person?.name ?? null,
 			toReceiveCents: 0,
 			toPayCents: 0,
-			creditCents: cents,
+			creditCents: cents.in,
+			paidAheadCents: cents.out,
 			oldestDate: null,
 			posts: []
 		});
@@ -563,6 +670,7 @@ export function owedOverview(db: Conn, today: string) {
 		toReceiveCents: list.reduce((s, p) => s + p.toReceiveCents, 0),
 		toPayCents: list.reduce((s, p) => s + p.toPayCents, 0),
 		creditCents: list.reduce((s, p) => s + p.creditCents, 0),
+		paidAheadCents: list.reduce((s, p) => s + p.paidAheadCents, 0),
 		people: list
 	};
 }

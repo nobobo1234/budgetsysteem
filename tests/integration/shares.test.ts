@@ -468,6 +468,30 @@ describe('randgevallen', () => {
 		]);
 	});
 
+	it('goedkoper dan de vaste aandelen samen: weigeren, jouw deel kan niet onder nul', () => {
+		share(sanne);
+		share(tim);
+		generateMonth(db, '2026-10');
+		expect(() => confirmExpected(db, expected('2026-10').id, 3500, '2026-10-01')).toThrow(
+			/lager dan wat de anderen nog moeten/
+		);
+		expect(expected('2026-10').status).toBe('verwacht');
+		confirmExpected(db, expected('2026-10').id, 4000, '2026-10-01');
+		expect(splits(expected('2026-10').id)).toEqual({ 'Mijn deel': 0, Voorgeschoten: -4000 });
+	});
+
+	it('een ingehaalde afschrijving krijgt ook zijn posten', () => {
+		share(sanne);
+		generateMonth(db, '2026-10');
+		// Oktober niet bevestigd; november wordt ingehaald
+		generateMonth(db, '2026-11');
+		expect(sharePosts().map((p) => [p.month, p.personId])).toEqual([
+			['2026-10', sanne],
+			['2026-11', sanne]
+		]);
+		expect(splits(expected('2026-11').id)).toEqual({ 'Mijn deel': -4000, Voorgeschoten: -2000 });
+	});
+
 	it('aandelen samen niet meer dan de last', () => {
 		share(sanne, { amountCents: 4000 });
 		expect(() => share(tim, { amountCents: 2001 })).toThrow(/meer dan het bedrag/);
@@ -598,7 +622,7 @@ describe('overzicht Terugbetalingen', () => {
 	});
 });
 
-describe('migratie 0006: aandelen', () => {
+describe('migratie 0007: aandelen', () => {
 	function statements(file: string): string[] {
 		return readFileSync(`drizzle/${file}`, 'utf8')
 			.split('--> statement-breakpoint')
@@ -615,7 +639,8 @@ describe('migratie 0006: aandelen', () => {
 			'0002_saldocheck.sql',
 			'0003_pushmeldingen.sql',
 			'0004_vaste_lasten.sql',
-			'0005_te_krijgen.sql'
+			'0005_te_krijgen.sql',
+			'0006_reservering_categorie.sql'
 		])
 			sqlite.transaction(() => statements(f).forEach((s) => sqlite.exec(s)))();
 		sqlite.exec(`
@@ -630,7 +655,7 @@ describe('migratie 0006: aandelen', () => {
 		`);
 		// Zoals de migrator: alles in één transactie, met foreign keys aan
 		sqlite.transaction(() => {
-			for (const s of statements('0006_gedeelde_vaste_lasten.sql')) sqlite.exec(s);
+			for (const s of statements('0007_gedeelde_vaste_lasten.sql')) sqlite.exec(s);
 		})();
 		expect(sqlite.prepare('SELECT owed_id FROM owed_payments').all()).toEqual([{ owed_id: 'o' }]);
 		expect(sqlite.prepare('SELECT share_id, month FROM owed').all()).toEqual([

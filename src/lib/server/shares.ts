@@ -174,6 +174,9 @@ function writeSplits(db: Conn, transactionId: string): void {
 		0
 	);
 	const total = -t.amountCents;
+	// Zelfde regel als bij voorschieten (syncShareSplits): jouw deel kan niet onder nul
+	if (total - others < 0)
+		throw new ValidationError('Het bedrag is lager dan wat de anderen nog moeten');
 	db.insert(transactionSplits)
 		.values([
 			{ transactionId, categoryId: t.categoryId, amountCents: -(total - others), note: MY_SHARE },
