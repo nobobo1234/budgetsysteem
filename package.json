@@ -31,11 +31,13 @@
 		"check:tests": "node scripts/check-test-count.mjs"
 	},
 	"dependencies": {
+		"@anthropic-ai/sdk": "^0.135.0",
 		"@simplewebauthn/server": "^14.0.3",
 		"better-sqlite3": "^13.0.3",
 		"drizzle-orm": "^0.45.4",
 		"fast-xml-parser": "^5.11.2",
 		"pino": "^10.4.0",
+		"sharp": "^0.35.5",
 		"zod": "^4.6.7"
 	},
 	"devDependencies": {
