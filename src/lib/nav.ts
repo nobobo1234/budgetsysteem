@@ -9,6 +9,7 @@ const LABELS: Record<string, string> = {
 	'/instellingen': 'Meer',
 	'/te-krijgen': 'Te krijgen',
 	'/te-controleren': 'Te controleren',
+	'/bonnen': 'Bonnen',
 	'/vaste-lasten': 'Vaste lasten'
 };
 
@@ -45,7 +46,8 @@ const TAB_OF: [prefix: string, tab: string][] = [
 	['/te-krijgen', '/instellingen'],
 	['/personen', '/instellingen'],
 	['/terugbetalingen', '/instellingen'],
-	['/saldocheck', '/instellingen']
+	['/saldocheck', '/instellingen'],
+	['/bonnen', '/instellingen']
 ];
 
 const under = (path: string, prefix: string) => path === prefix || path.startsWith(`${prefix}/`);

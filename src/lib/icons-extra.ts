@@ -39,3 +39,8 @@ export const apparaten: IconDef = {
 	hue: 115,
 	path: 'M7 3h10v18H7z M10.5 18h3 M12 14V7 M9.5 9.5 12 7l2.5 2.5'
 };
+
+export const bonnen: IconDef = {
+	hue: 185,
+	path: 'M6 3h12v18l-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5L6 21z M9 8h6 M9 12h6 M9 16h3'
+};

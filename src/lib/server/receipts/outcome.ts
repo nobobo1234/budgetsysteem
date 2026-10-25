@@ -1,0 +1,90 @@
+import type { MatchLabel, MatchQuery } from '../../match.ts';
+import type { FieldStatus } from './checks.ts';
+import type { StoredFields } from './stored.ts';
+
+// Wat er met een gelezen bon gebeurt (spec: Bonnetjes en koppelen, Verwerking stap 5 en
+// Koppellijst). Pure logica, zodat de regels zonder database te testen zijn.
+//
+// | Uitkomst    | Koppellijst                         | Gevolg                                        |
+// | zeker       | duidelijke voorloper (voorselectie) | gekoppeld aan die transactie, klaar           |
+// | zeker       | geen waarschijnlijke of mogelijke   | nieuwe transactie (bron bon), klaar           |
+// | zeker       | wel kandidaten, geen voorloper      | review-inbox: kies zelf (nooit gokken)        |
+// | controleren | als zeker                           | verwerkt, maar blijft gemarkeerd in de inbox  |
+// | onzeker     | —                                   | review-inbox, er wordt niets geboekt          |
+//
+// Een nieuwe transactie uit een bon met "controleren" staat op te controleren; een bestaande
+// transactie die gekoppeld wordt, blijft zoals hij was.
+
+export type ReceiptPlan =
+	| { action: 'koppelen'; transactionId: string; handled: boolean }
+	| { action: 'nieuw'; handled: boolean; status: 'bevestigd' | 'te_controleren' }
+	| { action: 'inbox'; reason: 'onzeker' | 'kiezen' };
+
+export interface RankedCandidates {
+	candidates: readonly { label: MatchLabel }[];
+	preselect: string | null;
+}
+
+/** De vraag voor de koppellijst, of `null` als een veld ontbreekt dat de lijst nodig heeft. */
+export function matchQueryFor(fields: StoredFields): MatchQuery | null {
+	if (fields.totalCents === null || fields.totalCents <= 0 || fields.date === null) return null;
+	return { amountCents: fields.totalCents, date: fields.date, name: fields.store ?? '' };
+}
+
+/** Of een bon genoeg velden heeft om er een transactie van te maken. */
+export function isComplete(fields: StoredFields): boolean {
+	return (
+		fields.store !== null &&
+		fields.store.trim() !== '' &&
+		fields.date !== null &&
+		fields.totalCents !== null &&
+		fields.totalCents > 0 &&
+		fields.currency !== null
+	);
+}
+
+/**
+ * Bepaalt wat de worker automatisch doet. Alleen zeker en controleren worden verwerkt, en alleen
+ * als de koppellijst geen twijfel laat: een duidelijke voorloper, of helemaal niets dat erop
+ * lijkt. Bij twijfel komt de bon in de review-inbox om zelf te kiezen.
+ */
+export function planReceipt(
+	outcome: FieldStatus,
+	fields: StoredFields,
+	ranked: RankedCandidates
+): ReceiptPlan {
+	if (outcome === 'onzeker' || !isComplete(fields)) return { action: 'inbox', reason: 'onzeker' };
+	const handled = outcome === 'zeker';
+	if (ranked.preselect !== null) {
+		return { action: 'koppelen', transactionId: ranked.preselect, handled };
+	}
+	const plausible = ranked.candidates.some((c) => c.label !== 'onwaarschijnlijk');
+	if (plausible) return { action: 'inbox', reason: 'kiezen' };
+	return { action: 'nieuw', handled, status: handled ? 'bevestigd' : 'te_controleren' };
+}
+
+/** De waarde van een bon na verwerken: de status in de inbox en wat er op het scherm staat. */
+export type ReceiptStage =
+	| 'wordt_gelezen'
+	/** Gelezen en verwerkt, niets meer te doen */
+	| 'klaar'
+	/** Verwerkt, maar je moet hem nog nakijken (controleren) */
+	| 'nakijken'
+	/** Gelezen, maar je kiest zelf de koppeling (zeker of controleren zonder duidelijke voorloper) */
+	| 'kiezen'
+	/** Haiku twijfelt: velden nakijken, dan verwerken */
+	| 'onzeker'
+	/** Niet te lezen: zelf invullen of opnieuw proberen */
+	| 'fout';
+
+export function receiptStage(r: {
+	status: 'wordt_gelezen' | FieldStatus | 'fout';
+	transactionId: string | null;
+	handledAt: string | null;
+}): ReceiptStage {
+	if (r.status === 'wordt_gelezen') return 'wordt_gelezen';
+	if (r.handledAt !== null) return 'klaar';
+	if (r.status === 'fout') return 'fout';
+	if (r.status === 'onzeker') return r.transactionId === null ? 'onzeker' : 'nakijken';
+	return r.transactionId === null ? 'kiezen' : 'nakijken';
+}

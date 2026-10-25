@@ -149,6 +149,9 @@
 		{#if displayName(tx.counterparty) !== tx.counterparty.trim()}
 			<p class="muted small">Op je afschrift: {tx.counterparty}</p>
 		{/if}
+		{#each data.receipts as receiptId (receiptId)}
+			<a class="more-link bon-link" href="/bonnen/{receiptId}">Bon bekijken</a>
+		{/each}
 		{#if tx.status === 'te_controleren'}
 			<p class="review">
 				Te controleren{tx.amountCents === 0
@@ -662,6 +665,10 @@
 
 	.amount.in {
 		color: var(--accent-strong);
+	}
+
+	.bon-link {
+		justify-self: start;
 	}
 
 	.review {

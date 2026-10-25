@@ -27,6 +27,8 @@ describe('actieve tab', () => {
 		expect(activeTab('/vaste-lasten/0b7f3c52')).toBe('/budget');
 		expect(activeTab('/regels')).toBe('/budget');
 		expect(activeTab('/saldocheck')).toBe('/instellingen');
+		expect(activeTab('/bonnen')).toBe('/instellingen');
+		expect(activeTab('/bonnen/0b7f3c52-6a2e-4c8e-9a43-1f2d3e4c5b6a')).toBe('/instellingen');
 		expect(activeTab('/instellingen/beveiliging')).toBe('/instellingen');
 		expect(activeTab('/transacties/0b7f3c52')).toBe('/transacties');
 		expect(activeTab('/te-controleren')).toBe('/');

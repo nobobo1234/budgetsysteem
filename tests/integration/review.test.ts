@@ -108,6 +108,7 @@ describe('verzameling', () => {
 	it('leeg: niets te controleren', () => {
 		const inbox = reviewInbox(db, '2026-10-05');
 		expect(sizes(inbox)).toEqual({
+			receipts: 0,
 			missed: 0,
 			transactions: 0,
 			late: 0,

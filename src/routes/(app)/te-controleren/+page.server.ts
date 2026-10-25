@@ -9,6 +9,7 @@ import { transactions } from '#lib/server/db/schema.ts';
 import { ValidationError } from '#lib/server/errors.ts';
 import { confirmExpected, skipExpected } from '#lib/server/recurring.ts';
 import { inboxCount, leaveInInbox, reviewInbox } from '#lib/server/review.ts';
+import { confirmReceipt } from '#lib/server/receipts/process.ts';
 import { confirmReceived, creditToPayable } from '#lib/server/shares.ts';
 import { updateTransaction } from '#lib/server/transactions.ts';
 import type { Actions, PageServerLoad } from './$types';
@@ -24,6 +25,7 @@ export const load: PageServerLoad = ({ setHeaders }) => {
 		today,
 		count: inboxCount(inbox),
 		inbox: {
+			receipts: inbox.receipts,
 			missed: inbox.missed.map((i) => ({ ...i, hue: hue(i.categoryGroup) })),
 			transactions: inbox.transactions.map((t) => ({ ...t, hue: hue(t.categoryGroup) })),
 			late: inbox.late.map((l) => ({ ...l, hue: groupHue(l.personName) })),
@@ -109,6 +111,15 @@ export const actions: Actions = {
 		return guarded(() => {
 			creditToPayable(db(), parsed.data.personId);
 			return { payable: parsed.data.personId };
+		});
+	},
+	// Een verwerkte bon met twijfel klopt
+	confirmReceipt: async ({ request }) => {
+		const parsed = idSchema.safeParse(fromForm(await request.formData()));
+		if (!parsed.success) return fail(400, { message: 'Deze bon ken ik niet.' });
+		return guarded(() => {
+			confirmReceipt(db(), parsed.data.id);
+			return { receipt: parsed.data.id };
 		});
 	},
 	leave: async ({ request }) => {

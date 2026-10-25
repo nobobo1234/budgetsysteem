@@ -56,6 +56,18 @@
 					icon: icons.vasteLasten
 				},
 				{
+					href: '/bonnen',
+					title: 'Bonnen',
+					value:
+						t.receipts.waiting > 0
+							? `${plural(t.receipts.waiting, 'bon wacht', 'bonnen wachten')} op je`
+							: t.receipts.total > 0
+								? plural(t.receipts.total, 'bon', 'bonnen')
+								: 'Foto of screenshot toevoegen',
+					icon: icons.bonnen,
+					warn: t.receipts.waiting > 0
+				},
+				{
 					href: '/saldocheck',
 					title: 'Saldocheck',
 					value:

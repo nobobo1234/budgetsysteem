@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { attention } from './server/telemetry/status.ts';
 import type { Health } from './server/telemetry/health.ts';
-import { formatAge, formatBytes, formatDuration, formatPercent, formatVital } from './status.ts';
+import {
+	formatAge,
+	formatBytes,
+	formatCallDuration,
+	formatDuration,
+	formatPercent,
+	formatTokens,
+	formatUsd,
+	formatVital
+} from './status.ts';
 
 describe('formatDuration', () => {
 	it('kiest de grootste eenheid die past', () => {
@@ -90,5 +99,18 @@ describe('attention', () => {
 
 	it('onbekende schijfruimte', () => {
 		expect(attention({ ...healthy(), disk: null })).toEqual(['Schijfruimte onbekend.']);
+	});
+});
+
+describe('bonnen lezen', () => {
+	it('toont kosten, duur en tokens in gewone taal', () => {
+		expect(formatUsd(0)).toBe('$ 0,00');
+		expect(formatUsd(400_000_000)).toBe('$ 0,40');
+		expect(formatUsd(1_234_000)).toBe('$ 0,001');
+		expect(formatUsd(12_345_000_000)).toBe('$ 12,35');
+		expect(formatCallDuration(4210)).toBe('4,2 s');
+		expect(formatTokens(950)).toBe('950');
+		expect(formatTokens(12_340)).toBe('12,3 k');
+		expect(formatTokens(1_250_000)).toBe('1,3 mln');
 	});
 });

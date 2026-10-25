@@ -57,3 +57,43 @@ export const webVitals = sqliteTable(
 	},
 	(t) => [index('web_vitals_at_idx').on(t.at)]
 );
+
+/**
+ * Eén Haiku-aanroep per bon (spec: Telemetrie en monitoring, AI): tokens, kosten, duur en
+ * uitkomst, en later of je velden corrigeerde. Alleen het ID van de bon, nooit wat erop staat.
+ */
+export const RECEIPT_OUTCOMES = [
+	'zeker',
+	'controleren',
+	'onzeker',
+	'weigering',
+	'afgekapt',
+	'ongeldig',
+	'fout'
+] as const;
+export type ReceiptReadOutcome = (typeof RECEIPT_OUTCOMES)[number];
+
+export const receiptReads = sqliteTable(
+	'receipt_reads',
+	{
+		id: integer('id').primaryKey({ autoIncrement: true }),
+		at: at(),
+		receiptId: text('receipt_id'),
+		model: text('model').notNull(),
+		parts: integer('parts').notNull(),
+		inputTokens: integer('input_tokens').notNull(),
+		outputTokens: integer('output_tokens').notNull(),
+		// Nano-dollars, zodat er nooit afgerond hoeft te worden
+		costNanoUsd: integer('cost_nano_usd').notNull(),
+		durationMs: integer('duration_ms').notNull(),
+		outcome: text('outcome', { enum: RECEIPT_OUTCOMES }).notNull(),
+		// Achteraf gecorrigeerde velden, zoals `totaal,datum`; leeg als niets gecorrigeerd is
+		corrected: text('corrected'),
+		// Een veld dat Haiku zeker noemde en de controles haalde, was toch fout
+		correctedSure: integer('corrected_sure', { mode: 'boolean' }).notNull().default(false)
+	},
+	(t) => [
+		index('receipt_reads_at_idx').on(t.at),
+		index('receipt_reads_receipt_idx').on(t.receiptId)
+	]
+);

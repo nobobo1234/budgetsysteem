@@ -12,7 +12,7 @@ test.beforeEach(async ({ context }) => {
 });
 
 /** Een transactie en een vaste last, zodat ook de detailpagina's meedoen. */
-function details(): { tx: string; recurring: string } {
+function details(): { tx: string; recurring: string; receipt: string } {
 	const db = new Database('.e2e/budget.db', { fileMustExist: true });
 	db.pragma('busy_timeout = 5000');
 	const account = (
@@ -30,17 +30,46 @@ function details(): { tx: string; recurring: string } {
 			min_cents, max_cents, kind, next_date, account_id, status)
 		 VALUES (?, ?, ?, 'maand', 3, 1234, 1234, 1234, 'vast', date('now', '+20 days'), ?, 'actief')`
 	).run(recurring, `${name.toLowerCase()}|`, name, account);
+	// Een gelezen bon (zonder bestand: de preview geeft dan 404, de pagina blijft werken)
+	const receipt = randomUUID();
+	db.prepare(
+		`INSERT INTO receipts (id, file_id, source, status, checked_fields, field_confidence, read_at,
+			transaction_id, handled_at)
+		 VALUES (?, ?, 'app', 'zeker', ?, ?, datetime('now'), ?, datetime('now'))`
+	).run(
+		receipt,
+		randomUUID(),
+		JSON.stringify({
+			store: name,
+			date: new Date().toISOString().slice(0, 10),
+			totalCents: 1234,
+			currency: 'EUR',
+			paymentMethod: 'pin',
+			lines: [],
+			linesSumCents: null
+		}),
+		JSON.stringify(
+			Object.fromEntries(
+				['winkel', 'datum', 'totaal', 'valuta', 'betaalwijze'].map((f) => [
+					f,
+					{ status: 'zeker', model: 'zeker', note: '', failures: [], corrected: false }
+				])
+			)
+		),
+		tx
+	);
 	db.close();
-	return { tx, recurring };
+	return { tx, recurring, receipt };
 }
 
 /** Alle schermen achter de login; subpagina's zonder eigen tab apart. */
-function routes(ids: { tx: string; recurring: string }) {
+function routes(ids: { tx: string; recurring: string; receipt: string }) {
 	const sub = [
 		...MEER_PAGES,
 		'/te-controleren',
 		`/transacties/${ids.tx}`,
-		`/vaste-lasten/${ids.recurring}`
+		`/vaste-lasten/${ids.recurring}`,
+		`/bonnen/${ids.receipt}`
 	] as string[];
 	return { tabs: [...TABS] as string[], sub };
 }

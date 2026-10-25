@@ -153,7 +153,7 @@ describe('bevestigen en verwachte posten', () => {
 		).toThrow(ValidationError);
 	});
 
-	it('de maandjob maakt verwachte posten en reserveringen aan, één keer', () => {
+	it('de maandjob maakt verwachte posten en reserveringen aan, één keer', async () => {
 		rentHistory();
 		history([
 			['2025-11-03', 9000, 'Studievereniging', CLUB_IBAN],
@@ -181,7 +181,7 @@ describe('bevestigen en verwachte posten', () => {
 		const events: RecurringEvent[] = [];
 		const off = onRecurringEvent((e) => events.push(e));
 		scheduleRecurringJobs(db, new Date(2026, 10, 1, 0, 5));
-		expect(runDueJobs(db, new Date(2026, 10, 1, 0, 6))).toBe(1);
+		expect(await runDueJobs(db, new Date(2026, 10, 1, 0, 6))).toBe(1);
 		off();
 
 		expect(expectedPosts(rent.id)).toHaveLength(1);

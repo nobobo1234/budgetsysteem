@@ -37,6 +37,10 @@ const schema = z.object({
 		.string()
 		.regex(/^(mailto:|https:\/\/)\S+$/)
 		.optional(),
+	// Claude Haiku voor bonnetjes. Een geheim: alleen in de omgeving op de VPS. Zonder sleutel
+	// blijven bonnen op "wordt gelezen" staan. De SDK leest ANTHROPIC_BASE_URL zelf (e2e-tests
+	// wijzen die naar een nagebootste Haiku).
+	ANTHROPIC_API_KEY: z.string().min(1).optional(),
 	LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info')
 });
 
