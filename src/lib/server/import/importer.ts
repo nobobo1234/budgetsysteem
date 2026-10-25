@@ -21,6 +21,7 @@ import { INTERNAL_TRANSFER } from '../db/seed.ts';
 import { personByIban } from '../people.ts';
 import { autoLinkPayment, findReceiptToMerge } from '../shares.ts';
 import { mccCategory, parseCardPayment } from './card.ts';
+import { findOwnMatch, hasUnlinkedOwn, tryMergeIntoOwn } from './koppellijst.ts';
 import { ImportError, type ImportFormat, type ImportRecord, type OpeningBalance } from './types.ts';
 
 export interface UncategorizedGroup {
@@ -46,6 +47,21 @@ export interface ImportSummary {
 	anchors: { accountName: string; date: string; amountCents: number }[];
 	/** Inkomende overboekingen die automatisch aan een openstaande post zijn gekoppeld */
 	linkedCount: number;
+	/**
+	 * Koppellijst: boekingen die je zelf al had ingevoerd. Samengevoegd (die tellen ook bij al
+	 * bekend), of op te controleren omdat er meer dan één kandidaat is of geen duidelijke.
+	 */
+	matched: {
+		merged: {
+			id: string;
+			counterparty: string;
+			amountCents: number;
+			date: string;
+			/** Wat de bank meer (positief) of minder boekte dan je invoerde, zoals een fooi */
+			differenceCents: number;
+		}[];
+		reviewCount: number;
+	};
 	/** Storno's (`RvslInd`): automatisch verrekend, of op te controleren met de koppellijst */
 	reversals: {
 		linked: {
@@ -205,6 +221,9 @@ export function importRecords(
 		let periodEnd: string | null = null;
 		// Nieuwe inkomende boekingen met een tegen-IBAN: na de import automatisch koppelen
 		const incoming: { id: string; date: string }[] = [];
+		const matched: ImportSummary['matched'] = { merged: [], reviewCount: 0 };
+		// Zonder eigen invoer (de eerste import) valt er niets tegen te houden
+		const ownEntries = hasUnlinkedOwn(tx);
 
 		for (const r of records) {
 			const reference = r.bankReference && !bad.has(r.bankReference) ? r.bankReference : null;
@@ -221,12 +240,8 @@ export function importRecords(
 			const rule = internal ? null : matchRule(sortedRules, r);
 			const categoryId = internal ? internalId : (rule?.categoryId ?? null);
 
-			// Een al met één tik bevestigde ontvangst krijgt de gegevens van de bank, in plaats
-			// van een tweede boeking (spec: Gedeelde vaste lasten)
-			const incomingFromOther =
-				r.amountCents > 0 && r.counterIban !== null && !internal && !r.reversal;
-			if (incomingFromOther) {
-				const known = tx
+			const known =
+				tx
 					.select({ id: transactions.id })
 					.from(transactions)
 					.where(
@@ -234,7 +249,13 @@ export function importRecords(
 							? eq(transactions.bankReference, reference)
 							: eq(transactions.dedupeHash, hash!)
 					)
-					.get();
+					.get() !== undefined;
+
+			// Een al met één tik bevestigde ontvangst krijgt de gegevens van de bank, in plaats
+			// van een tweede boeking (spec: Gedeelde vaste lasten)
+			const incomingFromOther =
+				r.amountCents > 0 && r.counterIban !== null && !internal && !r.reversal;
+			if (incomingFromOther) {
 				const merge = known ? null : findReceiptToMerge(tx, r);
 				if (merge) {
 					const before = tx
@@ -268,6 +289,55 @@ export function importRecords(
 				}
 			}
 
+			// Koppellijst: je eigen invoer (handmatig, bon of bevestigde verwachte post) krijgt de
+			// gegevens van de bank als hij duidelijk voorloopt; anders komt de boeking op te
+			// controleren. Een storno heeft zijn eigen koppeling, en een geschat eurobedrag
+			// voegt nooit vanzelf samen.
+			let awaitsMatch = false;
+			if (ownEntries && !known && !r.reversal) {
+				const decision = findOwnMatch(
+					tx,
+					{ amountCents: r.amountCents, date: r.date, name: r.counterparty, iban: r.counterIban },
+					{ auto: !r.needsReview }
+				);
+				const differenceCents =
+					decision.kind === 'samenvoegen'
+						? tryMergeIntoOwn(tx, decision.target.id, {
+								amountCents: r.amountCents,
+								date: r.date,
+								counterparty: r.counterparty,
+								counterIban: r.counterIban,
+								description: r.description,
+								accountId: accountIds.get(accountKey(r))!,
+								bankReference: reference,
+								dedupeHash: hash,
+								importBatchId: batch.id,
+								origAmountCents: r.origAmountCents ?? null,
+								origCurrency: r.origCurrency ?? null,
+								endToEndId: r.endToEndId ?? null,
+								category: categoryId
+									? {
+											categoryId,
+											categorySource: rule ? 'regel' : 'intern',
+											categoryRuleId: rule?.id ?? null
+										}
+									: null
+							})
+						: null;
+				if (decision.kind === 'samenvoegen' && differenceCents !== null) {
+					matched.merged.push({
+						id: decision.target.id,
+						counterparty: r.counterparty || decision.target.counterparty,
+						amountCents: r.amountCents,
+						date: r.date,
+						differenceCents
+					});
+					duplicateCount++;
+					continue;
+				}
+				awaitsMatch = decision.kind !== 'nieuw';
+			}
+
 			const inserted = tx
 				.insert(transactions)
 				.values({
@@ -287,8 +357,9 @@ export function importRecords(
 					origAmountCents: r.origAmountCents ?? null,
 					origCurrency: r.origCurrency ?? null,
 					endToEndId: r.endToEndId ?? null,
-					// Een storno staat op te controleren tot hij aan het origineel gekoppeld is
-					...((r.needsReview || (r.reversal && !internal)) && {
+					// Een storno staat op te controleren tot hij aan het origineel gekoppeld is, en een
+					// boeking die bij je eigen invoer kan horen tot je in de koppellijst kiest
+					...((r.needsReview || (r.reversal && !internal) || awaitsMatch) && {
 						status: 'te_controleren' as const
 					})
 				})
@@ -298,7 +369,9 @@ export function importRecords(
 
 			if (inserted.length === 1) {
 				newCount++;
-				if (incomingFromOther) incoming.push({ id: inserted[0]!.id, date: r.date });
+				// Wacht hij op de koppellijst, dan niet ook nog aan een post koppelen
+				if (awaitsMatch) matched.reviewCount++;
+				else if (incomingFromOther) incoming.push({ id: inserted[0]!.id, date: r.date });
 				if (!periodStart || r.date < periodStart) periodStart = r.date;
 				if (!periodEnd || r.date > periodEnd) periodEnd = r.date;
 				if (r.reversal && !internal) reversalIds.push(inserted[0]!.id);
@@ -378,7 +451,12 @@ export function importRecords(
 				anchors.push({ accountName: name, date: anchor.date, amountCents: anchor.amountCents });
 			}
 		}
-		recordChange(tx, 'import', 'import_batches', batch.id, null, { newCount, duplicateCount });
+		recordChange(tx, 'import', 'import_batches', batch.id, null, {
+			newCount,
+			duplicateCount,
+			merged: matched.merged.length,
+			awaitingMatch: matched.reviewCount
+		});
 
 		return {
 			batchId: batch.id,
@@ -390,6 +468,7 @@ export function importRecords(
 			uncategorized: uncategorizedGroups(tx),
 			anchors,
 			linkedCount,
+			matched,
 			reversals
 		};
 	});

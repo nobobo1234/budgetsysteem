@@ -19,6 +19,10 @@
 	let undone = $state<string[]>([]);
 	let fileInput: HTMLInputElement;
 	const summary = $derived(form && 'summary' in form ? form.summary : null);
+	// Samengevoegd met je invoer, maar met een ander bedrag (zoals een fooi): dat moet je zien
+	const differences = $derived(
+		summary?.matched.merged.filter((m) => m.differenceCents !== 0).slice(0, 20) ?? []
+	);
 
 	const categoryOptions = $derived<SelectOption[]>(
 		data.categories.map((c) => ({
@@ -245,6 +249,32 @@
 						/>
 					</li>
 				{/if}
+				{#if summary.matched.merged.length > 0}
+					{@const n = summary.matched.merged.length}
+					<li>
+						<Tile
+							href="/transacties"
+							icon={icons.samenvoegen}
+							title={n === 1
+								? '1 boeking samengevoegd met je invoer'
+								: `${n} boekingen samengevoegd met je invoer`}
+							value="Telt één keer; categorie en notitie bleven"
+						/>
+					</li>
+				{/if}
+				{#if summary.matched.reviewCount > 0}
+					<li>
+						<Tile
+							href="/te-controleren"
+							icon={icons.controleren}
+							title={summary.matched.reviewCount === 1
+								? '1 boeking wacht op de koppellijst'
+								: `${summary.matched.reviewCount} boekingen wachten op de koppellijst`}
+							value="Al zelf ingevoerd? Kies wat erbij hoort"
+							warn
+						/>
+					</li>
+				{/if}
 				{#if summary.reversals.reviewCount > 0}
 					<li>
 						<Tile
@@ -259,6 +289,30 @@
 					</li>
 				{/if}
 			</ul>
+			{#if differences.length > 0}
+				<div class="reversals">
+					<p>
+						{differences.length === 1
+							? 'Bij één samengevoegde boeking'
+							: `Bij ${differences.length} samengevoegde boekingen`} boekte de bank een ander bedrag dan
+						je invoerde. Het bedrag van de bank telt.
+					</p>
+					<ul>
+						{#each differences as m (m.id)}
+							<li>
+								<a class="reversal" href="/transacties/{m.id}">
+									<span class="rname">{displayName(m.counterparty) || 'Zonder naam'}</span>
+									<span class="num">{formatCents(m.amountCents, { sign: true })}</span>
+									<span class="muted num"
+										>{formatCents(Math.abs(m.differenceCents))}
+										{m.differenceCents > 0 ? 'meer' : 'minder'} dan ingevoerd</span
+									>
+								</a>
+							</li>
+						{/each}
+					</ul>
+				</div>
+			{/if}
 			{#if summary.reversals.linked.length > 0}
 				<div class="reversals">
 					<p>
