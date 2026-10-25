@@ -31,3 +31,5 @@ data/
 *.db-shm
 *.db-wal
 .e2e/
+.lhci/
+.lighthouseci/
