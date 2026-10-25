@@ -1,4 +1,5 @@
 import { and, desc, eq, gte, inArray, isNull, lte, or, sql, type SQL } from 'drizzle-orm';
+import { nextOccurrence } from '../recurring.ts';
 import { recordChange } from './audit.ts';
 import type { Conn, DB } from './db/index.ts';
 import {
@@ -6,6 +7,8 @@ import {
 	categories,
 	owed,
 	owedPayments,
+	recurring,
+	reservations,
 	transactionSplits,
 	transactions
 } from './db/schema.ts';
@@ -189,6 +192,29 @@ export function deleteTransaction(db: DB, id: string): boolean {
 		if (unpaid.length > 0) tx.delete(owed).where(inArray(owed.id, unpaid)).run();
 		// Was dit een betaling, dan gaan de posten die hij dekte weer open
 		const covered = unlinkPayment(tx, id);
+		// Een afschrijving van een uitgesmeerde vaste last: de reservering staat weer opzij
+		tx.update(reservations)
+			.set({ drawnCents: 0, transactionId: null })
+			.where(eq(reservations.transactionId, id))
+			.run();
+		// Een verwachte post weggooien is "deze keer niet": de vaste last schuift door
+		if (before.status === 'verwacht' && before.recurringId) {
+			const r = tx.select().from(recurring).where(eq(recurring.id, before.recurringId)).get();
+			if (r?.nextDate && r.nextDate.slice(0, 7) <= before.date.slice(0, 7)) {
+				tx.update(recurring)
+					.set({
+						nextDate: nextOccurrence({
+							interval: r.interval,
+							expectedDay: r.expectedDay,
+							current: r.nextDate,
+							previous: r.lastDate
+						}),
+						lastDate: r.nextDate
+					})
+					.where(eq(recurring.id, r.id))
+					.run();
+			}
+		}
 		tx.delete(transactions).where(eq(transactions.id, id)).run();
 		recomputeStatus(tx, covered);
 		recordChange(tx, 'verwijderd', 'transactions', id, before, null);

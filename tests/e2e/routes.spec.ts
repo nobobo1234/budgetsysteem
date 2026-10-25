@@ -6,6 +6,8 @@ const closed = [
 	['GET', '/transacties'],
 	['GET', '/transacties/0b7f3c52-6a2e-4c8e-9a43-1f2d3e4c5b6a'],
 	['GET', '/budget'],
+	['GET', '/vaste-lasten'],
+	['GET', '/vaste-lasten/0b7f3c52-6a2e-4c8e-9a43-1f2d3e4c5b6a'],
 	['GET', '/import'],
 	['GET', '/categorieen'],
 	['GET', '/regels'],
@@ -15,12 +17,18 @@ const closed = [
 	['POST', '/te-krijgen?/add'],
 	['POST', '/personen?/addIban'],
 	['GET', '/saldocheck'],
+	['GET', '/instellingen/meldingen'],
 	['GET', '/__data.json'],
 	['GET', '/bestaat-niet'],
 	['POST', '/api/transactions'],
+	['POST', '/?/confirmExpected'],
+	['POST', '/vaste-lasten?/confirm'],
 	['POST', '/api/auth/passkeys/options'],
 	['POST', '/instellingen?/logout'],
-	['POST', '/saldocheck?/check']
+	['POST', '/saldocheck?/check'],
+	['POST', '/instellingen/meldingen?/toggle'],
+	['POST', '/api/push/subscription'],
+	['DELETE', '/api/push/subscription']
 ] as const;
 
 for (const [method, path] of closed) {
@@ -28,7 +36,7 @@ for (const [method, path] of closed) {
 		const response = await request.fetch(path, {
 			method,
 			headers: { origin: baseURL!, 'content-type': 'application/json' },
-			data: method === 'POST' ? {} : undefined,
+			data: method === 'GET' ? undefined : {},
 			maxRedirects: 0
 		});
 		expect(response.status()).toBe(401);

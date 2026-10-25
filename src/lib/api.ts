@@ -1,14 +1,20 @@
 export type ApiResult<T> = { ok: true; data: T } | { ok: false; status: number; message: string };
 
 /** POST met JSON naar onze eigen API. Netwerkfouten geven status 0. */
-export async function postJson<T = unknown>(
+export function postJson<T = unknown>(url: string, body: unknown = {}): Promise<ApiResult<T>> {
+	return sendJson<T>('POST', url, body);
+}
+
+/** Verzoek met JSON naar onze eigen API. Netwerkfouten geven status 0. */
+export async function sendJson<T = unknown>(
+	method: 'POST' | 'DELETE',
 	url: string,
 	body: unknown = {}
 ): Promise<ApiResult<T>> {
 	let response: Response;
 	try {
 		response = await fetch(url, {
-			method: 'POST',
+			method,
 			headers: { 'content-type': 'application/json' },
 			body: JSON.stringify(body),
 			credentials: 'same-origin'

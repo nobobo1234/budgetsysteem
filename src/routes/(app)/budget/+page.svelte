@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import BudgetBar from '#lib/components/BudgetBar.svelte';
-	import { formatMonth } from '#lib/dates.ts';
+	import { suggestedLimit } from '#lib/budget.ts';
+	import { formatDayMonth, formatMonth } from '#lib/dates.ts';
 	import { centsToInput, formatCents } from '#lib/money.ts';
 
 	let { data, form } = $props();
@@ -46,6 +47,28 @@
 		</div>
 	</div>
 
+	<a class="fixed card" href="/vaste-lasten">
+		<span>
+			<strong>Vaste lasten</strong>
+			<span class="muted">
+				{#if data.fixed.count > 0}
+					{data.fixed.count} lopend{#if data.fixed.proposals > 0}, {data.fixed.proposals}
+						{data.fixed.proposals === 1 ? 'voorstel' : 'voorstellen'}{/if}
+				{:else if data.fixed.proposals > 0}
+					{data.fixed.proposals}
+					{data.fixed.proposals === 1 ? 'voorstel' : 'voorstellen'} om te bevestigen
+				{:else}
+					Huur, energie en abonnementen als verwachte posten
+				{/if}
+			</span>
+		</span>
+		<span class="num">
+			{#if data.fixed.count > 0}{formatCents(data.fixed.perMonthCents, { whole: true })}
+				<span class="muted">per maand</span>{/if}
+			<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7.5 4.5L13 10l-5.5 5.5" /></svg>
+		</span>
+	</a>
+
 	{#if o.uncategorizedCents > 0}
 		<p class="muted">
 			<a href="/transacties?maand={o.month}&categorie=geen"
@@ -66,6 +89,8 @@
 				{#each lines as line (line.categoryId)}
 					<li>
 						{#if line.limitCents > 0}
+							<BudgetBar {...line} />
+						{:else if line.plannedCents > 0}
 							<BudgetBar {...line} />
 						{:else}
 							<div class="nolimit">
@@ -97,6 +122,40 @@
 							</label>
 							<button class="button secondary">Opslaan</button>
 						</form>
+						{#each line.reserves as r (r.recurringId)}
+							<p class="reserve muted">
+								{r.counterparty}: <span class="num">{formatCents(r.reservedCents)}</span> van
+								<span class="num">{formatCents(r.expectedCents)}</span> opzij{#if r.nextDate},
+									afschrijving rond {formatDayMonth(r.nextDate)}{/if}
+							</p>
+						{/each}
+						{#if line.plannedCents > line.limitCents}
+							<form
+								method="POST"
+								action="?/limit"
+								class="too-low"
+								use:enhance={() =>
+									async ({ update }) =>
+										update({ reset: false })}
+							>
+								<p>
+									Gepland is <span class="num">{formatCents(line.plannedCents)}</span>, meer dan de
+									limiet. Daardoor is er geen ruimte voor andere uitgaven.
+								</p>
+								<input type="hidden" name="month" value={o.month} />
+								<input type="hidden" name="categoryId" value={line.categoryId} />
+								<input
+									type="hidden"
+									name="limit"
+									value={centsToInput(suggestedLimit(line.plannedCents))}
+								/>
+								<button class="text-button"
+									>Limiet op {formatCents(suggestedLimit(line.plannedCents), {
+										whole: true
+									})}</button
+								>
+							</form>
+						{/if}
 						{#if form?.categoryId === line.categoryId && form?.message}
 							<p class="error-text" role="alert">{form.message}</p>
 						{/if}
@@ -218,6 +277,68 @@
 	li {
 		display: grid;
 		gap: 8px;
+	}
+
+	.fixed {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		gap: 12px;
+		color: inherit;
+		text-decoration: none;
+		transition: transform 160ms var(--ease-spring);
+	}
+
+	.fixed:active {
+		transform: scale(0.99);
+	}
+
+	.fixed > span:first-child {
+		display: grid;
+		min-width: 0;
+	}
+
+	.fixed .num {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		white-space: nowrap;
+		font-weight: 600;
+	}
+
+	.fixed svg {
+		width: 18px;
+		height: 18px;
+		fill: none;
+		stroke: currentColor;
+		stroke-width: 1.8;
+		stroke-linecap: round;
+		stroke-linejoin: round;
+	}
+
+	.reserve {
+		font-size: 0.88rem;
+	}
+
+	.too-low {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 4px 12px;
+		padding: 10px 12px;
+		border-radius: var(--radius-sm);
+		background: color-mix(in oklch, var(--warn) 18%, transparent);
+		font-size: 0.92rem;
+	}
+
+	.text-button {
+		min-height: var(--tap);
+		padding: 0 4px;
+		border: 0;
+		background: none;
+		color: var(--accent-strong);
+		font-weight: 600;
+		cursor: pointer;
 	}
 
 	.nolimit {

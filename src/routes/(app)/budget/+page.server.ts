@@ -4,6 +4,7 @@ import { shiftMonth, toIsoDate } from '#lib/dates.ts';
 import { parseAmount } from '#lib/money.ts';
 import { monthOverview, setBudget } from '#lib/server/budgets.ts';
 import { db } from '#lib/server/db/index.ts';
+import { recurringOverview } from '#lib/server/recurring.ts';
 import type { Actions, PageServerLoad } from './$types';
 
 const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
@@ -16,8 +17,14 @@ function monthFrom(value: string | null): string {
 export const load: PageServerLoad = ({ url }) => {
 	const month = monthFrom(url.searchParams.get('maand'));
 	const today = toIsoDate(new Date());
+	const fixed = recurringOverview(db(), today);
 	return {
 		overview: monthOverview(db(), month, today),
+		fixed: {
+			perMonthCents: fixed.totalPerMonthCents,
+			count: fixed.active.length,
+			proposals: fixed.proposals.length
+		},
 		previous: shiftMonth(month, -1),
 		next: shiftMonth(month, 1),
 		isCurrent: month === today.slice(0, 7)

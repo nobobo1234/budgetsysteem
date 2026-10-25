@@ -3,6 +3,7 @@
 	import { refreshAll } from '$app/navigation';
 	import { flush } from '#lib/offline/queue.ts';
 	import { sync } from '#lib/offline/sync.svelte.ts';
+	import { refreshSubscription } from '#lib/push.ts';
 
 	let { children } = $props();
 
@@ -27,8 +28,12 @@
 		}
 	] as const;
 
+	// Vaste lasten horen bij Budget: daar zit je via de link op de budgetpagina
 	const active = (href: string) =>
-		href === '/' ? page.url.pathname === '/' : page.url.pathname.startsWith(href);
+		href === '/'
+			? page.url.pathname === '/'
+			: page.url.pathname.startsWith(href) ||
+				(href === '/budget' && page.url.pathname.startsWith('/vaste-lasten'));
 
 	async function trySync() {
 		const result = await flush();
@@ -40,6 +45,8 @@
 
 	$effect(() => {
 		void trySync();
+		// Pushabonnement aan de huidige sessie koppelen (na opnieuw inloggen)
+		void refreshSubscription();
 	});
 </script>
 

@@ -110,7 +110,8 @@ for (const path of [
 	'/instellingen',
 	'/te-krijgen',
 	'/personen',
-	'/saldocheck'
+	'/saldocheck',
+	'/instellingen/meldingen'
 ]) {
 	test(`${path} past op een telefoonscherm`, async ({ page }) => {
 		await page.goto(path);
@@ -203,3 +204,26 @@ test(
 		expect(total).toBeLessThan(100 * 1024);
 	}
 );
+
+// Meldingen: een schakelaar slaat direct op en blijft na herladen staan. Zonder VAPID-sleutels
+// (zoals hier) zegt de pagina dat pushmeldingen op de server nog niet zijn ingesteld.
+test('meldingen: schakelaar opslaan en vergrendelscherm standaard uit', async ({ page }) => {
+	await page.goto('/instellingen/meldingen');
+	await expect(page.getByText('nog niet ingesteld')).toBeVisible();
+	const lockscreen = page.getByRole('switch', { name: /Bedragen en namen tonen/ });
+	await expect(lockscreen).not.toBeChecked();
+	await expect(page.getByRole('switch', { name: /Nieuwe passkey/ })).toBeDisabled();
+
+	// De database is gedeeld tussen Chromium en WebKit: vanuit de huidige stand omzetten en terug
+	const tikkie = () => page.getByRole('switch', { name: /Tikkie 14 dagen open/ });
+	for (let round = 0; round < 2; round++) {
+		const before = await tikkie().isChecked();
+		const saved = page.waitForResponse((r) => r.url().includes('?/toggle') && r.ok());
+		await tikkie().click({ force: true });
+		await saved;
+		await page.reload();
+		// Pas na hydratatie (onMount) staat deze tekst er; dan werkt de volgende klik
+		await expect(page.getByText('nog niet ingesteld')).toBeVisible();
+		await expect(tikkie()).toBeChecked({ checked: !before });
+	}
+});

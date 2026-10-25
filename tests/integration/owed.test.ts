@@ -447,7 +447,7 @@ describe('personen', () => {
 	});
 });
 
-describe('migratie 0003: personen en betalingen', () => {
+describe('migratie 0005: personen en betalingen', () => {
 	function statements(file: string): string[] {
 		return readFileSync(`drizzle/${file}`, 'utf8')
 			.split('--> statement-breakpoint')
@@ -461,7 +461,9 @@ describe('migratie 0003: personen en betalingen', () => {
 		for (const s of [
 			...statements('0000_init.sql'),
 			...statements('0001_regelbron.sql'),
-			...statements('0002_saldocheck.sql')
+			...statements('0002_saldocheck.sql'),
+			...statements('0003_pushmeldingen.sql'),
+			...statements('0004_vaste_lasten.sql')
 		])
 			sqlite.exec(s);
 		sqlite.exec(`
@@ -476,7 +478,7 @@ describe('migratie 0003: personen en betalingen', () => {
 		`);
 		// Zoals de migrator: alles in één transactie, met foreign keys aan
 		sqlite.transaction(() => {
-			for (const s of statements('0003_te_krijgen.sql')) sqlite.exec(s);
+			for (const s of statements('0005_te_krijgen.sql')) sqlite.exec(s);
 		})();
 
 		const peopleRows = sqlite.prepare('SELECT id, name FROM people').all() as {

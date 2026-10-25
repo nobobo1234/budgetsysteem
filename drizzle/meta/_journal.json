@@ -26,8 +26,22 @@
     {
       "idx": 3,
       "version": "6",
-      "when": 1792909463862,
-      "tag": "0003_te_krijgen",
+      "when": 1792909544565,
+      "tag": "0003_pushmeldingen",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1792910269537,
+      "tag": "0004_vaste_lasten",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1792911679009,
+      "tag": "0005_te_krijgen",
       "breakpoints": true
     }
   ]
