@@ -34,3 +34,8 @@ export const beveiliging: IconDef = {
 };
 
 export const status: IconDef = { hue: 270, path: 'M3 12h4l2.5-6 5 12 2.5-6h4' };
+
+export const apparaten: IconDef = {
+	hue: 115,
+	path: 'M7 3h10v18H7z M10.5 18h3 M12 14V7 M9.5 9.5 12 7l2.5 2.5'
+};

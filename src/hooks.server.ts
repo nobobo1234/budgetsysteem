@@ -4,6 +4,7 @@ import { pruneSessions, sessionCookieName, validateSession } from '#lib/server/a
 import { config } from '#lib/server/config.ts';
 import { db } from '#lib/server/db/index.ts';
 import {
+	INGEST_ROUTE,
 	SECURITY_HEADERS,
 	clientAddress,
 	isPublicRoute,
@@ -14,6 +15,7 @@ import { budgetCheckSoon, startBudgetNotifications } from '#lib/server/budget-no
 import { startJobs } from '#lib/server/jobs.ts';
 import { log } from '#lib/server/log.ts';
 import { requestLimiter } from '#lib/server/ratelimit.ts';
+import { verifyUploadToken } from '#lib/server/receipts/tokens.ts';
 import { scheduleRecurringJobs } from '#lib/server/recurring.ts';
 import { startRecurringNotifications } from '#lib/server/recurring-notify.ts';
 import {
@@ -53,12 +55,25 @@ export const handle: Handle = async ({ event, resolve }) => {
 		return json(429, 'Te veel verzoeken');
 	}
 
-	// Muterende verzoeken alleen vanaf onze eigen origin (aanvulling op de CSRF-controle van SvelteKit)
-	if (!isSafeMethod(request.method)) {
-		const expected = config().ORIGIN ?? event.url.origin;
-		if (request.headers.get('origin') !== expected) return json(403, 'Verzoek geweigerd');
+	const expectedOrigin = config().ORIGIN ?? event.url.origin;
+
+	// Het deelmenu: alleen een upload-token, nooit een sessie. Een iOS-opdracht stuurt geen
+	// Origin; stuurt een browser er wel een, dan moet het de onze zijn.
+	if (event.route.id === INGEST_ROUTE) {
+		event.locals.session = null;
+		const origin = request.headers.get('origin');
+		if (origin !== null && origin !== expectedOrigin) return json(403, 'Verzoek geweigerd');
+		event.locals.uploadToken = verifyUploadToken(db(), request.headers.get('authorization'));
+		if (!event.locals.uploadToken) return unauthorized(request);
+		return secure(await resolve(event));
 	}
 
+	// Muterende verzoeken alleen vanaf onze eigen origin (aanvulling op de CSRF-controle van SvelteKit)
+	if (!isSafeMethod(request.method)) {
+		if (request.headers.get('origin') !== expectedOrigin) return json(403, 'Verzoek geweigerd');
+	}
+
+	// Een upload-token telt hier niet: alleen de sessiecookie
 	const token = event.cookies.get(sessionCookieName());
 	event.locals.session = token ? validateSession(db(), token) : null;
 
@@ -71,14 +86,17 @@ export const handle: Handle = async ({ event, resolve }) => {
 	if (!isSafeMethod(request.method) && event.locals.session && response.status < 400) {
 		budgetCheckSoon();
 	}
+	return secure(response);
+};
 
+function secure(response: Response): Response {
 	for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
 		if (!response.headers.has(name)) response.headers.set(name, value);
 	}
 	// Persoonlijke gegevens niet in gedeelde caches of de back/forward-cache
 	if (!response.headers.has('cache-control')) response.headers.set('cache-control', 'no-store');
 	return response;
-};
+}
 
 export const handleError: HandleServerError = ({ kind, error, event }) => {
 	if (kind === 'app') return error;

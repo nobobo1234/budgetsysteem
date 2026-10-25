@@ -163,7 +163,15 @@ export const receipts = sqliteTable('receipts', {
 	id: id(),
 	// Bestandsnaam is altijd een eigen UUID, nooit een pad uit invoer
 	fileId: text('file_id').notNull(),
+	// Opnieuw gecodeerd door de server; het bestand heet `<fileId>.jpg` of `<fileId>.png`
+	mediaType: text('media_type', { enum: ['image/jpeg', 'image/png'] })
+		.notNull()
+		.default('image/jpeg'),
 	source: text('source', { enum: ['app', 'deelmenu'] }).notNull(),
+	// Bij `deelmenu`: met welk upload-token hij binnenkwam
+	uploadTokenId: text('upload_token_id').references(() => uploadTokens.id, {
+		onDelete: 'set null'
+	}),
 	status: text('status', { enum: ['wordt_gelezen', 'zeker', 'controleren', 'onzeker', 'fout'] })
 		.notNull()
 		.default('wordt_gelezen'),
@@ -430,6 +438,20 @@ export const setupTokens = sqliteTable('setup_tokens', {
 	expiresAt: text('expires_at').notNull(),
 	usedAt: text('used_at'),
 	createdAt: createdAt()
+});
+
+// Upload-tokens voor het deelmenu (spec: Uploaden via het deelmenu). Een token mag alleen
+// `POST /api/ingest`; het token zelf wordt één keer getoond, hier staat alleen de hash.
+export const uploadTokens = sqliteTable('upload_tokens', {
+	id: id(),
+	tokenHash: text('token_hash').notNull().unique(),
+	// Apparaat waarvoor het token is, zoals "iPhone"
+	name: text('name').notNull(),
+	createdAt: createdAt(),
+	lastUsedAt: text('last_used_at'),
+	// Tijdelijk geblokkeerd na meer dan 30 uploads in een uur
+	blockedUntil: text('blocked_until'),
+	revokedAt: text('revoked_at')
 });
 
 export const jobs = sqliteTable(

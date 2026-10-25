@@ -12,6 +12,10 @@ export type SecurityEvent =
 	| 'sessie_ingetrokken'
 	| 'herstelcode_vernieuwd'
 	| 'setup_token_gebruikt'
+	| 'upload_token_aangemaakt'
+	| 'upload_token_ingetrokken'
+	| 'upload_token_gebruikt'
+	| 'upload_token_geblokkeerd'
 	| 'rate_limit';
 
 // De belangrijkste gebeurtenissen krijgen ook een pushmelding (spec: OWASP A09, Passkeys):
@@ -24,6 +28,14 @@ const PUSH: Partial<Record<SecurityEvent, NotifyMessage>> = {
 	herstelcode_gebruikt: {
 		text: 'Er is ingelogd met je herstelcode. Was jij dit niet? Trek de sessie in bij Beveiliging.',
 		url: '/instellingen/beveiliging'
+	},
+	upload_token_aangemaakt: {
+		text: 'Er is een upload-token aangemaakt. Was jij dit niet? Trek hem in bij Apparaten.',
+		url: '/instellingen/apparaten'
+	},
+	upload_token_geblokkeerd: {
+		text: 'Een upload-token stuurde meer dan 30 bonnen in een uur en is een uur geblokkeerd.',
+		url: '/instellingen/apparaten'
 	}
 };
 

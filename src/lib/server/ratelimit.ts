@@ -31,6 +31,10 @@ export class RateLimiter {
 		this.windows.delete(key);
 	}
 
+	clear(): void {
+		this.windows.clear();
+	}
+
 	private sweep(now: number): void {
 		for (const [key, w] of this.windows) if (w.resetAt <= now) this.windows.delete(key);
 		// Nog steeds vol: begin opnieuw in plaats van onbeperkt te groeien

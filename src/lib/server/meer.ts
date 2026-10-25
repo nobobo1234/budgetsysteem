@@ -8,6 +8,7 @@ import type { DB } from './db/index.ts';
 import { db as appDb } from './db/index.ts';
 import { accounts, categories, people, rules } from './db/schema.ts';
 import { owedSummary } from './owed.ts';
+import { activeUploadTokens, isBlocked } from './receipts/tokens.ts';
 import { listDevices } from './push/subscriptions.ts';
 import { recurringOverview } from './recurring.ts';
 import { sharesOverview } from './shares.ts';
@@ -36,6 +37,7 @@ export function meerTiles(db: DB, today = toIsoDate(new Date())) {
 	const owed = owedSummary(db);
 	const fixed = recurringOverview(db, today);
 	const shares = sharesOverview(db, today);
+	const tokens = activeUploadTokens(db);
 	return {
 		owed,
 		fixed: {
@@ -57,6 +59,7 @@ export function meerTiles(db: DB, today = toIsoDate(new Date())) {
 			.all()
 			.map((a) => a.name),
 		passkeys: activePasskeys(db).length,
+		uploadTokens: { count: tokens.length, blocked: tokens.some((t) => isBlocked(t)) },
 		recoveryCode: hasRecoveryCode(db),
 		statusAttention: statusAttention()
 	};

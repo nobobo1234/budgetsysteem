@@ -7,6 +7,8 @@ const schema = z.object({
 	// Aparte telemetrie-database; standaard `telemetry.db` naast DATABASE_PATH
 	TELEMETRY_DATABASE_PATH: z.string().min(1).optional(),
 	MIGRATIONS_DIR: z.string().min(1).default('drizzle'),
+	// Bonnetjes, buiten de webroot; standaard `receipts/` naast DATABASE_PATH (het datavolume)
+	RECEIPTS_DIR: z.string().min(1).optional(),
 	// Publieke origin, zoals https://finance.mijndomein.nl
 	ORIGIN: z.url().optional(),
 	// Relying party ID voor passkeys; standaard de host van ORIGIN

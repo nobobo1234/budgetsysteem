@@ -16,6 +16,7 @@ export const MEER_PAGES = [
 	'/regels',
 	'/personen',
 	'/instellingen/meldingen',
+	'/instellingen/apparaten',
 	'/instellingen/rekeningen',
 	'/instellingen/beveiliging',
 	'/instellingen/status'
