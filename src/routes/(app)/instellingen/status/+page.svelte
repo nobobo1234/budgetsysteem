@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { invalidateAll } from '$app/navigation';
-	import { addDays, formatShortDate } from '#lib/dates.ts';
+	import { formatShortDate } from '#lib/dates.ts';
 	import {
 		formatAge,
 		formatBytes,
@@ -14,9 +14,8 @@
 
 	const h = $derived(data.health);
 	const time = new Intl.DateTimeFormat('nl-NL', { timeStyle: 'short' });
-	const VITALS = ['LCP', 'INP', 'CLS', 'TTFB'] as const;
-	const week = (start: string) =>
-		`${formatShortDate(start)} – ${formatShortDate(addDays(start, 6))}`;
+	// FCP en TTFB worden ook opgeslagen, maar passen niet op een telefoonscherm
+	const VITALS = ['LCP', 'INP', 'CLS'] as const;
 
 	async function refresh() {
 		refreshing = true;
@@ -155,7 +154,7 @@
 				<table>
 					<thead>
 						<tr>
-							<th scope="col">Week</th>
+							<th scope="col">Week van</th>
 							{#each VITALS as name (name)}<th scope="col" class="value">{name}</th>{/each}
 						</tr>
 					</thead>
@@ -163,7 +162,7 @@
 						{#each data.vitals as row (row.weekStart)}
 							<tr>
 								<th scope="row">
-									<span class="num">{week(row.weekStart)}</span>
+									<span class="num">{formatShortDate(row.weekStart)}</span>
 									<span class="muted count num">
 										{Object.values(row.metrics).reduce((n, m) => Math.max(n, m.count), 0)} metingen
 									</span>

@@ -223,4 +223,12 @@ test('web-vitals komen op de statuspagina', async ({ page }) => {
 	const vitals = page.getByRole('table');
 	await expect(vitals).toBeVisible();
 	await expect(vitals.getByRole('row')).not.toHaveCount(1);
+
+	// Met de tabel erop past de pagina ook op het smalste scherm (375 px)
+	await page.setViewportSize({ width: 375, height: 812 });
+	const { inner, scroll } = await page.evaluate(() => ({
+		inner: document.documentElement.clientWidth,
+		scroll: document.documentElement.scrollWidth
+	}));
+	expect(scroll).toBeLessThanOrEqual(inner);
 });
