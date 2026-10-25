@@ -59,7 +59,7 @@ node scripts/sign-shortcut.ts
 
 Andere host: `node scripts/sign-shortcut.ts --url https://<host>/api/ingest` (pas dan ook
 `INGEST_URL` in `shortcut.ts` aan, anders faalt de test). Met `--bewaar <map>` krijg je ook het
-`.shortcut`-bestand en de plist om zelf te bekijken. Commit daarna `shortcut-signed.ts`.
+`.shortcut`-bestand en de bron (JSON) om zelf te bekijken. Commit daarna `shortcut-signed.ts`.
 
 ## Testen
 

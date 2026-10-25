@@ -234,43 +234,12 @@ export function shortcutDefinition(ingestUrl = INGEST_URL): Plist {
 	};
 }
 
-const escapeXml = (s: string) =>
-	s.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
-
-function serialize(value: Plist, indent: string): string {
-	const inner = indent + '\t';
-	if (typeof value === 'string') return `${indent}<string>${escapeXml(value)}</string>`;
-	if (typeof value === 'boolean') return `${indent}<${value}/>`;
-	if (typeof value === 'number') {
-		return Number.isInteger(value)
-			? `${indent}<integer>${value}</integer>`
-			: `${indent}<real>${value}</real>`;
-	}
-	if (Array.isArray(value)) {
-		if (value.length === 0) return `${indent}<array/>`;
-		return [`${indent}<array>`, ...value.map((v) => serialize(v, inner)), `${indent}</array>`].join(
-			'\n'
-		);
-	}
-	const keys = Object.keys(value).sort();
-	if (keys.length === 0) return `${indent}<dict/>`;
-	return [
-		`${indent}<dict>`,
-		...keys.flatMap((k) => [`${inner}<key>${escapeXml(k)}</key>`, serialize(value[k]!, inner)]),
-		`${indent}</dict>`
-	].join('\n');
-}
-
-/** XML-plist; `plutil` maakt er bij het ondertekenen een binaire plist van. */
-export function shortcutPlist(ingestUrl = INGEST_URL): string {
-	return [
-		'<?xml version="1.0" encoding="UTF-8"?>',
-		'<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">',
-		'<plist version="1.0">',
-		serialize(shortcutDefinition(ingestUrl), ''),
-		'</plist>',
-		''
-	].join('\n');
+/**
+ * De bron als JSON; `plutil` maakt er bij het ondertekenen een binaire plist van. Zo hoeft er
+ * niets met de hand naar XML ge-escapet te worden.
+ */
+export function shortcutJson(ingestUrl = INGEST_URL): string {
+	return `${JSON.stringify(shortcutDefinition(ingestUrl), null, '\t')}\n`;
 }
 
 /** Een maand voordat het certificaat verloopt, vraagt de app om opnieuw te ondertekenen. */
@@ -307,5 +276,5 @@ export function shortcutStatus(
 
 /** Hash van de bron, zodat een test ziet dat het ondertekende bestand bij deze definitie hoort. */
 export function shortcutSourceHash(ingestUrl = INGEST_URL): string {
-	return createHash('sha256').update(shortcutPlist(ingestUrl)).digest('hex');
+	return createHash('sha256').update(shortcutJson(ingestUrl)).digest('hex');
 }

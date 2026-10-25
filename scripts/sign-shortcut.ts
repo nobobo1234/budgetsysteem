@@ -16,7 +16,7 @@ import { parseArgs } from 'node:util';
 import {
 	INGEST_URL,
 	SHORTCUT_NAME,
-	shortcutPlist,
+	shortcutJson,
 	shortcutSourceHash
 } from '../src/lib/server/receipts/shortcut.ts';
 
@@ -39,13 +39,13 @@ if (process.platform !== 'darwin') {
 
 const dir = mkdtempSync(join(tmpdir(), 'opdracht-'));
 try {
-	const source = join(dir, 'bron.plist');
+	const source = join(dir, 'bron.json');
 	const unsigned = join(dir, 'unsigned.shortcut');
 	const signed = join(dir, `${SHORTCUT_NAME}.shortcut`);
-	writeFileSync(source, shortcutPlist(url));
-	execFileSync('plutil', ['-lint', source], { stdio: 'inherit' });
+	writeFileSync(source, shortcutJson(url));
 	// `shortcuts sign` leest alleen een binaire plist met de extensie .shortcut
 	execFileSync('plutil', ['-convert', 'binary1', '-o', unsigned, source]);
+	execFileSync('plutil', ['-lint', unsigned], { stdio: 'inherit' });
 	execFileSync('shortcuts', ['sign', '--mode', 'anyone', '--input', unsigned, '--output', signed], {
 		stdio: 'inherit'
 	});
@@ -68,7 +68,7 @@ try {
 
 	if (values.bewaar) {
 		copyFileSync(signed, join(resolve(values.bewaar), `${SHORTCUT_NAME}.shortcut`));
-		copyFileSync(source, join(resolve(values.bewaar), `${SHORTCUT_NAME}.plist`));
+		copyFileSync(source, join(resolve(values.bewaar), `${SHORTCUT_NAME}.json`));
 	}
 
 	writeFileSync(

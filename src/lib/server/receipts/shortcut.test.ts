@@ -5,7 +5,7 @@ import {
 	MAX_EDGE,
 	RENEW_DAYS,
 	shortcutDefinition,
-	shortcutPlist,
+	shortcutJson,
 	shortcutSourceHash,
 	shortcutStatus
 } from './shortcut.ts';
@@ -35,7 +35,7 @@ describe('iOS-opdracht', () => {
 	});
 
 	it('bevat geen token', () => {
-		expect(shortcutPlist()).not.toMatch(/bon_[A-Za-z0-9_-]{20,}/);
+		expect(shortcutJson()).not.toMatch(/bon_[A-Za-z0-9_-]{20,}/);
 	});
 
 	it('stuurt elke afbeelding als ruwe JPEG-body met het token als Bearer', () => {
