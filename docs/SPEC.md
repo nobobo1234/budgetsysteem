@@ -154,6 +154,7 @@ Bedragen staan altijd als hele centen (integer) in euro; een vreemde valuta is e
 | budgets | maand, categorie, limiet\_cent |
 | reservations | vaste last, maand, bedrag\_cent, afschrijving (transactie, alleen in de afschrijfmaand) |
 | receipts | bestand (eigen UUID), type (JPEG / PNG), bron (app / deelmenu), upload-token, status (wordt gelezen / zeker / controleren / onzeker / fout), ruwe AI-uitvoer, gecontroleerde velden, zekerheid per veld, transactie |
+| receipt\_lines (fase 4) | bon, volgnummer, omschrijving zoals op de bon, soort (artikel / korting / bonus / statiegeld / statiegeld-retour / fooi / overig), bedrag\_cent, productgroep (vaste lijst, zie Analyses → Boodschappen per productgroep) |
 | upload\_tokens | naam van het apparaat, hash van het token, laatst gebruikt, geblokkeerd tot, ingetrokken |
 | recurring | tegenpartij, interval (maandelijks / kwartaal / halfjaarlijks / jaarlijks), verwachte dag, mediaan + min/max bedrag, soort (vast / wisselend), volgende datum, uitsmeren (ja/nee; standaard ja bij een interval langer dan een maand) |
 | owed | persoon (verwijzing naar people; leeg zolang je bij `voor 3` nog niet koos wie), bedrag\_cent, richting (te krijgen / te betalen), bron-transactie, omschrijving, datum (open sinds), aandeel + maand (optioneel, samen uniek), status (open / deels / betaald / kwijtgescholden), Tikkie-link, notitie |
@@ -477,6 +478,18 @@ De vaste analyses draaien als SQL op je eigen server en zijn direct; AI komt er 
 - Verwachting einde maand: uitgegeven + verwachte vaste lasten (bij uitgesmeerde lasten de reservering in plaats van de afschrijving) + je gemiddelde variabele uitgaven per resterende dag.
 - Jaaroverzicht, en wat een tag (bijvoorbeeld een reis) in totaal kostte.
 
+**Boodschappen per productgroep** (uit bonregels)
+
+Doel: zien waar het boodschappengeld heen gaat, niet elk product volgen. Daarom een vaste lijst productgroepen in plaats van losse producten.
+
+- **Bonregels als eigen tabel.** Zodra een bon verwerkt is (zeker, controleren of na de review-inbox), gaan de gecontroleerde regels naar `receipt_lines`. Bonnen van voor fase 4 komen er één keer in via een migratie uit de bewaarde gecontroleerde velden; hun productgroep is dan leeg tot je ze opnieuw laat lezen. Een correctie in de interface past de tabel aan, niet de ruwe AI-uitvoer.
+- **Productgroep.** Haiku kiest per artikelregel een groep uit een vaste lijst, in dezelfde aanroep als nu, zodat er alleen de foto naar de API blijft gaan: groente en fruit, zuivel en eieren, vlees en vis, brood en ontbijt, voorraad (pasta, rijst, conserven), kant-en-klaar, snacks en snoep, frisdrank en sap, alcohol, huishouden, verzorging, overig. Het veld is een enum in het Zod-schema; een onbekende waarde wordt overig. Je kunt de groep van een regel aanpassen; dat telt in de telemetrie als correctie. Kortingen, bonus en statiegeld krijgen geen groep.
+- **Overzicht.** Bij de categorie Boodschappen: per maand de uitgaven verdeeld over de groepen (gestapelde balk en lijst), het verschil met het gemiddelde van de vorige drie maanden, en de tien duurste regels van de maand. Kortingen en bonus tellen als één regel "korting" in het totaal en niet per groep.
+- **Dekking.** Het overzicht ziet alleen aankopen met een bon die regels heeft. Daarom staat erbij welk deel van de boodschappen een bon met regels heeft ("68% van je boodschappen deze maand"), zodat een laag getal niet als weinig uitgeven leest.
+- **Testen.** De Haiku-eval meet ook hoe vaak alle regels gevuld zijn en of de productgroep klopt. Unit-tests dekken de verdeling over groepen, de omgang met kortingen en de dekking.
+- **Privacy.** Bonregels blijven op de server. Latere AI-analyses krijgen hooguit totalen per productgroep, nooit losse regels of bonfoto's.
+- **Bewust niet.** Geen productentabel, normalisatie van productnamen, prijsverloop per product of aantal per regel. De regels staan in de tabel, dus dat kan later alsnog als de groepen te grof blijken.
+
 **Met AI** (later)
 
 - Maandsamenvatting: wat viel op tegenover vorige maanden. Het model krijgt alleen totalen per categorie en tegenpartij, geen IBANs.
@@ -769,7 +782,7 @@ Bij elke fase hoort naast "Klaar als" ook Klaar voor UI (zie Design en interacti
    - Daarna, als laatste blok van deze fase: **gedeelde vaste lasten** (personen, aandelen, terugbetalingen koppelen en het overzicht). Het bouwt direct op vaste lasten en Te krijgen, en levert elke maand iets op; het hoort niet in het klaar-criterium hierboven, zodat dat niet wacht. Tot dan telt de wifi bruto mee. Klaar als: twee maanden lang per huisgenoot klopt wat er binnen is, met alleen bevestigen als handwerk.
 3. **Bonnetjes.** Eerst het testplan op je eigen bonnen, dan de verwerking, de review-inbox, de koppellijst en de opdracht voor het deelmenu. Telemetrie: per Haiku-aanroep tokens, kosten, duur, uitkomst en of je velden achteraf corrigeerde.
    - Klaar als: de test het doel haalt, of we bewust kiezen voor altijd reviewen.
-4. **Analyses.** Grafieken, trends, verwachting einde maand, jaaroverzicht, tags. Telemetrie: je eigen gebruik (dagen met invoer, tijd van openen tot opslaan).
+4. **Analyses.** Grafieken, trends, verwachting einde maand, jaaroverzicht, tags, en boodschappen per productgroep uit bonregels (zie Analyses → Boodschappen per productgroep). Telemetrie: je eigen gebruik (dagen met invoer, tijd van openen tot opslaan).
 5. **AI en extra's.** Maandsamenvatting, vraagveld, MCP-server, garantie-herinneringen.
 
 Het testplan voor de bonnetjes kan parallel met fase 1: je verzamelt de bonnen toch al.
