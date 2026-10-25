@@ -64,6 +64,27 @@
 			? `${tx.origCurrency === 'USD' ? '$' : `${tx.origCurrency} `}${centsToInput(tx.origAmountCents)}`
 			: formatCents(tx.amountCents, { sign: true });
 
+	// Koppellijst bij een import: je eigen invoer die bij de boeking kan horen
+	const labelText = {
+		waarschijnlijk: 'Waarschijnlijk',
+		mogelijk: 'Mogelijk',
+		onwaarschijnlijk: 'Onwaarschijnlijk'
+	};
+	const sourceText = { handmatig: 'Zelf ingevoerd', bon: 'Van een bon', verwacht: 'Bevestigd' };
+	// Positief: de bank boekte meer dan je invoerde, zoals een fooi
+	const differenceText = (cents: number, out: boolean) =>
+		cents > 0
+			? `De bank boekte ${formatCents(cents)} meer${out ? ', zoals een fooi' : ''}`
+			: `De bank boekte ${formatCents(-cents)} minder`;
+	// Gekozen per boeking; zonder keuze de voorselectie (alleen bij een duidelijke voorsprong)
+	let picks = $state<Record<string, string>>({});
+	const picked = (tx: (typeof inbox.transactions)[number]) =>
+		picks[tx.id] ?? tx.own?.preselect ?? '';
+	const merged = (name: string) => (form: FormData) =>
+		form.get('target') === 'nieuw'
+			? `${name} staat als nieuwe transactie.`
+			: `${name} samengevoegd met je invoer.`;
+
 	const creditText = {
 		dubbel: 'Meer ontvangen dan er openstond; gaat anders naar de volgende maand.',
 		vertrokken: 'Binnengekomen na het vertrek; er komt geen post meer.',
@@ -324,7 +345,7 @@
 				'tx-title',
 				'Boekingen',
 				inbox.transactions.length,
-				'Storno’s, terugboekingen en boekingen zonder eurobedrag tellen al mee in je saldo.'
+				'Storno’s, mogelijke dubbele boekingen en boekingen zonder eurobedrag tellen al mee in je saldo.'
 			)}
 			<ul class="card list">
 				{#each inbox.transactions as tx (tx.id)}
@@ -357,6 +378,72 @@
 								<div class="actions">
 									<a class="button secondary small" href="/transacties/{tx.id}">Bedrag invullen</a>
 								</div>
+							{:else if tx.reason === 'dubbel' && tx.own}
+								{@const own = tx.own}
+								{@const choice = picked(tx)}
+								<p class="small">Al zelf ingevoerd? Kies wat erbij hoort, dan telt hij één keer.</p>
+								<form
+									class="pick"
+									method="POST"
+									action="?/merge"
+									use:enhance={act(tx.id, merged(name))}
+								>
+									<input type="hidden" name="id" value={tx.id} />
+									<fieldset>
+										<legend class="visually-hidden">Hoort {name} bij je eigen invoer?</legend>
+										{#each own.candidates as c (c.id)}
+											<label class="option">
+												<input
+													type="radio"
+													name="target"
+													value={c.id}
+													checked={choice === c.id}
+													onchange={() => (picks[tx.id] = c.id)}
+												/>
+												<span class="who-what">
+													<strong>{displayName(c.counterparty) || 'Zonder naam'}</strong>
+													<span class="muted small"
+														>{sourceText[c.source]} · {formatShortDate(c.date)}{c.categoryName
+															? ` · ${c.categoryName}`
+															: ''}</span
+													>
+													{#if c.differenceCents !== 0}
+														<span class="small diff"
+															>{differenceText(c.differenceCents, tx.amountCents < 0)}</span
+														>
+													{/if}
+												</span>
+												<span class="side">
+													<span class="num">{formatCents(c.amountCents, { sign: true })}</span>
+													<span class={['tag', c.label]}>{labelText[c.label]}</span>
+												</span>
+											</label>
+										{/each}
+										<label class="option">
+											<input
+												type="radio"
+												name="target"
+												value="nieuw"
+												checked={choice === 'nieuw'}
+												onchange={() => (picks[tx.id] = 'nieuw')}
+											/>
+											<span class="who-what">
+												<strong>Nieuwe transactie</strong>
+												<span class="muted small">Staat los van je invoer en telt apart mee.</span>
+											</span>
+										</label>
+									</fieldset>
+									<div class="actions">
+										<button
+											class="button secondary small"
+											disabled={!choice || busy === tx.id}
+											aria-label={choice === 'nieuw'
+												? `${name} bewaren als nieuwe transactie`
+												: `${name} samenvoegen met je invoer`}
+											>{choice === 'nieuw' ? 'Bewaren als nieuwe' : 'Samenvoegen'}</button
+										>
+									</div>
+								</form>
 							{:else if tx.reason === 'koppelen' && tx.match}
 								<p class="small">
 									Hoort waarschijnlijk bij {displayName(tx.match.counterparty)} van {formatShortDate(
@@ -716,6 +803,73 @@
 		translate: 0 -50%;
 		color: var(--muted);
 		pointer-events: none;
+	}
+
+	/* Koppellijst: een keuzerondje per kandidaat, met het label rechts */
+	.pick {
+		display: grid;
+		gap: 6px;
+	}
+
+	.pick fieldset {
+		display: grid;
+		gap: 2px;
+		margin: 0 0 0 -6px;
+		padding: 0;
+		border: 0;
+		min-width: 0;
+	}
+
+	.option {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		min-height: 52px;
+		padding: 4px 6px;
+		border-radius: var(--radius-sm);
+		cursor: pointer;
+	}
+
+	.option:has(input:checked) {
+		background: var(--accent-soft);
+	}
+
+	.option input {
+		flex: none;
+		width: 20px;
+		height: 20px;
+		min-height: 0;
+		margin: 0;
+		accent-color: var(--accent);
+	}
+
+	.who-what {
+		flex: 1;
+		min-width: 0;
+		display: grid;
+		line-height: 1.3;
+		overflow-wrap: anywhere;
+	}
+
+	.diff {
+		color: color-mix(in oklch, var(--warn) 60%, var(--text));
+	}
+
+	.side {
+		display: grid;
+		justify-items: end;
+		gap: 2px;
+		white-space: nowrap;
+	}
+
+	.tag {
+		font-size: 0.78rem;
+		font-weight: 600;
+		color: var(--muted);
+	}
+
+	.tag.waarschijnlijk {
+		color: var(--accent-strong);
 	}
 
 	.text-button.danger-text {

@@ -12,6 +12,9 @@ export const zoeken: IconDef = {
 
 export const terugbetalingen: IconDef = { hue: 200, path: 'M4 9h14l-3.5-3.5 M20 15H6l3.5 3.5' };
 
+// Twee lijnen die samenkomen: een bankboeking en je eigen invoer worden één
+export const samenvoegen: IconDef = { hue: 175, path: 'M6 3v4c0 4 6 5 6 9v5 M18 3v4c0 4-6 5-6 9' };
+
 export const categorieen: IconDef = { hue: 300, path: 'M3.5 12V4h8l9 9-8 8z M8 8.5h.01' };
 
 export const regels: IconDef = { hue: 330, path: 'M4 6h16 M4 12h9 M4 18h6 M16 14l3.5 3.5L16 21' };

@@ -18,6 +18,7 @@ import {
 	transactions
 } from './db/schema.ts';
 import { ValidationError } from './errors.ts';
+import { ownMatchesFor, type OwnCandidate } from './import/koppellijst.ts';
 import { owedReminders, type OpenPost } from './owed.ts';
 import { receiptStage } from './receipts/outcome.ts';
 import { readStored, type ReceiptField } from './receipts/stored.ts';
@@ -50,12 +51,15 @@ export interface ReviewTransaction {
 	origAmountCents: number | null;
 	origCurrency: string | null;
 	/**
-	 * `bedrag`: het eurobedrag ontbreekt; `koppelen`: hoort waarschijnlijk bij een eerdere
-	 * boeking (storno, terugboeking of retour); anders gewoon nakijken.
+	 * `bedrag`: het eurobedrag ontbreekt; `dubbel`: een geïmporteerde boeking die je misschien
+	 * al zelf invoerde; `koppelen`: hoort waarschijnlijk bij een eerdere boeking (storno,
+	 * terugboeking of retour); anders gewoon nakijken.
 	 */
-	reason: 'bedrag' | 'koppelen' | 'controleren';
+	reason: 'bedrag' | 'dubbel' | 'koppelen' | 'controleren';
 	/** De beste kandidaat uit de koppellijst, zonder IBAN */
 	match: { counterparty: string; date: string; amountCents: number } | null;
+	/** Bij `dubbel`: de koppellijst met je eigen invoer, hoogstens vijf */
+	own: { candidates: OwnCandidate[]; preselect: string | null } | null;
 }
 
 export interface ReviewCredit {
@@ -152,8 +156,10 @@ function reviewTransactions(db: Conn): ReviewTransaction[] {
 		.orderBy(asc(transactions.date), asc(transactions.createdAt))
 		.all();
 	return rows.map((r, i) => {
-		const base = { ...r, status: 'te_controleren' as const, match: null };
+		const base = { ...r, status: 'te_controleren' as const, match: null, own: null };
 		if (r.amountCents === 0) return { ...base, reason: 'bedrag' as const };
+		const own = i < MATCH_LIMIT ? ownMatchesFor(db, r.id) : null;
+		if (own) return { ...base, reason: 'dubbel' as const, own };
 		const { candidates, preselect } =
 			i < MATCH_LIMIT ? correctionCandidates(db, r.id) : { candidates: [], preselect: null };
 		const best = candidates.find((c) => c.id === preselect) ?? candidates[0];

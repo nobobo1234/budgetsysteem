@@ -152,7 +152,22 @@
 		{#each data.receipts as receiptId (receiptId)}
 			<a class="more-link bon-link" href="/bonnen/{receiptId}">Bon bekijken</a>
 		{/each}
-		{#if tx.status === 'te_controleren'}
+		{#if data.merged}
+			{@const m = data.merged}
+			<p class="muted small">
+				Samengevoegd met {m.source === 'bon' ? 'je bon' : 'je eigen invoer'} van {formatShortDate(
+					m.enteredDate
+				)}{m.differenceCents === 0
+					? '.'
+					: `; je voerde ${formatCents(m.enteredCents, { sign: true })} in, de bank boekte ${formatCents(Math.abs(m.differenceCents))} ${m.differenceCents > 0 ? 'meer' : 'minder'}${m.differenceCents > 0 && tx.amountCents < 0 ? ' (fooi of kosten)' : ''}.`}
+			</p>
+		{/if}
+		{#if tx.status === 'te_controleren' && tx.amountCents !== 0 && data.awaitsMatch}
+			<p class="review">
+				Te controleren: misschien heb je hem al zelf ingevoerd. Kies bij
+				<a href="/te-controleren">Te controleren</a> wat erbij hoort, dan telt hij één keer.
+			</p>
+		{:else if tx.status === 'te_controleren'}
 			<p class="review">
 				Te controleren{tx.amountCents === 0
 					? ': vul het eurobedrag in dat is afgeschreven.'
