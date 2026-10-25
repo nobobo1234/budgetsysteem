@@ -34,8 +34,9 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      # Lagen-cache van main: alleen runs op main schrijven hierin, PR's lezen hem alleen. Een PR
-      # schrijft in zijn eigen scope, die main niet kan lezen.
+      # Bewust geen cache (spec: "Extra afspraken voor de workflows"): elke job op main kan in de
+      # cache van main schrijven, ook een job met een gecompromitteerde dependency. Het
+      # productie-image bouwt daarom altijd vers vanuit de lockfile en het base image op digest.
       - id: push
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
@@ -46,8 +47,6 @@ jobs:
           build-args: ORIGIN=${{ vars.APP_ORIGIN }}
           provenance: true
           sbom: true
-          cache-from: type=gha
-          cache-to: type=gha,mode=max,ignore-error=true
 
   deploy:
     needs: build
