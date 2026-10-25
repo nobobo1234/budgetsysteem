@@ -85,6 +85,7 @@ export const transactions = sqliteTable(
 		index('transactions_date_idx').on(t.date),
 		index('transactions_category_date_idx').on(t.categoryId, t.date),
 		index('transactions_counterparty_idx').on(t.counterparty),
+		index('transactions_account_date_idx').on(t.accountId, t.date),
 		check(
 			'transactions_date_format',
 			sql`${t.date} GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'`
@@ -272,4 +273,53 @@ export const auditLog = sqliteTable(
 		after: text('after', { mode: 'json' })
 	},
 	(t) => [index('audit_log_at_idx').on(t.at)]
+);
+
+// Saldocheck (spec: Dagelijks gebruik). Het anker is het startsaldo van een rekening: het saldo
+// aan het eind van `date`. Het verwachte saldo is het anker plus alles wat daarna geboekt is.
+export const balanceAnchors = sqliteTable(
+	'balance_anchors',
+	{
+		id: id(),
+		accountId: text('account_id')
+			.notNull()
+			.unique()
+			.references(() => accounts.id, { onDelete: 'cascade' }),
+		date: text('date').notNull(),
+		amountCents: integer('amount_cents').notNull(),
+		source: text('source', { enum: ['import', 'handmatig'] }).notNull(),
+		importBatchId: text('import_batch_id').references(() => importBatches.id, {
+			onDelete: 'set null'
+		}),
+		createdAt: createdAt(),
+		updatedAt: text('updated_at')
+	},
+	(t) => [
+		check(
+			'balance_anchors_date_format',
+			sql`${t.date} GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'`
+		)
+	]
+);
+
+/** Het echte saldo volgens de bank, aan het eind van `date`. Het verschil rekent de app live uit. */
+export const balanceChecks = sqliteTable(
+	'balance_checks',
+	{
+		id: id(),
+		accountId: text('account_id')
+			.notNull()
+			.references(() => accounts.id, { onDelete: 'cascade' }),
+		date: text('date').notNull(),
+		amountCents: integer('amount_cents').notNull(),
+		createdAt: createdAt(),
+		updatedAt: text('updated_at')
+	},
+	(t) => [
+		uniqueIndex('balance_checks_account_date_idx').on(t.accountId, t.date),
+		check(
+			'balance_checks_date_format',
+			sql`${t.date} GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'`
+		)
+	]
 );

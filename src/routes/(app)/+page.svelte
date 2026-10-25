@@ -52,6 +52,17 @@
 		<QuickEntry context={data.context} onsaved={saved} />
 	</div>
 
+	{#if data.balanceCheckDue.length > 0}
+		<p class="card reminder">
+			<span>
+				Saldocheck voor {formatMonth(data.overview.month)}: nog te doen voor {data.balanceCheckDue
+					.map((a) => a.name)
+					.join(' en ')}.
+			</span>
+			<a href="/saldocheck">Saldo invullen</a>
+		</p>
+	{/if}
+
 	<section class="recent" aria-labelledby="recent-title">
 		<div class="head">
 			<h2 id="recent-title">Recent</h2>
@@ -117,6 +128,22 @@
 	.top {
 		display: grid;
 		gap: 24px;
+	}
+
+	.reminder {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 4px 16px;
+		border-left: 4px solid var(--accent);
+	}
+
+	.reminder a {
+		display: inline-flex;
+		align-items: center;
+		min-height: var(--tap);
+		font-weight: 600;
 	}
 
 	.empty {

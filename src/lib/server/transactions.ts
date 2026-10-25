@@ -197,6 +197,10 @@ export interface ListFilter {
 	month?: string;
 	categoryId?: string | 'geen';
 	status?: 'bevestigd' | 'verwacht' | 'te_controleren';
+	accountId?: string;
+	/** Datums `YYYY-MM-DD`, beide inclusief */
+	from?: string;
+	to?: string;
 	limit?: number;
 	offset?: number;
 }
@@ -227,6 +231,9 @@ function filterWhere(filter: ListFilter): SQL | undefined {
 	if (filter.categoryId === 'geen') where.push(isNull(transactions.categoryId));
 	else if (filter.categoryId) where.push(eq(transactions.categoryId, filter.categoryId));
 	if (filter.status) where.push(eq(transactions.status, filter.status));
+	if (filter.accountId) where.push(eq(transactions.accountId, filter.accountId));
+	if (filter.from) where.push(gte(transactions.date, filter.from));
+	if (filter.to) where.push(lte(transactions.date, filter.to));
 	return and(...where);
 }
 

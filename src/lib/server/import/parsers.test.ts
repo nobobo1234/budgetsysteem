@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { parseCamt053 } from './camt.ts';
-import { parseCsv, parseSnsCsv } from './csv.ts';
+import { parseCamt053, readCamt053 } from './camt.ts';
+import { parseCsv, parseSnsCsv, readSnsCsv } from './csv.ts';
 import { parseBankFile } from './index.ts';
 import { ImportError } from './types.ts';
 
@@ -172,6 +172,68 @@ describe('SNS-CSV', () => {
 	it('weigert onbekende indelingen en ongeldige regels', () => {
 		expect(() => parseSnsCsv('a,b,c\n1,2,3')).toThrow(ImportError);
 		expect(() => parseSnsCsv(fixture('sns.csv').replace('-23.45', 'veel'))).toThrow(ImportError);
+	});
+});
+
+describe('startsaldo uit het afschrift', () => {
+	const camt = fixture('camt053-v02.xml');
+
+	it('CAMT: eindsaldo min de boekingen, gecontroleerd met het beginsaldo', () => {
+		expect(readCamt053(camt).balances).toEqual([
+			{ accountIban: 'NL12SNSB0123456789', firstDate: '2026-09-02', amountCents: 100000 }
+		]);
+	});
+
+	it('CAMT: een saldo onder nul (DBIT)', () => {
+		const xml = camt
+			.replace('<Amt Ccy="EUR">2156.57</Amt>', '<Amt Ccy="EUR">43.43</Amt>')
+			.replace(/(<Cd>CLBD<\/Cd>[\s\S]*?<CdtDbtInd>)CRDT/, '$1DBIT')
+			.replace('<Amt Ccy="EUR">1000.00</Amt>', '<Amt Ccy="EUR">1200.00</Amt>')
+			.replace(/(<Cd>OPBD<\/Cd>[\s\S]*?<CdtDbtInd>)CRDT/, '$1DBIT');
+		expect(readCamt053(xml).balances[0]?.amountCents).toBe(-120000);
+	});
+
+	it('CAMT: geen saldo als begin en eind niet bij de boekingen passen', () => {
+		expect(readCamt053(camt.replace('2156.57', '2156.58')).balances).toEqual([]);
+	});
+
+	it('CAMT: alleen een beginsaldo is ook goed', () => {
+		const xml = camt.replace('<Cd>CLBD</Cd>', '<Cd>ITBD</Cd>');
+		expect(readCamt053(xml).balances[0]?.amountCents).toBe(100000);
+	});
+
+	it('CAMT: zonder saldo in het bestand geen startsaldo', () => {
+		expect(readCamt053(fixture('camt053-v08.xml')).balances).toEqual([]);
+	});
+
+	it('SNS-CSV: het saldo vóór de eerste boeking', () => {
+		expect(readSnsCsv(fixture('sns.csv')).balances).toEqual([
+			{ accountIban: 'NL12SNSB0123456789', firstDate: '2026-09-02', amountCents: 100000 }
+		]);
+	});
+
+	it('SNS-CSV: volgt de keten, ook als boekingen van één dag andersom staan', () => {
+		const row = (saldo: string, bedrag: string, volgnr: string) =>
+			`02-09-2026,NL12SNSB0123456789,,Winkel,EUR,${saldo},EUR,${bedrag},02-09-2026,02-09-2026,8810,BEA,${volgnr},,x,1,`;
+		const csv = [row('90.00', '-5.00', '3'), row('100.00', '-10.00', '1')].join('\n');
+		expect(readSnsCsv(csv).balances[0]?.amountCents).toBe(10000);
+	});
+
+	it('SNS-CSV: geen saldo als de keten niet sluit, de boekingen wel', () => {
+		const broken = fixture('sns.csv').replace('976.55', '976.56');
+		expect(readSnsCsv(broken).balances).toEqual([]);
+		expect(readSnsCsv(broken).records).toHaveLength(2);
+	});
+
+	it('SNS-CSV: zonder saldokolom geen startsaldo', () => {
+		const csv =
+			'Datum;Je rekening;Van / naar;Naam;Bedrag bij/af;Volgnummer;Omschrijving\n' +
+			'1-10-2026;NL12SNSB0123456789;;Bakker;-3.10;77;brood\n';
+		expect(readSnsCsv(csv).balances).toEqual([]);
+	});
+
+	it('komt mee uit parseBankFile', () => {
+		expect(parseBankFile(new TextEncoder().encode(camt)).balances).toHaveLength(1);
 	});
 });
 

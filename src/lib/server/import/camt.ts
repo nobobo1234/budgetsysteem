@@ -3,7 +3,14 @@ import { isIsoDate } from '../../dates.ts';
 import { parseDecimal } from '../../money.ts';
 import { normalizeIban } from '../../text.ts';
 import { counterpartyOrMerchant } from './card.ts';
-import { ImportError, MAX_IMPORT_BYTES, type ImportRecord } from './types.ts';
+import {
+	ImportError,
+	MAX_IMPORT_BYTES,
+	openingFromClosing,
+	type ImportRecord,
+	type OpeningBalance,
+	type ParsedBankFile
+} from './types.ts';
 
 // CAMT.053 (ISO 20022 bankafschrift), versies 001.02 tot en met 001.08.
 // Geen DTD's en geen entiteiten: elk bestand met <!DOCTYPE of <!ENTITY wordt geweigerd
@@ -91,7 +98,69 @@ function amount(amt: unknown): { cents: number; currency: string } | null {
 	return { cents, currency };
 }
 
+interface Balance {
+	code: string;
+	date: string;
+	cents: number;
+}
+
+/** Een `<Bal>`: soort (OPBD, CLBD, …), datum en bedrag met teken. Alleen in euro. */
+function balance(bal: unknown): Balance | null {
+	const code = str(path(bal, 'Tp', 'CdOrPrtry', 'Cd'));
+	const amt = amount(path(bal, 'Amt'));
+	const sign = str(path(bal, 'CdtDbtInd'));
+	const date = str(path(bal, 'Dt', 'Dt')) || str(path(bal, 'Dt', 'DtTm')).slice(0, 10);
+	if (!code || !amt || (amt.currency && amt.currency !== 'EUR')) return null;
+	if ((sign !== 'CRDT' && sign !== 'DBIT') || !isIsoDate(date)) return null;
+	return { code, date, cents: sign === 'DBIT' ? -amt.cents : amt.cents };
+}
+
+/**
+ * Startsaldo per rekening: het laatste eindsaldo (CLBD) min alle boekingen in het bestand.
+ * Noemt het bestand ook een beginsaldo (OPBD) op de dag van de eerste boeking of eerder, dan
+ * moet dat kloppen; anders geven we geen saldo, zodat de saldocheck niet op een fout anker rust.
+ */
+function openingBalances(
+	records: ImportRecord[],
+	balances: Map<string, Balance[]>
+): OpeningBalance[] {
+	const out: OpeningBalance[] = [];
+	for (const [accountIban, list] of balances) {
+		const latest = (code: string) =>
+			list
+				.filter((b) => b.code === code)
+				.reduce<Balance | null>((best, b) => (!best || b.date >= best.date ? b : best), null);
+		const earliest = list
+			.filter((b) => b.code === 'OPBD')
+			.reduce<Balance | null>((best, b) => (!best || b.date < best.date ? b : best), null);
+		const closing = latest('CLBD');
+		const fromClosing = closing
+			? openingFromClosing(records, closing.cents, { accountIban })
+			: null;
+		if (fromClosing) {
+			if (
+				earliest &&
+				earliest.date <= fromClosing.firstDate &&
+				earliest.cents !== fromClosing.amountCents
+			)
+				continue;
+			out.push(fromClosing);
+		} else if (earliest) {
+			const own = records.filter((r) => r.accountIban === accountIban);
+			if (own.length > 0 && own.every((r) => r.date >= earliest.date)) {
+				out.push({ accountIban, firstDate: earliest.date, amountCents: earliest.cents });
+			}
+		}
+	}
+	return out;
+}
+
 export function parseCamt053(xml: string): ImportRecord[] {
+	return readCamt053(xml).records;
+}
+
+/** Leest boekingen en, als het afschrift ze noemt, het startsaldo per rekening. */
+export function readCamt053(xml: string): ParsedBankFile {
 	if (Buffer.byteLength(xml, 'utf8') > MAX_IMPORT_BYTES) {
 		throw new ImportError('Het bestand is groter dan 20 MB.');
 	}
@@ -107,9 +176,16 @@ export function parseCamt053(xml: string): ImportRecord[] {
 	if (statements.length === 0) throw new ImportError('Geen CAMT.053-afschrift gevonden.');
 
 	const records: ImportRecord[] = [];
+	const balances = new Map<string, Balance[]>();
 	for (const stmt of statements) {
 		const accountIban = normalizeIban(str(path(stmt, 'Acct', 'Id', 'IBAN')));
 		if (!accountIban) throw new ImportError('Afschrift zonder IBAN van de rekening.');
+		const own = balances.get(accountIban) ?? [];
+		for (const bal of list(path(stmt, 'Bal'))) {
+			const b = balance(bal);
+			if (b) own.push(b);
+		}
+		balances.set(accountIban, own);
 
 		for (const entry of list(path(stmt, 'Ntry'))) {
 			// Alleen geboekte posten; 001.08 zet de status in Sts/Cd
@@ -167,5 +243,5 @@ export function parseCamt053(xml: string): ImportRecord[] {
 			});
 		}
 	}
-	return records;
+	return { records, balances: openingBalances(records, balances) };
 }

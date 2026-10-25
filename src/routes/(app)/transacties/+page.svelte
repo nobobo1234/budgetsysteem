@@ -4,7 +4,7 @@
 	import Select, { type SelectOption } from '#lib/components/Select.svelte';
 	import TransactionItem from '#lib/components/TransactionItem.svelte';
 	import { groupColor } from '#lib/categoryColor.ts';
-	import { formatDayHeading, formatMonth } from '#lib/dates.ts';
+	import { formatDayHeading, formatMonth, formatShortDate } from '#lib/dates.ts';
 	import { formatCents } from '#lib/money.ts';
 
 	let { data } = $props();
@@ -14,9 +14,28 @@
 	// Schrijfbaar: volgt de server, en ook wat je typt (voor de wis-knop)
 	let query = $derived(data.filter.q);
 
+	// Rekening en periode komen alleen via een link (vanuit de saldocheck); ze blijven bij het filteren
+	const rangeFilter = $derived(!!(data.filter.accountId || data.filter.from || data.filter.to));
+	const rangeLabel = $derived(
+		[
+			data.accountName,
+			data.filter.from || data.filter.to
+				? `${data.filter.from ? formatShortDate(data.filter.from) : '…'} – ${data.filter.to ? formatShortDate(data.filter.to) : '…'}`
+				: ''
+		]
+			.filter(Boolean)
+			.join(' · ')
+	);
+
 	const PAGE = 50;
 	const hasFilter = $derived(
-		!!(data.filter.q || data.filter.month || data.filter.categoryId || data.filter.status)
+		!!(
+			data.filter.q ||
+			data.filter.month ||
+			data.filter.categoryId ||
+			data.filter.status ||
+			rangeFilter
+		)
 	);
 	const pages = $derived(Math.max(1, Math.ceil(data.summary.count / PAGE)));
 	const busy = $derived(navigating.to?.url.pathname === '/transacties');
@@ -68,6 +87,9 @@
 			['maand', data.filter.month],
 			['categorie', data.filter.categoryId],
 			['status', data.filter.status ?? ''],
+			['rekening', data.filter.accountId],
+			['van', data.filter.from],
+			['tot', data.filter.to],
 			['pagina', p > 0 ? String(p) : '']
 		];
 		const q = parts
@@ -76,6 +98,21 @@
 			.join('&');
 		return `?${q}`;
 	};
+
+	// Zonder rekening en periode, met de rest van het filter
+	const rangeOffHref = $derived.by(() => {
+		const parts: [string, string][] = [
+			['q', data.filter.q],
+			['maand', data.filter.month],
+			['categorie', data.filter.categoryId],
+			['status', data.filter.status ?? '']
+		];
+		const q = parts
+			.filter(([, v]) => v)
+			.map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
+			.join('&');
+		return q ? `?${q}` : '/transacties';
+	});
 
 	async function submit() {
 		// Eerst de nieuwe waarde in het verborgen veld laten landen
@@ -159,6 +196,13 @@
 			onchange={submit}
 		/>
 		{#if data.filter.status}<input type="hidden" name="status" value={data.filter.status} />{/if}
+		{#if data.filter.accountId}<input
+				type="hidden"
+				name="rekening"
+				value={data.filter.accountId}
+			/>{/if}
+		{#if data.filter.from}<input type="hidden" name="van" value={data.filter.from} />{/if}
+		{#if data.filter.to}<input type="hidden" name="tot" value={data.filter.to} />{/if}
 	</form>
 
 	{#if data.transactions.length > 0 || hasFilter}
@@ -185,13 +229,30 @@
 					</svg>
 				</a>
 			{/if}
+			{#if rangeFilter}
+				<a class="tag range" href={rangeOffHref} aria-label="Filter {rangeLabel} weghalen">
+					{rangeLabel}
+					<svg viewBox="0 0 16 16" aria-hidden="true">
+						<path d="M4.5 4.5l7 7M11.5 4.5l-7 7" stroke="currentColor" stroke-width="1.6" />
+					</svg>
+				</a>
+			{/if}
 			{#if hasFilter}<a href="/transacties" class="reset">Filters wissen</a>{/if}
 		</div>
 	{/if}
 
 	{#if data.transactions.length === 0}
 		<div class="empty card">
-			{#if hasFilter}
+			{#if rangeFilter && !data.filter.q}
+				<h2>Geen boekingen in deze periode</h2>
+				<p class="muted">
+					Mis je een uitgave, voer hem dan in op het overzicht of importeer een export van de bank.
+				</p>
+				<div class="actions">
+					<a class="button" href="/">Uitgave invoeren</a>
+					<a class="button secondary" href="/import">Export importeren</a>
+				</div>
+			{:else if hasFilter}
 				<h2>Niets gevonden{data.filter.q ? ` voor "${data.filter.q}"` : ''}.</h2>
 				<p class="muted">Probeer een ander woord, of zoek in alle maanden en categorieën.</p>
 				<a class="button secondary" href="/transacties">Filters wissen</a>
@@ -380,6 +441,10 @@
 		color: var(--text);
 		font-weight: 550;
 		text-decoration: none;
+	}
+
+	.tag.range {
+		background: var(--accent-soft);
 	}
 
 	.tag svg {
