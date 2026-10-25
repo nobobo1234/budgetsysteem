@@ -175,6 +175,8 @@ function lighthouse(url, name, extraArgs = []) {
 				'--output=html',
 				`--output-path=${output}`,
 				'--quiet',
+				// Nooit Sentry laden of iets naar Google sturen, ook niet lokaal na een eerdere keuze
+				'--no-enable-error-reporting',
 				...extraArgs
 			],
 			{ stdio: 'inherit', timeout: 5 * 60_000 }
