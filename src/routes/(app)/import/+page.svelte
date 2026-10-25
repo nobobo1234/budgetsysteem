@@ -161,6 +161,14 @@
 					</div>
 				{/if}
 			</dl>
+			{#if form && 'proposals' in form && form.proposals}
+				<p>
+					<a href="/vaste-lasten"
+						>{form.proposals}
+						{form.proposals === 1 ? 'mogelijke vaste last' : 'mogelijke vaste lasten'} gevonden</a
+					>; bevestig welke het zijn.
+				</p>
+			{/if}
 		</section>
 	{/if}
 

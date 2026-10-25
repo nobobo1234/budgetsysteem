@@ -492,17 +492,19 @@ Elk scherm staat in deze tabel. Een nieuw scherm krijgt eerst een regel hier, in
 
 | Scherm | Route | Bovenaan | Hoofdactie | Verder |
 | --- | --- | --- | --- | --- |
-| Overzicht | `/` | Nog vrij deze maand, daaronder de snelinvoer | Uitgave invoeren | Recent (8 posten), aantal te controleren, balken per categorie |
+| Overzicht | `/` | Nog vrij deze maand, daaronder de snelinvoer | Uitgave invoeren | Te bevestigen vaste lasten (met "gemist of opgezegd?" na 7 dagen), Recent (8 posten), aantal te controleren, balken per categorie |
 | Transacties | `/transacties` | Zoekveld met filters op maand en categorie, die direct filteren | Zoeken | Lijst per dag met dagsaldo, aantal en totalen voor het hele filter, pagina's van 50 |
 | Transactie | `/transacties/[id]` | Tegenpartij en bedrag, groot | Opslaan | Bedrag, richting, datum, categorie, tegenpartij, notitie; verdeling; verwijderen met bevestiging |
 | Budget | `/budget` | Maand met vorige en volgende, totalen | Limiet instellen | Per groep een balk met tempo en een limietveld; link naar categorieën |
+| Vaste lasten | `/vaste-lasten` | Totaal per maand en per jaar | Voorstel bevestigen | Voorstellen ("Is Vattenfall een vaste last?") met volgende datum, categorie en uitsmeren; lijst met bedrag per maand, ritme, stand van de reservering en signalen; gestopt ingeklapt. Bereikbaar via Budget en Meer; de tab Budget blijft actief |
+| Vaste last | `/vaste-lasten/[id]` | Tegenpartij en bedrag per keer, groot | Opslaan | Naam, verwacht bedrag, vast of wisselend, ritme, volgende afschrijving, categorie, uitsmeren; afschrijvingen; stoppen met bevestiging |
 | Categorieën | `/categorieen` | Tabs Categorieën en Regels | Nieuwe categorie | Per groep een kaart; bewerken in de rij (naam, groep, telt mee); gearchiveerd ingeklapt |
 | Regels | `/regels` | Tabs Categorieën en Regels | Nieuwe regel | Lijst als zin ("Tegenpartij bevat … → categorie") met filter; nieuwe regel als "Als … dan …", prioriteit ingeklapt; onderaan "Regels opnieuw toepassen" |
 | Import | `/import` | Sleepvak voor het bankbestand | Importeren | Overzicht na import, tegenpartijen zonder categorie met één klik een regel, eerdere imports |
 | Meer | `/instellingen` | Passkeys | — | Herstelcode, actieve apparaten, rekeningen, links naar categorieën en regels, uitloggen |
 | Inloggen | `/login` | Titel en uitleg | Inloggen met passkey | Herstelcode als terugval |
 
-Schermen uit latere fasen (vaste lasten, Te krijgen, review-inbox, analyses) komen in de tabel zodra die fase begint.
+Schermen uit latere fasen (Te krijgen, review-inbox, analyses) komen in de tabel zodra die fase begint.
 
 **Navigatie.** Een tabbalk met vijf tabs (icoon en label) onderin op een telefoon en bovenin op desktop. Hoort een onderwerp bij meerdere pagina's, zoals categorieën en regels, dan krijgen die bovenaan een tab-schakelaar met het aantal per pagina. Geen ankerlinks naar plekken op één lange pagina: wordt een pagina op 375 px breed langer dan ongeveer drie schermhoogtes met verschillende onderwerpen, dan wordt hij gesplitst.
 

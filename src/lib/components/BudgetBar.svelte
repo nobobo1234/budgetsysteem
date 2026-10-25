@@ -6,24 +6,43 @@
 		name,
 		spentCents,
 		limitCents,
-		spentRatio,
 		monthRatio,
-		pace
+		pace,
+		plannedCents = 0,
+		plannedSpentCents = 0,
+		otherCents = spentCents
 	}: {
 		name: string;
 		spentCents: number;
 		limitCents: number;
-		spentRatio: number;
 		monthRatio: number;
 		pace: Pace;
+		/** Gepland: reserveringen en verwachte of bevestigde vaste lasten */
+		plannedCents?: number;
+		/** Deel van gepland dat al bevestigd is (en als uitgave telt) */
+		plannedSpentCents?: number;
+		/** Overige uitgaven: daar meet het tempo */
+		otherCents?: number;
 	} = $props();
 
-	const fill = $derived(Math.max(0, Math.min(1, Number.isFinite(spentRatio) ? spentRatio : 1)));
+	const clamp = (n: number) => Math.max(0, Math.min(1, Number.isFinite(n) ? n : 1));
+	const ratio = (cents: number) => (limitCents > 0 ? cents / limitCents : cents > 0 ? 1 : 0);
+
+	// Geplande posten staan als eigen segment vooraan, lichter tot ze bevestigd zijn; daarna het
+	// vrije deel met tempo. Alles als deel van de limiet.
+	const confirmed = $derived(clamp(ratio(plannedSpentCents)));
+	const planned = $derived(Math.max(confirmed, clamp(ratio(plannedCents))));
+	const other = $derived(Math.min(clamp(ratio(otherCents)), 1 - planned));
+	const expectedCents = $derived(Math.max(0, plannedCents - plannedSpentCents));
+	// Het tempo loopt over het vrije deel: de streep staat daar waar de maand is
+	const marker = $derived(planned + monthRatio * (1 - planned));
+
 	const paceText: Record<Pace, string> = {
 		rustig: 'rustig',
 		op_schema: 'op schema',
 		snel: 'gaat snel',
-		over: 'over de limiet'
+		over: 'over de limiet',
+		gepland: 'alles gepland'
 	};
 </script>
 
@@ -42,11 +61,23 @@
 		aria-valuemin={0}
 		aria-valuemax={limitCents}
 		aria-valuenow={Math.max(0, spentCents)}
-		style:--fill={fill}
 	>
-		<div class="bar"></div>
-		<div class="marker" style:--at={monthRatio} title="Deel van de maand dat voorbij is"></div>
+		{#if planned > 0}
+			<div class="seg planned" style:--start={0} style:--len={confirmed}></div>
+			<div class="seg expected" style:--start={confirmed} style:--len={planned - confirmed}></div>
+		{/if}
+		<div class="seg bar" style:--start={planned} style:--len={other} style:--fill={other}></div>
+		{#if pace !== 'gepland'}
+			<div class="marker" style:--at={marker} title="Deel van de maand dat voorbij is"></div>
+		{/if}
 	</div>
+	{#if plannedCents > 0}
+		<p class="planned-text muted">
+			<span class="num">{formatCents(plannedCents, { whole: true })}</span>
+			gepland{#if expectedCents > 0},
+				<span class="num">{formatCents(expectedCents, { whole: true })}</span> nog te bevestigen{/if}
+		</p>
+	{/if}
 </div>
 
 <style>
@@ -76,23 +107,39 @@
 		border-radius: 999px;
 		background: var(--surface-2);
 		overflow: hidden;
+		container-type: inline-size;
 	}
 
-	/* Alleen transform en opacity animeren */
-	.bar {
+	/* Alleen transform en opacity animeren: elk segment is de hele balk, verschoven en geschaald */
+	.seg {
 		position: absolute;
 		inset: 0;
 		transform-origin: left center;
-		transform: scaleX(var(--fill));
-		border-radius: inherit;
-		background: var(--accent);
+		transform: translateX(calc(var(--start) * 100%)) scaleX(var(--len));
 		transition: transform 700ms var(--ease-spring);
 	}
 
 	@starting-style {
-		.bar {
-			transform: scaleX(0);
+		.seg {
+			transform: translateX(0) scaleX(0);
 		}
+	}
+
+	.planned {
+		background: color-mix(in oklch, var(--accent) 45%, var(--surface-2));
+	}
+
+	/* Nog niet bevestigd: lichter, met een arcering zodat het ook zonder kleur te zien is */
+	.expected {
+		background: repeating-linear-gradient(
+			-45deg,
+			color-mix(in oklch, var(--accent) 30%, var(--surface-2)) 0 3px,
+			color-mix(in oklch, var(--accent) 12%, var(--surface-2)) 3px 6px
+		);
+	}
+
+	.bar {
+		background: var(--accent);
 	}
 
 	/* Nadert de limiet: de kleur verloopt geleidelijk naar oranje */
@@ -112,6 +159,10 @@
 		background: var(--danger);
 	}
 
+	[data-pace='over'] .planned {
+		background: color-mix(in oklch, var(--danger) 50%, var(--surface-2));
+	}
+
 	.marker {
 		position: absolute;
 		top: -2px;
@@ -123,7 +174,7 @@
 		transform: translateX(calc(var(--at) * (100cqw - 2px)));
 	}
 
-	.track {
-		container-type: inline-size;
+	.planned-text {
+		font-size: 0.85rem;
 	}
 </style>

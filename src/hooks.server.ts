@@ -10,8 +10,10 @@ import {
 	isSafeMethod,
 	unauthorized
 } from '#lib/server/guard.ts';
+import { startJobs } from '#lib/server/jobs.ts';
 import { log } from '#lib/server/log.ts';
 import { requestLimiter } from '#lib/server/ratelimit.ts';
+import { scheduleRecurringJobs } from '#lib/server/recurring.ts';
 import {
 	describeError,
 	recordError,
@@ -24,6 +26,9 @@ export const init: ServerInit = () => {
 	// Database openen en migraties draaien bij het starten, niet bij het eerste verzoek
 	pruneSessions(db());
 	startTelemetry(version);
+	// Achtergrondtaken: de maandjob van vaste lasten draait bij het starten en op elke eerste
+	scheduleRecurringJobs(db());
+	startJobs(db);
 	log.info('gestart');
 };
 

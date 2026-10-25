@@ -78,11 +78,14 @@ export const transactions = sqliteTable(
 			.notNull()
 			.default('bevestigd'),
 		note: text('note').notNull().default(''),
+		// De vaste last waar deze (verwachte) post bij hoort
+		recurringId: text('recurring_id').references(() => recurring.id, { onDelete: 'set null' }),
 		createdAt: createdAt(),
 		updatedAt: text('updated_at')
 	},
 	(t) => [
 		index('transactions_date_idx').on(t.date),
+		index('transactions_recurring_idx').on(t.recurringId, t.date),
 		index('transactions_category_date_idx').on(t.categoryId, t.date),
 		index('transactions_counterparty_idx').on(t.counterparty),
 		check(
@@ -160,24 +163,75 @@ export const receipts = sqliteTable('receipts', {
 	createdAt: createdAt()
 });
 
-export const recurring = sqliteTable('recurring', {
-	id: id(),
-	counterparty: text('counterparty').notNull(),
-	counterIban: text('counter_iban'),
-	interval: text('interval', { enum: ['maand', 'kwartaal', 'jaar'] }).notNull(),
-	expectedDay: integer('expected_day').notNull(),
-	medianCents: integer('median_cents').notNull(),
-	minCents: integer('min_cents').notNull(),
-	maxCents: integer('max_cents').notNull(),
-	kind: text('kind', { enum: ['vast', 'wisselend'] }).notNull(),
-	nextDate: text('next_date'),
-	categoryId: text('category_id').references(() => categories.id, { onDelete: 'set null' }),
-	accountId: text('account_id').references(() => accounts.id),
-	status: text('status', { enum: ['voorstel', 'actief', 'gestopt'] })
-		.notNull()
-		.default('voorstel'),
-	createdAt: createdAt()
-});
+export const recurring = sqliteTable(
+	'recurring',
+	{
+		id: id(),
+		// Genormaliseerde tegenpartij en tegen-IBAN: één vaste last (of voorstel) per sleutel
+		matchKey: text('match_key').notNull(),
+		counterparty: text('counterparty').notNull(),
+		counterIban: text('counter_iban'),
+		interval: text('interval', { enum: ['maand', 'kwartaal', 'halfjaar', 'jaar'] }).notNull(),
+		expectedDay: integer('expected_day').notNull(),
+		// Positieve centen: wat er afgaat
+		medianCents: integer('median_cents').notNull(),
+		minCents: integer('min_cents').notNull(),
+		maxCents: integer('max_cents').notNull(),
+		kind: text('kind', { enum: ['vast', 'wisselend'] }).notNull(),
+		nextDate: text('next_date'),
+		// Vorige afschrijving: voor halfjaarlijkse lasten met ongelijke semesters
+		lastDate: text('last_date'),
+		// Laatst bevestigde bedrag, voor het signaal prijsverhoging
+		lastCents: integer('last_cents'),
+		// Uitsmeren met een reservering per maand; maandelijkse lasten nooit
+		spread: integer('spread', { mode: 'boolean' }).notNull().default(false),
+		categoryId: text('category_id').references(() => categories.id, { onDelete: 'set null' }),
+		accountId: text('account_id').references(() => accounts.id),
+		status: text('status', { enum: ['voorstel', 'actief', 'gestopt', 'afgewezen'] })
+			.notNull()
+			.default('voorstel'),
+		signal: text('signal', { enum: ['prijsverhoging', 'uitschieter'] }),
+		signalFromCents: integer('signal_from_cents'),
+		signalToCents: integer('signal_to_cents'),
+		stoppedAt: text('stopped_at'),
+		createdAt: createdAt(),
+		updatedAt: text('updated_at')
+	},
+	(t) => [
+		uniqueIndex('recurring_match_key_idx').on(t.matchKey),
+		index('recurring_status_idx').on(t.status),
+		check('recurring_expected_day', sql`${t.expectedDay} BETWEEN 1 AND 31`),
+		check('recurring_amounts', sql`${t.minCents} >= 0 AND ${t.medianCents} >= 0`)
+	]
+);
+
+// Reservering per vaste last per maand (spec: Vaste lasten die niet elke maand komen). Telt
+// vanaf de eerste van de maand als uitgave in de categorie, maar is geen transactie.
+export const reservations = sqliteTable(
+	'reservations',
+	{
+		id: id(),
+		recurringId: text('recurring_id')
+			.notNull()
+			.references(() => recurring.id, { onDelete: 'cascade' }),
+		month: text('month').notNull(),
+		// Opzij gezet in deze maand
+		amountCents: integer('amount_cents').notNull(),
+		// Uit de reservering gehaald in deze maand: bij de afschrijving, of bij stoppen
+		drawnCents: integer('drawn_cents').notNull().default(0),
+		// De afschrijving, alleen in de afschrijfmaand
+		transactionId: text('transaction_id').references(() => transactions.id, {
+			onDelete: 'set null'
+		}),
+		createdAt: createdAt()
+	},
+	(t) => [
+		uniqueIndex('reservations_recurring_month_idx').on(t.recurringId, t.month),
+		index('reservations_month_idx').on(t.month),
+		check('reservations_month_format', sql`${t.month} GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]'`),
+		check('reservations_amounts', sql`${t.amountCents} >= 0 AND ${t.drawnCents} >= 0`)
+	]
+);
 
 export const owed = sqliteTable('owed', {
 	id: id(),
