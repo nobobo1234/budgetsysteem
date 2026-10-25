@@ -323,3 +323,43 @@ export const balanceChecks = sqliteTable(
 		)
 	]
 );
+
+// Pushmeldingen (spec: Dagelijks gebruik → Meldingen). Eén abonnement per apparaat; endpoint en
+// sleutels komen van de push-dienst van de browser en staan nooit in een logregel.
+export const pushSubscriptions = sqliteTable('push_subscriptions', {
+	id: id(),
+	endpoint: text('endpoint').notNull().unique(),
+	// Publieke sleutel (P-256) en auth-geheim van het apparaat, base64url
+	p256dh: text('p256dh').notNull(),
+	auth: text('auth').notNull(),
+	deviceName: text('device_name').notNull(),
+	// Sessie van het apparaat. Is die verlopen of ingetrokken (telefoon kwijt), dan krijgt het
+	// apparaat geen meldingen meer en wordt het abonnement opgeruimd.
+	sessionIdHash: text('session_id_hash').references(() => sessions.idHash, {
+		onDelete: 'cascade'
+	}),
+	createdAt: createdAt(),
+	lastSentAt: text('last_sent_at')
+});
+
+// Schakelaar per soort melding, plus `vergrendelscherm` (bedragen en namen tonen). Ontbreekt een
+// rij, dan geldt de standaard uit src/lib/notifications.ts.
+export const notificationSettings = sqliteTable('notification_settings', {
+	key: text('key').primaryKey(),
+	enabled: integer('enabled', { mode: 'boolean' }).notNull()
+});
+
+// Ontdubbelen: een melding met dezelfde soort en sleutel gaat maar één keer uit, tot de sleutel
+// is vrijgegeven (bij telemetrie: als het probleem is opgelost). Na 90 dagen opgeruimd.
+export const notificationsSent = sqliteTable(
+	'notifications_sent',
+	{
+		kind: text('kind').notNull(),
+		key: text('key').notNull(),
+		sentAt: createdAt()
+	},
+	(t) => [
+		uniqueIndex('notifications_sent_kind_key_idx').on(t.kind, t.key),
+		index('notifications_sent_at_idx').on(t.sentAt)
+	]
+);
