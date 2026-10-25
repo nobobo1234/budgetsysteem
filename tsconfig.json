@@ -8,6 +8,6 @@
 		"allowJs": true,
 		"checkJs": true
 	},
-	"include": ["src", "tests", "*.ts"],
+	"include": ["src", "tests", "*.ts", "scripts/**/*.ts"],
 	"exclude": ["src/service-worker"]
 }
