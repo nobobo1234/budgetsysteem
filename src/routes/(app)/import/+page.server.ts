@@ -16,6 +16,7 @@ import {
 } from '#lib/server/import/importer.ts';
 import { MAX_IMPORT_BYTES } from '#lib/server/import/types.ts';
 import { log } from '#lib/server/log.ts';
+import { proposalCount, refreshProposals } from '#lib/server/recurring.ts';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = () => ({
@@ -56,7 +57,9 @@ export const actions: Actions = {
 				balances
 			});
 			log.info({ format, new: summary.newCount, duplicates: summary.duplicateCount }, 'import');
-			return { summary };
+			// Vaste lasten meteen uit de nieuwe historie voorstellen
+			refreshProposals(db());
+			return { summary, proposals: proposalCount(db()) };
 		} catch (e) {
 			if (e instanceof ImportError) return fail(400, { message: e.message });
 			throw e;

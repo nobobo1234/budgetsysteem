@@ -12,6 +12,7 @@
 		'/',
 		'/transacties',
 		'/budget',
+		'/vaste-lasten',
 		'/categorieen',
 		'/regels',
 		'/import',

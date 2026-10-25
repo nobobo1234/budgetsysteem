@@ -29,6 +29,13 @@
       "when": 1792909544565,
       "tag": "0003_pushmeldingen",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1792910269537,
+      "tag": "0004_vaste_lasten",
+      "breakpoints": true
     }
   ]
 }
