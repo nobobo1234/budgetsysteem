@@ -58,6 +58,13 @@ export function formatShortDate(iso: string): string {
 	return shortDate.format(fromIsoDate(iso));
 }
 
+const dayMonth = new Intl.DateTimeFormat('nl-NL', { day: 'numeric', month: 'long' });
+
+/** `1 februari` */
+export function formatDayMonth(iso: string): string {
+	return dayMonth.format(fromIsoDate(iso));
+}
+
 const weekdayDate = new Intl.DateTimeFormat('nl-NL', {
 	weekday: 'long',
 	day: 'numeric',

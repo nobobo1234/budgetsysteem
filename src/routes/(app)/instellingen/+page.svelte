@@ -183,6 +183,7 @@
 
 	<section>
 		<h2>Overig</h2>
+		<a href="/vaste-lasten">Vaste lasten</a>
 		<a href="/saldocheck">Saldocheck</a>
 		<a href="/instellingen/meldingen">Meldingen</a>
 		<a href="/categorieen">Categorieën</a>

@@ -2,6 +2,7 @@ import { and, asc, desc, eq, lt, sql } from 'drizzle-orm';
 import { freeThisMonth, pace, type Pace } from '../budget.ts';
 import { daysInMonth } from '../dates.ts';
 import { recordChange } from './audit.ts';
+import { plannedByCategory, reserveStatuses, type ReserveStatus } from './recurring.ts';
 import type { DB } from './db/index.ts';
 import { budgets, categories } from './db/schema.ts';
 
@@ -71,10 +72,18 @@ export interface CategoryLine {
 	name: string;
 	group: string;
 	limitCents: number;
+	/** Uitgegeven, inclusief reserveringen (die tellen vanaf de eerste van de maand) */
 	spentCents: number;
 	spentRatio: number;
 	monthRatio: number;
 	pace: Pace;
+	/** Gepland: reserveringen en verwachte of bevestigde vaste lasten */
+	plannedCents: number;
+	plannedSpentCents: number;
+	otherCents: number;
+	freeLimitCents: number;
+	/** Uitgesmeerde vaste lasten in deze categorie, met wat er opzij staat */
+	reserves: ReserveStatus[];
 }
 
 export interface MonthOverview {
@@ -104,6 +113,8 @@ export function monthOverview(db: DB, month: string, today: string): MonthOvervi
 			.map((b) => [b.categoryId, b.limitCents])
 	);
 	const spending = spendingByCategory(db, month);
+	const planned = plannedByCategory(db, month);
+	const reserves = Map.groupBy(reserveStatuses(db, month), (r) => r.categoryId);
 
 	const days = daysInMonth(month);
 	const day =
@@ -111,19 +122,29 @@ export function monthOverview(db: DB, month: string, today: string): MonthOvervi
 
 	const lines: CategoryLine[] = cats.map((c) => {
 		const limitCents = limits.get(c.id) ?? 0;
-		const spentCents = spending.get(c.id) ?? 0;
+		const p = planned.get(c.id);
+		// Een reservering is geen transactie, maar telt wel als uitgave in de categorie
+		const spentCents = (spending.get(c.id) ?? 0) + (p?.reservedCents ?? 0);
+		const plannedCents = p?.plannedCents ?? 0;
+		const plannedSpentCents = p?.plannedSpentCents ?? 0;
 		return {
 			categoryId: c.id,
 			name: c.name,
 			group: c.group,
 			limitCents,
 			spentCents,
-			...pace({ spentCents, limitCents, day, daysInMonth: days })
+			plannedCents,
+			plannedSpentCents,
+			reserves: reserves.get(c.id) ?? [],
+			...pace({ spentCents, limitCents, plannedCents, plannedSpentCents, day, daysInMonth: days })
 		};
 	});
 
 	// Uitgaven zonder categorie tellen als uitgave; inkomsten zonder categorie niet als ruimte
-	const uncategorizedCents = Math.max(0, spending.get(null) ?? 0);
+	const uncategorizedCents = Math.max(
+		0,
+		(spending.get(null) ?? 0) + (planned.get(null)?.reservedCents ?? 0)
+	);
 	const withLimit = lines.filter((l) => l.limitCents > 0);
 	const withoutLimitSpent = lines
 		.filter((l) => l.limitCents === 0)
