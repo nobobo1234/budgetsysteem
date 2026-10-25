@@ -248,6 +248,36 @@ sudo systemctl start budget-backup.service
 
 Controleer in het dashboard van de dienst dat alle drie de checks binnen een paar minuten groen worden. Een alternatief voor de app-check is Uptime Kuma op een ander apparaat dat `https://budget.example.nl/healthz` opvraagt; dat ziet alleen niet of Litestream of restic stilvalt.
 
+### Pushmeldingen
+
+Pushmeldingen (Web Push) hebben een VAPID-sleutelpaar nodig. Zonder sleutels werkt de app gewoon; op Meer → Meldingen staat dan dat ze nog niet zijn ingesteld. Telemetrie-meldingen (nieuw soort fout, backup te oud, schijf boven 80%) en beveiligingsmeldingen gaan via dezelfde weg.
+
+| Variabele           | Waar                  | Inhoud                                                                     |
+| ------------------- | --------------------- | -------------------------------------------------------------------------- |
+| `VAPID_PUBLIC_KEY`  | `/etc/budget/app.env` | Publieke sleutel, 87 tekens base64url (niet geheim)                        |
+| `VAPID_PRIVATE_KEY` | `/etc/budget/app.env` | Privésleutel, 43 tekens base64url (**geheim**)                             |
+| `VAPID_SUBJECT`     | `/etc/budget/app.env` | Contact voor de push-diensten, `mailto:…` of `https://…`; standaard ORIGIN |
+
+De sleutels maak je één keer op de VPS, in de draaiende container, en ze gaan direct het omgevingsbestand in zonder op je scherm te komen:
+
+```bash
+sudo docker exec budget node -e "
+  const { generateKeyPairSync } = require('node:crypto');
+  const { publicKey, privateKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+  const pub = publicKey.export({ format: 'jwk' });
+  const raw = Buffer.concat([Buffer.from([4]), Buffer.from(pub.x, 'base64url'), Buffer.from(pub.y, 'base64url')]);
+  console.log('VAPID_PUBLIC_KEY=' + raw.toString('base64url'));
+  console.log('VAPID_PRIVATE_KEY=' + privateKey.export({ format: 'jwk' }).d);
+" | sudo tee -a /etc/budget/app.env >/dev/null
+echo 'VAPID_SUBJECT=https://budget.example.nl' | sudo tee -a /etc/budget/app.env >/dev/null
+sudo BUDGET_IMAGE="ghcr.io/nobobo1234/budgetsysteem@$(cat /var/lib/budget/current-digest)" docker compose -f /opt/budget/docker-compose.yml up -d --force-recreate app
+```
+
+- Bewaar een kopie van beide sleutels in je wachtwoordmanager. Een nieuw sleutelpaar maakt alle bestaande abonnementen ongeldig: dan zet je meldingen op elk apparaat opnieuw aan.
+- De sleutels zijn alleen nodig op de VPS; de deploy-workflow geeft ze niet door, dus in GitHub Secrets hoeven ze niet.
+- Daarna op je iPhone, vanuit de app op je beginscherm: Meer → Meldingen → Meldingen aanzetten, en Testmelding sturen.
+- Drempels: restic-backup ouder dan 26 uur (dezelfde marge als de externe backup-check), Litestream meer dan een uur achter op de laatste wijziging aan de database, schijf boven 80% (weer in orde onder 78%). Elke soort meldt één keer tot hij weer in orde is.
+
 ## Wijzigingen in `deploy/`
 
 De deploy-workflow rolt alleen het image uit. De bestanden uit stap 4 staan als kopie op de VPS en worden niet automatisch bijgewerkt. Verandert een PR iets in `deploy/`, kopieer de bestanden dan na de merge opnieuw, vanaf je laptop:
