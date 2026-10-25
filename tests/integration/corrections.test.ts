@@ -284,6 +284,62 @@ describe('retour van een voorgeschoten uitgave', () => {
 		expect(outstanding(bol)[0]!.open).toBe(2000);
 	});
 
+	it('kwijtschelden na een retour: de verdeling uit de posten (syncShareSplits) blijft kloppen', () => {
+		const bol = shared();
+		const [sannePost, timPost] = db
+			.select()
+			.from(owed)
+			.where(eq(owed.sourceTransactionId, bol))
+			.orderBy(asc(owed.createdAt))
+			.all();
+		const terug = () => spendingByCategory(db, '2026-09').get(cat('Terugbetaling')) ?? 0;
+		const splitOf = (note: string) =>
+			db
+				.select()
+				.from(transactionSplits)
+				.where(and(eq(transactionSplits.transactionId, bol), eq(transactionSplits.note, note)))
+				.get()!.amountCents;
+
+		// €30 terug: elk deel €10 lager
+		const retour = tx({ amountCents: 3000, counterparty: 'Bol.com', date: '2026-10-05' });
+		link(retour, bol);
+		// De retour verandert de posten niet, dus ook de verdeling van het origineel niet
+		expect([splitOf('Mijn deel'), splitOf('Voorgeschoten')]).toEqual([-3000, -6000]);
+
+		// Sanne's resterende €20 kwijtschelden: het deel dat de retour dekte blijft van haar
+		forgiveOwed(db, sannePost!.id);
+		expect([splitOf('Mijn deel'), splitOf('Voorgeschoten')]).toEqual([-5000, -4000]);
+		// Jij: €30 − €10 retour + €20 kwijtgescholden
+		expect(spent('2026-09', 'Elektronica')).toBe(4000);
+		// Terugbetaling loopt op nul uit zodra Tim zijn €20 betaalt
+		const tim = findOrCreatePerson(db, 'Tim');
+		const tikkie = tx({
+			amountCents: 2000,
+			counterparty: 'Tim',
+			date: '2026-09-25',
+			categoryId: cat('Terugbetaling')
+		});
+		db.transaction((t) => settlePayment(t, tikkie, { owedId: timPost!.id, personId: tim }));
+		expect(terug()).toBe(0);
+		expect(outstanding(bol).map((p) => p.open)).toEqual([2000, 0]);
+
+		// Nog een retour van €30: Sanne telt niet meer mee, jij €40 en Tim nog €20 → 2:1
+		const tweede = tx({ amountCents: 3000, counterparty: 'Bol.com', date: '2026-10-06' });
+		link(tweede, bol);
+		expect(spent('2026-09', 'Elektronica')).toBe(2000);
+		// Tim betaalde al alles: zijn €10 wordt te betalen
+		expect(db.select().from(owed).where(eq(owed.sourceTransactionId, tweede)).all()).toMatchObject([
+			{ personId: tim, direction: 'te_betalen', amountCents: 1000 }
+		]);
+
+		// Losmaken van de eerste: Sanne's hele aandeel is dan kwijtgescholden en voor jou
+		unlink(tweede);
+		unlink(retour);
+		expect([splitOf('Mijn deel'), splitOf('Voorgeschoten')]).toEqual([-6000, -3000]);
+		expect(spent('2026-09', 'Elektronica')).toBe(6000);
+		expect(terug()).toBe(1000);
+	});
+
 	it('zonder namen moet je eerst kiezen wie er meededen', () => {
 		const bol = tx({ amountCents: -9000, counterparty: 'Bol.com', share: { people: 3, with: [] } });
 		const retour = tx({ amountCents: 3000, counterparty: 'Bol.com', date: '2026-10-05' });
