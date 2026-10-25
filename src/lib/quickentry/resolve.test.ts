@@ -187,6 +187,25 @@ describe('ontvangen in de snelinvoer', () => {
 		expect(d.preselect).toBeNull();
 	});
 
+	it('noem je een persoon, dan alleen diens posten', () => {
+		const ctx2: ResolveContext = {
+			...withPosts,
+			people: [...withPosts.people!, { id: 'p-eva', name: 'Eva' }],
+			openPosts: [
+				...withPosts.openPosts!,
+				post({ id: 'o-eva', personId: 'p-eva', personName: 'Eva' })
+			]
+		};
+		const d = resolveEntry(
+			parseQuickEntry('+15 tikkie sanne', '2026-10-20', {
+				people: ctx2.people!.map((p) => p.name)
+			}),
+			ctx2
+		);
+		expect(d.candidates.map((c) => c.id)).toEqual(['o-sanne']);
+		expect(d.preselect).toBe('o-sanne');
+	});
+
 	it('salaris geeft geen koppellijst', () => {
 		expect(resolveWith('+2500 salaris').candidates).toEqual([]);
 	});

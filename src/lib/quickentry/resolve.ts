@@ -256,7 +256,10 @@ export function resolveEntry(entry: ParsedEntry, ctx: ResolveContext): Draft {
 	let preselect: string | null = null;
 	if (amountCents !== null && sharing === 1 && ctx.openPosts && ctx.openPosts.length > 0) {
 		const direction = entry.direction === 'in' ? 'te_krijgen' : 'te_betalen';
-		const posts = ctx.openPosts.filter((p) => p.direction === direction);
+		const all = ctx.openPosts.filter((p) => p.direction === direction);
+		// Noem je een bekende persoon, dan alleen diens posten (als die er zijn)
+		const own = entry.person ? all.filter((p) => p.personName === entry.person) : [];
+		const posts = own.length > 0 ? own : all;
 		const ranked = rankMatches(
 			{ amountCents: Math.abs(amountCents), date: entry.date, name: `${counterparty} ${typed}` },
 			posts.map((p) => ({ ...p, amountCents: p.outstandingCents, name: p.personName })),

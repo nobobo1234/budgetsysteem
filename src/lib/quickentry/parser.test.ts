@@ -301,9 +301,15 @@ describe('robuust', () => {
 		const fuzzOpts = { ...opts, people: ['Sanne', 'Tim de Vries', 'Tim Jansen', '__proto__'] };
 		fc.assert(
 			fc.property(input, (s) => {
-				const start = performance.now();
-				const r = parseQuickEntry(s, TODAY, fuzzOpts);
-				const ms = performance.now() - start;
+				// De parser is puur: echt trage invoer is elke keer traag. Een losse uitschieter door
+				// een GC- of JIT-pauze van de testrunner wordt opnieuw gemeten, hooguit twee keer.
+				const timed = () => {
+					const start = performance.now();
+					const r = parseQuickEntry(s, TODAY, fuzzOpts);
+					return { r, ms: performance.now() - start };
+				};
+				let { r, ms } = timed();
+				for (let retry = 0; retry < 2 && ms >= 5; retry++) ({ r, ms } = timed());
 				expect(ms).toBeLessThan(5);
 				expect(
 					r.amountCents === null || (Number.isSafeInteger(r.amountCents) && r.amountCents > 0)

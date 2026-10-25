@@ -58,9 +58,7 @@
 			<h2 id="recent-title">Recent</h2>
 			<div class="links">
 				{#if data.owed.toReceiveCents > 0}
-					<a href="/te-krijgen"
-						><span class="num">{formatCents(data.owed.toReceiveCents)}</span> te krijgen</a
-					>
+					<a href="/te-krijgen">{`${formatCents(data.owed.toReceiveCents)} te krijgen`}</a>
 				{/if}
 				{#if data.reviewCount > 0}
 					<a href="/transacties?status=te_controleren">{data.reviewCount} te controleren</a>
@@ -148,6 +146,7 @@
 	}
 
 	.links a {
+		font-variant-numeric: tabular-nums;
 		display: inline-flex;
 		align-items: center;
 		min-height: var(--tap);
