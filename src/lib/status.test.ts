@@ -61,7 +61,7 @@ describe('attention', () => {
 	it('database, backups, schijf, herstarts en fouten', () => {
 		const h = healthy();
 		h.database = false;
-		h.backups = { litestreamAgeSeconds: null, resticAgeSeconds: 26 * 3600 };
+		h.backups = { litestreamAgeSeconds: null, resticAgeSeconds: 26 * 3600 + 1 };
 		h.disk = { usedPercent: 80.1, freeBytes: 1e9 };
 		h.starts.restarts7d = 2;
 		h.errors = { last24h: 1, kinds24h: 1, last7d: 1 };
@@ -75,10 +75,16 @@ describe('attention', () => {
 		]);
 	});
 
-	it('precies 80% schijf en een backup van 25 uur zijn nog goed', () => {
+	it('precies 80% schijf en een restic-backup van 26 uur zijn nog goed', () => {
 		const h = healthy();
 		h.disk = { usedPercent: 80, freeBytes: 1e9 };
-		h.backups.resticAgeSeconds = 25 * 3600;
+		h.backups.resticAgeSeconds = 26 * 3600;
+		expect(attention(h)).toEqual([]);
+	});
+
+	it('een oude Litestream-sync alleen is geen probleem: hij schrijft alleen bij wijzigingen', () => {
+		const h = healthy();
+		h.backups.litestreamAgeSeconds = 3 * 86_400;
 		expect(attention(h)).toEqual([]);
 	});
 
