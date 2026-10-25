@@ -2,6 +2,7 @@
 // POST /api/ingest bereiken en met één tik intrekken.
 import Database from 'better-sqlite3';
 import { createHash } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import { expect, test } from '@playwright/test';
 import sharp from 'sharp';
 import { count, login } from './helpers.ts';
@@ -53,6 +54,18 @@ test('upload-token aanmaken, gebruiken en intrekken', async ({ page, request, ba
 	const shown = page.getByRole('textbox', { name: 'Upload-token', exact: true });
 	await expect(shown).toHaveValue(/^bon_[A-Za-z0-9_-]{43}$/);
 	const token = await shown.inputValue();
+
+	// De opdracht voor het deelmenu als download, met de stappen en de waarschuwing
+	const install = page.getByRole('group', { name: 'Opdracht voor het deelmenu' });
+	await expect(install.getByText(/nooit met het token erin/)).toBeVisible();
+	const [download] = await Promise.all([
+		page.waitForEvent('download'),
+		install.getByRole('link', { name: 'Opdracht downloaden' }).click()
+	]);
+	expect(download.suggestedFilename()).toBe('Bon naar Budget.shortcut');
+	const shortcut = await readFile(await download.path());
+	expect(shortcut.subarray(0, 4).toString('latin1')).toBe('AEA1');
+	expect(shortcut.includes(Buffer.from(token))).toBe(false);
 
 	// Alleen de hash staat in de database
 	const hash = createHash('sha256').update(token).digest('hex');

@@ -96,10 +96,7 @@
 	{#if created}
 		<section class="card created" aria-labelledby="created-title">
 			<h2 id="created-title">Token voor {created.name}</h2>
-			<p>
-				Plak het in de opdracht in je deelmenu. Je ziet het maar één keer; deel de opdracht nooit
-				met het token erin.
-			</p>
+			<p>Je ziet het maar één keer. Kopieer het en zet de opdracht op je iPhone.</p>
 			<label class="field">
 				<span>Upload-token</span>
 				<textarea
@@ -115,6 +112,26 @@
 				<button type="button" class="button secondary" onclick={() => copy(created.token)}>
 					{copied ? 'Gekopieerd' : 'Kopiëren'}
 				</button>
+			</div>
+			<div class="install" role="group" aria-labelledby="install-title">
+				<h3 id="install-title">Opdracht voor het deelmenu</h3>
+				<ol class="steps">
+					<li>Download de opdracht op je iPhone en open hem in Opdrachten.</li>
+					<li>Tik op Voeg opdracht toe en plak het token als erom gevraagd wordt.</li>
+					<li>Deel een bon vanuit Foto's en kies Bon naar Budget.</li>
+				</ol>
+				<a class="button download" href="/instellingen/apparaten/opdracht" download>
+					<svg viewBox="0 0 24 24" aria-hidden="true"
+						><path d="M12 4v11m-5-5 5 5 5-5M5 20h14" /></svg
+					>
+					Opdracht downloaden
+				</a>
+				<p class="warning small">
+					Deel de opdracht nooit met het token erin. Voor een nieuw apparaat maak je een nieuw token
+					aan.
+				</p>
+			</div>
+			<div class="actions">
 				<button type="button" class="button secondary" onclick={() => (dismissed = created.id)}>
 					Klaar
 				</button>
@@ -213,6 +230,43 @@
 	.created h2,
 	.created p {
 		margin: 0;
+	}
+
+	.install {
+		display: grid;
+		gap: 10px;
+		justify-items: start;
+		padding-top: 12px;
+		border-top: 1px solid var(--line);
+	}
+
+	.install h3 {
+		margin: 0;
+		font-size: 1rem;
+	}
+
+	.steps {
+		display: grid;
+		gap: 6px;
+		margin: 0;
+		padding-left: 1.4em;
+	}
+
+	.download svg {
+		width: 20px;
+		height: 20px;
+		fill: none;
+		stroke: currentColor;
+		stroke-width: 1.8;
+		stroke-linecap: round;
+		stroke-linejoin: round;
+	}
+
+	.warning {
+		margin: 0;
+		padding-left: 10px;
+		border-left: 3px solid var(--warn);
+		font-weight: 550;
 	}
 
 	.token {
