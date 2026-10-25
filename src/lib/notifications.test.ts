@@ -20,6 +20,7 @@ describe('soorten meldingen', () => {
 				'fout',
 				'maand',
 				'schijf',
+				'terugbetaling',
 				'tikkie',
 				'vaste_last'
 			].sort()

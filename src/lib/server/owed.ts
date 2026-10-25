@@ -30,10 +30,10 @@ export const REFUND_CATEGORY = 'Terugbetaling';
 export const MY_SHARE = 'Mijn deel';
 export const ADVANCED = 'Voorgeschoten';
 
-type Direction = 'te_krijgen' | 'te_betalen';
+export type Direction = 'te_krijgen' | 'te_betalen';
 const OPEN = ['open', 'deels'] as const;
 
-function refundCategory(db: Conn): string | null {
+export function refundCategory(db: Conn): string | null {
 	return (
 		db
 			.select({ id: categories.id })
@@ -44,7 +44,7 @@ function refundCategory(db: Conn): string | null {
 }
 
 /** Hoeveel er per post betaald is. */
-function paidByOwed(db: Conn, ids: readonly string[]): Map<string, number> {
+export function paidByOwed(db: Conn, ids: readonly string[]): Map<string, number> {
 	if (ids.length === 0) return new Map();
 	const rows = db
 		.select({ owedId: owedPayments.owedId, paid: sql<number>`sum(${owedPayments.amountCents})` })
@@ -75,7 +75,7 @@ export function recomputeStatus(db: Conn, ids: readonly string[]): void {
 }
 
 /** Open posten van een persoon in één richting, oudste eerst, met wat er nog openstaat. */
-function openItems(db: Conn, personId: string, direction: Direction, first?: string | null) {
+export function openItems(db: Conn, personId: string, direction: Direction, first?: string | null) {
 	const rows = db
 		.select({ id: owed.id, amountCents: owed.amountCents, date: owed.date })
 		.from(owed)
@@ -103,7 +103,7 @@ function openItems(db: Conn, personId: string, direction: Direction, first?: str
 	return items;
 }
 
-const directionOf = (amountCents: number): Direction =>
+export const directionOf = (amountCents: number): Direction =>
 	amountCents > 0 ? 'te_krijgen' : 'te_betalen';
 
 /**
@@ -246,6 +246,10 @@ export function applyShare(
 	const row = db.select().from(transactions).where(eq(transactions.id, transactionId)).get();
 	if (!row) throw new ValidationError('Onbekende transactie');
 	const existing = db.select().from(owed).where(eq(owed.sourceTransactionId, transactionId)).all();
+	if (existing.some((o) => o.shareId !== null))
+		throw new ValidationError(
+			'Deze afschrijving is gedeeld via de vaste last; pas daar de aandelen aan'
+		);
 	const paid = paidByOwed(
 		db,
 		existing.map((o) => o.id)
@@ -361,6 +365,8 @@ export function updateOwed(db: DB, id: string, patch: OwedPatch): void {
 		const before = tx.select().from(owed).where(eq(owed.id, id)).get();
 		if (!before) throw new ValidationError('Onbekende post');
 		if (patch.personId !== undefined && patch.personId !== before.personId) {
+			if (before.shareId)
+				throw new ValidationError('Dit is een aandeel in een vaste last; pas het daar aan');
 			if (!tx.select({ id: people.id }).from(people).where(eq(people.id, patch.personId)).get())
 				throw new ValidationError('Onbekende persoon');
 			const paid = paidByOwed(tx, [id]).get(id) ?? 0;

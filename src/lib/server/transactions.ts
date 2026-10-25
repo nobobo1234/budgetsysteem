@@ -21,6 +21,7 @@ import {
 	shareFromNames,
 	unlinkPayment
 } from './owed.ts';
+import { applySharedSplit, hasSharePosts, removeSharedFor } from './shares.ts';
 import { dateInRange, type NewTransaction, type TransactionPatch } from './validation.ts';
 
 export { ValidationError };
@@ -121,7 +122,14 @@ export function updateTransaction(
 				.from(transactionSplits)
 				.where(eq(transactionSplits.transactionId, id))
 				.get() !== undefined;
-		if (hasSplits && patch.amountCents !== undefined && patch.amountCents !== before.amountCents) {
+		// Een gedeelde vaste last rekent zijn aandelen opnieuw uit; een voorgeschoten uitgave niet
+		const shared = hasSharePosts(tx, id);
+		if (
+			hasSplits &&
+			!shared &&
+			patch.amountCents !== undefined &&
+			patch.amountCents !== before.amountCents
+		) {
 			throw new ValidationError('Het bedrag van een gedeelde uitgave pas je aan via de verdeling');
 		}
 		const status =
@@ -149,6 +157,7 @@ export function updateTransaction(
 				.where(and(eq(transactionSplits.transactionId, id), eq(transactionSplits.note, MY_SHARE)))
 				.run();
 		}
+		if (shared) applySharedSplit(tx, id);
 		// Een gekoppelde betaling met een ander bedrag wordt opnieuw over de posten verdeeld
 		if (patch.amountCents !== undefined && patch.amountCents !== before.amountCents) {
 			const links = tx
@@ -171,6 +180,8 @@ export function deleteTransaction(db: DB, id: string): boolean {
 	return db.transaction((tx) => {
 		const before = tx.select().from(transactions).where(eq(transactions.id, id)).get();
 		if (!before) return false;
+		// Maandaandelen van een gedeelde vaste last vervallen; wat betaald was wordt tegoed
+		removeSharedFor(tx, id);
 		// Posten van deze uitgave waarop niets betaald is vervallen; betaalde blijven als historie
 		const posts = tx
 			.select({ id: owed.id })

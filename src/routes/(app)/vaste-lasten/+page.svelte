@@ -155,9 +155,10 @@
 								</span>
 								<span class="sub">{rhythmText(i.interval, i.expectedDay)}</span>
 								{#if i.spread && i.nextDate}
+									{@const reserve = i.mineCents ?? i.medianCents}
 									<span class="reserve">
 										<span class="num">{formatCents(i.reservedCents)}</span> van
-										<span class="num">{formatCents(i.medianCents)}</span> opzij, afschrijving rond
+										<span class="num">{formatCents(reserve)}</span> opzij, afschrijving rond
 										{formatDayMonth(i.nextDate)}
 									</span>
 								{/if}
@@ -168,6 +169,9 @@
 									{#if i.interval === 'maand'}per maand{:else}{formatCents(i.medianCents)}
 										{PER_INTERVAL[i.interval]}{/if}
 								</span>
+								{#if i.mineCents !== null}
+									<span class="per">jouw deel {formatCents(i.mineCents)}</span>
+								{/if}
 							</span>
 						</a>
 						{#if i.signal && i.signalToCents !== null}

@@ -16,6 +16,7 @@ import {
 	transactions
 } from '../db/schema.ts';
 import { INTERNAL_TRANSFER } from '../db/seed.ts';
+import { autoLinkPayment, findReceiptToMerge } from '../shares.ts';
 import { mccCategory, parseCardPayment } from './card.ts';
 import { ImportError, type ImportFormat, type ImportRecord, type OpeningBalance } from './types.ts';
 
@@ -40,6 +41,8 @@ export interface ImportSummary {
 	uncategorized: UncategorizedGroup[];
 	/** Startsaldo's die deze import vastlegde, voor de saldocheck */
 	anchors: { accountName: string; date: string; amountCents: number }[];
+	/** Inkomende overboekingen die automatisch aan een openstaande post zijn gekoppeld */
+	linkedCount: number;
 }
 
 const MAX_RECORDS = 100_000;
@@ -180,6 +183,8 @@ export function importRecords(
 		let duplicateCount = 0;
 		let periodStart: string | null = null;
 		let periodEnd: string | null = null;
+		// Nieuwe inkomende boekingen met een tegen-IBAN: na de import automatisch koppelen
+		const incoming: { id: string; date: string }[] = [];
 
 		for (const r of records) {
 			const reference = r.bankReference && !bad.has(r.bankReference) ? r.bankReference : null;
@@ -196,7 +201,53 @@ export function importRecords(
 			const rule = internal ? null : matchRule(sortedRules, r);
 			const categoryId = internal ? internalId : (rule?.categoryId ?? null);
 
-			const result = tx
+			// Een al met één tik bevestigde ontvangst krijgt de gegevens van de bank, in plaats
+			// van een tweede boeking (spec: Gedeelde vaste lasten)
+			const incomingFromOther = r.amountCents > 0 && r.counterIban !== null && !internal;
+			if (incomingFromOther) {
+				const known = tx
+					.select({ id: transactions.id })
+					.from(transactions)
+					.where(
+						reference
+							? eq(transactions.bankReference, reference)
+							: eq(transactions.dedupeHash, hash!)
+					)
+					.get();
+				const merge = known ? null : findReceiptToMerge(tx, r);
+				if (merge) {
+					const before = tx
+						.select({ date: transactions.date, source: transactions.source })
+						.from(transactions)
+						.where(eq(transactions.id, merge))
+						.get();
+					tx.update(transactions)
+						.set({
+							date: r.date,
+							counterparty: r.counterparty,
+							counterIban: r.counterIban,
+							description: r.description,
+							accountId: accountIds.get(accountKey(r))!,
+							source: 'import',
+							bankReference: reference,
+							dedupeHash: hash,
+							importBatchId: batch.id,
+							updatedAt: new Date().toISOString()
+						})
+						.where(eq(transactions.id, merge))
+						.run();
+					// Zonder IBAN: dat is een persoonsgegeven van een ander
+					recordChange(tx, 'ontdubbeld', 'transactions', merge, before, {
+						date: r.date,
+						source: 'import',
+						importBatchId: batch.id
+					});
+					duplicateCount++;
+					continue;
+				}
+			}
+
+			const inserted = tx
 				.insert(transactions)
 				.values({
 					amountCents: r.amountCents,
@@ -217,14 +268,21 @@ export function importRecords(
 					...(r.needsReview && { status: 'te_controleren' as const })
 				})
 				.onConflictDoNothing()
-				.run();
+				.returning({ id: transactions.id })
+				.get();
 
-			if (result.changes === 1) {
+			if (inserted) {
 				newCount++;
+				if (incomingFromOther) incoming.push({ id: inserted.id, date: r.date });
 				if (!periodStart || r.date < periodStart) periodStart = r.date;
 				if (!periodEnd || r.date > periodEnd) periodEnd = r.date;
 			} else duplicateCount++;
 		}
+
+		// Oudste eerst, zodat een betaling de oudste open post dekt
+		incoming.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+		let linkedCount = 0;
+		for (const t of incoming) if (autoLinkPayment(tx, t.id)) linkedCount++;
 
 		tx.update(importBatches)
 			.set({ newCount, duplicateCount, periodStart, periodEnd })
@@ -260,7 +318,8 @@ export function importRecords(
 			periodStart,
 			periodEnd,
 			uncategorized: uncategorizedGroups(tx),
-			anchors
+			anchors,
+			linkedCount
 		};
 	});
 }

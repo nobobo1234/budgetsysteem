@@ -7,6 +7,7 @@ import { enqueue, ensureScheduled, registerJob } from './jobs.ts';
 import { log } from './log.ts';
 import { notify, type NotifyMessage, type NotifyResult } from './push/notify.ts';
 import { awaitingConfirmation, onRecurringEvent } from './recurring.ts';
+import { dueReceipts } from './shares.ts';
 
 // Pushmelding "een verwachte vaste last staat klaar om te bevestigen" (spec: Meldingen). Een
 // post krijgt één melding, zodra zijn verwachte dag gekomen is: niet al op de eerste van de
@@ -16,7 +17,11 @@ export const NOTIFY_JOB = 'vaste_lasten_meldingen';
 const MORNING = 9;
 const EVENING = 21;
 
-export type Send = (kind: 'vaste_last', message: NotifyMessage, db: DB) => Promise<NotifyResult>;
+export type Send = (
+	kind: 'vaste_last' | 'terugbetaling',
+	message: NotifyMessage,
+	db: DB
+) => Promise<NotifyResult>;
 
 /** Overdag (9 tot 21 uur, lokale tijd) mag een melding meteen; anders wacht hij op de ochtend. */
 export function isDaytime(now: Date): boolean {
@@ -58,9 +63,37 @@ export async function notifyDueExpected(
 	return results.filter((r) => r.status === 'verstuurd').length;
 }
 
+/**
+ * Eén melding per maandaandeel dat te laat is: een week na de verwachte ontvangstdag nog niet
+ * volledig binnen (spec: Gedeelde vaste lasten, Randgevallen). Eigen schakelaar; zonder namen of
+ * bedragen, tenzij je dat hebt aangezet.
+ */
+export async function notifyLateShares(
+	db: DB,
+	today: string,
+	send: Send = notify
+): Promise<number> {
+	const late = dueReceipts(db, today).filter((r) => r.late);
+	const results = await Promise.all(
+		late.map((r) =>
+			send(
+				'terugbetaling',
+				{
+					key: `te_laat:${r.id}`,
+					text: 'Een terugbetaling is te laat',
+					detail: `${r.personName}: ${formatCents(r.outstandingCents)} voor ${r.counterparty} is te laat`,
+					url: '/terugbetalingen'
+				},
+				db
+			)
+		)
+	);
+	return results.filter((r) => r.status === 'verstuurd').length;
+}
+
 /** Op de achtergrond; een fout (bijvoorbeeld een database die net dicht is) komt alleen in de log. */
 function inBackground(db: DB, today: string): void {
-	notifyDueExpected(db, today).catch((e: unknown) => {
+	Promise.all([notifyDueExpected(db, today), notifyLateShares(db, today)]).catch((e: unknown) => {
 		log.warn(
 			{ err: { name: e instanceof Error ? e.name : 'Onbekend' } },
 			'meldingen vaste lasten mislukt'

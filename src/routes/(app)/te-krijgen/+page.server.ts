@@ -6,6 +6,7 @@ import { db } from '#lib/server/db/index.ts';
 import { ValidationError } from '#lib/server/errors.ts';
 import { createOwed, deleteOwed, forgiveOwed, owedOverview, updateOwed } from '#lib/server/owed.ts';
 import { findOrCreatePerson, listPeople } from '#lib/server/people.ts';
+import { openShareCount } from '#lib/server/shares.ts';
 import { dateInRange, optionalHttpsUrl, personName } from '#lib/server/validation.ts';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -14,7 +15,8 @@ export const load: PageServerLoad = () => {
 	return {
 		today,
 		overview: owedOverview(db(), today),
-		people: listPeople(db())
+		people: listPeople(db()),
+		openShares: openShareCount(db())
 	};
 };
 

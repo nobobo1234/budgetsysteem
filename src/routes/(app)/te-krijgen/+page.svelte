@@ -83,6 +83,11 @@
 	<div class="total">
 		<HeroAmount cents={o.toReceiveCents} label="Nog te krijgen" />
 		{#if subtitle}<p class="muted">{subtitle}</p>{/if}
+		<p>
+			<a href="/terugbetalingen"
+				>Terugbetalingen van gedeelde vaste lasten{#if data.openShares > 0}: {data.openShares} open{/if}</a
+			>
+		</p>
 	</div>
 
 	{#if feedback}

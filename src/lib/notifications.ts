@@ -45,6 +45,13 @@ export const NOTIFICATION_KINDS = {
 		hint: 'Iemand heeft je na twee weken nog niet terugbetaald',
 		switchable: true
 	},
+	terugbetaling: {
+		group: 'geld',
+		title: 'Terugbetalingen',
+		label: 'Terugbetaling te laat',
+		hint: 'Een aandeel in een gedeelde vaste last is een week na de ontvangstdag niet binnen',
+		switchable: true
+	},
 	maand: {
 		group: 'geld',
 		title: 'Maandafsluiting',
