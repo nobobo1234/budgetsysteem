@@ -183,6 +183,8 @@
 
 	<section>
 		<h2>Overig</h2>
+		<a href="/te-krijgen">Te krijgen</a>
+		<a href="/personen">Personen</a>
 		<a href="/vaste-lasten">Vaste lasten</a>
 		<a href="/saldocheck">Saldocheck</a>
 		<a href="/instellingen/meldingen">Meldingen</a>

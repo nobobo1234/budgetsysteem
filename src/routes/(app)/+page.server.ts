@@ -6,6 +6,7 @@ import { balanceCheckDue } from '#lib/server/balance.ts';
 import { monthOverview } from '#lib/server/budgets.ts';
 import { quickEntryContext } from '#lib/server/context.ts';
 import { db } from '#lib/server/db/index.ts';
+import { owedSummary } from '#lib/server/owed.ts';
 import {
 	awaitingConfirmation,
 	confirmExpected,
@@ -26,6 +27,7 @@ export const load: PageServerLoad = ({ setHeaders }) => {
 		overview: monthOverview(db(), month, today),
 		recent: listTransactions(db(), { limit: 8 }),
 		reviewCount: reviewCount(db()),
+		owed: owedSummary(db()),
 		expected: awaitingConfirmation(db(), today),
 		upcoming: upcomingThisMonth(db(), today),
 		proposals: proposalCount(db()),

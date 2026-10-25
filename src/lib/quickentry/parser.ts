@@ -6,7 +6,7 @@ import { parseAmount } from '../money.ts';
 
 export const MAX_INPUT = 200;
 
-export type SpanKind = 'bedrag' | 'datum' | 'categorie' | 'rekening' | 'delen';
+export type SpanKind = 'bedrag' | 'datum' | 'categorie' | 'rekening' | 'delen' | 'persoon';
 
 export interface Span {
 	start: number;
@@ -30,6 +30,8 @@ export interface ParsedEntry {
 	splitCount: number | null;
 	/** "met sanne en tom": de anderen */
 	splitWith: string[];
+	/** Een bekende persoon los in de tekst (`+15 tikkie sanne`), zoals hij in de app heet */
+	person: string | null;
 	/** Overige tekst: tegenpartij of omschrijving */
 	text: string;
 	spans: Span[];
@@ -40,6 +42,35 @@ export interface ParseOptions {
 	accountAliases?: readonly string[];
 	/** Startposities van tokens die de gebruiker weer gewone tekst heeft gemaakt */
 	plain?: ReadonlySet<number>;
+	/** Namen van bekende personen, voor `+15 tikkie sanne` */
+	people?: readonly string[];
+}
+
+/**
+ * Opzoektabel van personen: op de hele naam en op de voornaam, in kleine letters. Een voornaam
+ * die bij meer personen hoort, herkent de parser niet; dan is niet te zeggen wie je bedoelt.
+ */
+// Per lijst één keer opbouwen: de snelinvoer parset bij elke toetsaanslag met dezelfde lijst
+const indexCache = new WeakMap<readonly string[], Map<string, string>>();
+
+function peopleIndex(people: readonly string[]): Map<string, string> {
+	const cached = indexCache.get(people);
+	if (cached) return cached;
+	const out = new Map<string, string>();
+	const ambiguous = new Set<string>();
+	for (const name of people) {
+		const full = name.trim().toLowerCase();
+		if (full.length === 0) continue;
+		out.set(full, name);
+		const first = full.split(' ')[0]!;
+		if (first === full) continue;
+		if (out.has(first) && out.get(first) !== name) ambiguous.add(first);
+		else out.set(first, name);
+	}
+	for (const name of people) ambiguous.delete(name.trim().toLowerCase());
+	for (const key of ambiguous) out.delete(key);
+	indexCache.set(people, out);
+	return out;
 }
 
 interface Token {
@@ -172,6 +203,7 @@ export function parseQuickEntry(
 	const tokens = tokenize(source);
 	const aliases = new Set((opts.accountAliases ?? []).map((a) => a.toLowerCase()));
 	const plain = opts.plain;
+	const people = opts.people && opts.people.length > 0 ? peopleIndex(opts.people) : null;
 
 	const result: ParsedEntry = {
 		amountCents: null,
@@ -183,6 +215,7 @@ export function parseQuickEntry(
 		account: null,
 		splitCount: null,
 		splitWith: [],
+		person: null,
 		text: '',
 		spans: []
 	};
@@ -276,6 +309,16 @@ export function parseQuickEntry(
 			}
 		}
 
+		if (people && result.person === null) {
+			const word = lower.endsWith(',') ? lower.slice(0, -1) : lower;
+			const name = people.get(word);
+			if (name !== undefined) {
+				result.person = name;
+				span(tok, tok, 'persoon');
+				continue;
+			}
+		}
+
 		if (result.account === null && aliases.has(lower)) {
 			result.account = lower;
 			span(tok, tok, 'rekening');
@@ -291,17 +334,7 @@ export function parseQuickEntry(
 
 /** Hoeveel personen delen er mee, jij inbegrepen. */
 export function splitPeople(entry: Pick<ParsedEntry, 'splitCount' | 'splitWith'>): number {
-	if (entry.splitCount !== null) return entry.splitCount;
-	if (entry.splitWith.length > 0) return entry.splitWith.length + 1;
-	return 1;
-}
-
-/**
- * Verdeelt een totaal in hele centen: jouw deel naar beneden afgerond,
- * de rest is voorgeschoten. Samen altijd exact het totaal.
- */
-export function splitShare(totalCents: number, people: number): { mine: number; others: number } {
-	if (people <= 1) return { mine: totalCents, others: 0 };
-	const mine = Math.floor(totalCents / people);
-	return { mine, others: totalCents - mine };
+	const named = entry.splitWith.length > 0 ? entry.splitWith.length + 1 : 1;
+	// `voor 2 met sanne en tim`: de namen tellen, niet het te lage aantal
+	return Math.max(entry.splitCount ?? 1, named);
 }

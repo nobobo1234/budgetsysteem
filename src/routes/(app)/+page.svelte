@@ -8,6 +8,7 @@
 	import Toast from '#lib/components/Toast.svelte';
 	import TransactionItem from '#lib/components/TransactionItem.svelte';
 	import { formatMonth } from '#lib/dates.ts';
+	import { formatCents } from '#lib/money.ts';
 	import { flush, type QueuedTransaction } from '#lib/offline/queue.ts';
 	import { sync } from '#lib/offline/sync.svelte.ts';
 	import { motion } from '#lib/motion.ts';
@@ -104,9 +105,14 @@
 	<section class="recent" aria-labelledby="recent-title">
 		<div class="head">
 			<h2 id="recent-title">Recent</h2>
-			{#if data.reviewCount > 0}
-				<a href="/transacties?status=te_controleren">{data.reviewCount} te controleren</a>
-			{/if}
+			<div class="links">
+				{#if data.owed.toReceiveCents > 0}
+					<a href="/te-krijgen">{`${formatCents(data.owed.toReceiveCents)} te krijgen`}</a>
+				{/if}
+				{#if data.reviewCount > 0}
+					<a href="/transacties?status=te_controleren">{data.reviewCount} te controleren</a>
+				{/if}
+			</div>
 		</div>
 		<ul>
 			{#each queued as item (item.payload.id)}
@@ -199,6 +205,20 @@
 		justify-content: space-between;
 		align-items: baseline;
 		gap: 12px;
+	}
+
+	.links {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: flex-end;
+		gap: 0 14px;
+	}
+
+	.links a {
+		font-variant-numeric: tabular-nums;
+		display: inline-flex;
+		align-items: center;
+		min-height: var(--tap);
 	}
 
 	.fixed,

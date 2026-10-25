@@ -1,5 +1,4 @@
-import { and, desc, eq, gte, isNull, lte, or, sql, type SQL } from 'drizzle-orm';
-import { splitShare } from '../quickentry/parser.ts';
+import { and, desc, eq, gte, inArray, isNull, lte, or, sql, type SQL } from 'drizzle-orm';
 import { nextOccurrence } from '../recurring.ts';
 import { recordChange } from './audit.ts';
 import type { Conn, DB } from './db/index.ts';
@@ -7,34 +6,30 @@ import {
 	accounts,
 	categories,
 	owed,
+	owedPayments,
 	recurring,
 	reservations,
 	transactionSplits,
 	transactions
 } from './db/schema.ts';
+import { ValidationError } from './errors.ts';
+import {
+	applyShare,
+	MY_SHARE,
+	recomputeStatus,
+	settlePayment,
+	shareFromNames,
+	unlinkPayment
+} from './owed.ts';
 import { dateInRange, type NewTransaction, type TransactionPatch } from './validation.ts';
 
-export class ValidationError extends Error {
-	constructor(message: string) {
-		super(message);
-		this.name = 'ValidationError';
-	}
-}
-
-const REFUND_CATEGORY = 'Terugbetaling';
+export { ValidationError };
 
 function categoryExists(db: Conn, id: string): boolean {
 	return (
 		db.select({ id: categories.id }).from(categories).where(eq(categories.id, id)).get() !==
 		undefined
 	);
-}
-
-/** Verdeelt een bedrag zo gelijk mogelijk over `n` delen; samen exact het totaal. */
-function divide(total: number, n: number): number[] {
-	const base = Math.floor(total / n);
-	const rest = total - base * n;
-	return Array.from({ length: n }, (_, i) => base + (i < rest ? 1 : 0));
 }
 
 /**
@@ -66,7 +61,7 @@ export function createTransaction(
 		if (existing) return { id: existing.id, created: false };
 
 		const status = input.amountCents === 0 ? 'te_controleren' : 'bevestigd';
-		const row = tx
+		let row = tx
 			.insert(transactions)
 			.values({
 				id: input.id,
@@ -86,45 +81,19 @@ export function createTransaction(
 			.returning()
 			.get();
 
-		if (input.share) {
-			// Alleen jouw deel telt in de categorie; de rest is voorgeschoten (Te krijgen)
-			const total = -input.amountCents;
-			const { mine, others } = splitShare(total, input.share.people);
-			const refund = tx
-				.select({ id: categories.id })
-				.from(categories)
-				.where(eq(categories.name, REFUND_CATEGORY))
-				.get();
-			tx.insert(transactionSplits)
-				.values([
-					{
-						transactionId: row.id,
-						categoryId: input.categoryId,
-						amountCents: -mine,
-						note: 'Mijn deel'
-					},
-					{
-						transactionId: row.id,
-						categoryId: refund?.id ?? null,
-						amountCents: -others,
-						note: 'Voorgeschoten'
-					}
-				])
-				.run();
+		// Alleen jouw deel telt in de categorie; de rest is voorgeschoten (Te krijgen)
+		if (input.share)
+			applyShare(tx, row.id, shareFromNames(tx, input.share.people, input.share.with));
 
-			const people =
-				input.share.with.length > 0 ? input.share.with : [`${input.share.people - 1} anderen`];
-			const amounts = input.share.with.length > 0 ? divide(others, people.length) : [others];
-			tx.insert(owed)
-				.values(
-					people.map((person, i) => ({
-						person,
-						amountCents: amounts[i]!,
-						direction: 'te_krijgen' as const,
-						sourceTransactionId: row.id
-					}))
-				)
-				.run();
+		// Ontvangen of terugbetaald. Is de gekozen post intussen weg (offline ingevoerd), dan
+		// niet raden: de transactie blijft staan en komt bij te controleren.
+		if (input.settle && !settlePayment(tx, row.id, input.settle)) {
+			row = tx
+				.update(transactions)
+				.set({ status: 'te_controleren' })
+				.where(eq(transactions.id, row.id))
+				.returning()
+				.get();
 		}
 
 		recordChange(tx, 'aangemaakt', 'transactions', row.id, null, row);
@@ -177,10 +146,21 @@ export function updateTransaction(
 		if (hasSplits && patch.categoryId !== undefined) {
 			tx.update(transactionSplits)
 				.set({ categoryId: patch.categoryId })
-				.where(
-					and(eq(transactionSplits.transactionId, id), eq(transactionSplits.note, 'Mijn deel'))
-				)
+				.where(and(eq(transactionSplits.transactionId, id), eq(transactionSplits.note, MY_SHARE)))
 				.run();
+		}
+		// Een gekoppelde betaling met een ander bedrag wordt opnieuw over de posten verdeeld
+		if (patch.amountCents !== undefined && patch.amountCents !== before.amountCents) {
+			const links = tx
+				.select({ personId: owedPayments.personId, owedId: owedPayments.owedId })
+				.from(owedPayments)
+				.where(eq(owedPayments.transactionId, id))
+				.all();
+			if (links.length > 0) {
+				const first = links.find((l) => l.owedId)?.owedId ?? null;
+				if (!settlePayment(tx, id, { personId: links[0]!.personId, owedId: first }))
+					unlinkPayment(tx, id);
+			}
 		}
 		recordChange(tx, 'gewijzigd', 'transactions', id, before, after);
 		return true;
@@ -191,10 +171,27 @@ export function deleteTransaction(db: DB, id: string): boolean {
 	return db.transaction((tx) => {
 		const before = tx.select().from(transactions).where(eq(transactions.id, id)).get();
 		if (!before) return false;
-		// Openstaande posten van deze uitgave vervallen; (deels) betaalde blijven als historie
-		tx.delete(owed)
-			.where(and(eq(owed.sourceTransactionId, id), eq(owed.status, 'open')))
-			.run();
+		// Posten van deze uitgave waarop niets betaald is vervallen; betaalde blijven als historie
+		const posts = tx
+			.select({ id: owed.id })
+			.from(owed)
+			.where(eq(owed.sourceTransactionId, id))
+			.all()
+			.map((p) => p.id);
+		const paid = new Set(
+			posts.length === 0
+				? []
+				: tx
+						.select({ owedId: owedPayments.owedId })
+						.from(owedPayments)
+						.where(inArray(owedPayments.owedId, posts))
+						.all()
+						.map((r) => r.owedId)
+		);
+		const unpaid = posts.filter((p) => !paid.has(p));
+		if (unpaid.length > 0) tx.delete(owed).where(inArray(owed.id, unpaid)).run();
+		// Was dit een betaling, dan gaan de posten die hij dekte weer open
+		const covered = unlinkPayment(tx, id);
 		// Een afschrijving van een uitgesmeerde vaste last: de reservering staat weer opzij
 		tx.update(reservations)
 			.set({ drawnCents: 0, transactionId: null })
@@ -219,6 +216,7 @@ export function deleteTransaction(db: DB, id: string): boolean {
 			}
 		}
 		tx.delete(transactions).where(eq(transactions.id, id)).run();
+		recomputeStatus(tx, covered);
 		recordChange(tx, 'verwijderd', 'transactions', id, before, null);
 		return true;
 	});

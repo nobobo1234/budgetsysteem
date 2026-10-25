@@ -234,23 +234,86 @@ export const reservations = sqliteTable(
 	]
 );
 
-export const owed = sqliteTable('owed', {
-	id: id(),
-	person: text('person').notNull(),
-	amountCents: integer('amount_cents').notNull(),
-	direction: text('direction', { enum: ['te_krijgen', 'te_betalen'] }).notNull(),
-	sourceTransactionId: text('source_transaction_id').references(() => transactions.id, {
-		onDelete: 'set null'
-	}),
-	status: text('status', { enum: ['open', 'deels', 'betaald'] })
-		.notNull()
-		.default('open'),
-	paidViaTransactionId: text('paid_via_transaction_id').references(() => transactions.id, {
-		onDelete: 'set null'
-	}),
-	note: text('note').notNull().default(''),
-	createdAt: createdAt()
-});
+// Personen met wie je geld voorschiet of deelt. Een IBAN hoort bij hooguit één persoon en is
+// nooit een eigen rekening (gecontroleerd in people.ts). IBANs van anderen nooit in logs.
+export const people = sqliteTable(
+	'people',
+	{
+		id: id(),
+		name: text('name').notNull(),
+		active: integer('active', { mode: 'boolean' }).notNull().default(true),
+		createdAt: createdAt()
+	},
+	(t) => [uniqueIndex('people_name_idx').on(sql`lower(${t.name})`)]
+);
+
+export const peopleIbans = sqliteTable(
+	'people_ibans',
+	{
+		id: id(),
+		personId: text('person_id')
+			.notNull()
+			.references(() => people.id, { onDelete: 'cascade' }),
+		iban: text('iban').notNull().unique(),
+		createdAt: createdAt()
+	},
+	(t) => [index('people_ibans_person_idx').on(t.personId)]
+);
+
+// Een openstaande post: wat iemand jou nog moet (te krijgen) of jij iemand (te betalen).
+// Zonder persoon als je `voor 3` typte zonder namen; die kies je later op het overzicht.
+// Betaald is wat in `owed_payments` staat; de status volgt daaruit.
+export const owed = sqliteTable(
+	'owed',
+	{
+		id: id(),
+		personId: text('person_id').references(() => people.id),
+		amountCents: integer('amount_cents').notNull(),
+		direction: text('direction', { enum: ['te_krijgen', 'te_betalen'] }).notNull(),
+		sourceTransactionId: text('source_transaction_id').references(() => transactions.id, {
+			onDelete: 'set null'
+		}),
+		description: text('description').notNull().default(''),
+		// Vanaf wanneer de post openstaat
+		date: text('date').notNull(),
+		status: text('status', { enum: ['open', 'deels', 'betaald', 'kwijtgescholden'] })
+			.notNull()
+			.default('open'),
+		tikkieUrl: text('tikkie_url'),
+		note: text('note').notNull().default(''),
+		createdAt: createdAt()
+	},
+	(t) => [
+		index('owed_person_status_idx').on(t.personId, t.status),
+		index('owed_source_idx').on(t.sourceTransactionId),
+		check('owed_amount_positive', sql`${t.amountCents} > 0`),
+		check('owed_date_format', sql`${t.date} GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'`)
+	]
+);
+
+// Wie wat betaalde voor welke post. Eén betaling kan meerdere posten dekken en een post kan
+// uit meerdere betalingen komen. Zonder post is het tegoed, dat naar de volgende post gaat.
+export const owedPayments = sqliteTable(
+	'owed_payments',
+	{
+		id: id(),
+		transactionId: text('transaction_id')
+			.notNull()
+			.references(() => transactions.id, { onDelete: 'cascade' }),
+		personId: text('person_id')
+			.notNull()
+			.references(() => people.id),
+		owedId: text('owed_id').references(() => owed.id, { onDelete: 'set null' }),
+		amountCents: integer('amount_cents').notNull(),
+		createdAt: createdAt()
+	},
+	(t) => [
+		index('owed_payments_tx_idx').on(t.transactionId),
+		index('owed_payments_owed_idx').on(t.owedId),
+		index('owed_payments_person_idx').on(t.personId),
+		check('owed_payments_amount_positive', sql`${t.amountCents} > 0`)
+	]
+);
 
 export const passkeys = sqliteTable('passkeys', {
 	// Credential-ID (base64url) zoals de authenticator hem teruggeeft

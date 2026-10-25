@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { monthOverview, setBudget, spendingByCategory } from '../../src/lib/server/budgets.ts';
 import type { DB } from '../../src/lib/server/db/index.ts';
@@ -7,6 +7,7 @@ import {
 	auditLog,
 	categories,
 	owed,
+	people,
 	transactionSplits,
 	transactions
 } from '../../src/lib/server/db/schema.ts';
@@ -109,8 +110,10 @@ describe('handmatige transacties', () => {
 		expect(splits.map((s) => s.amountCents).sort((a, b) => a - b)).toEqual([-3000, -1500]);
 		expect(
 			db
-				.select()
+				.select({ person: people.name, amountCents: owed.amountCents })
 				.from(owed)
+				.innerJoin(people, eq(people.id, owed.personId))
+				.orderBy(owed.createdAt, sql`owed.rowid`)
 				.all()
 				.map((o) => [o.person, o.amountCents])
 		).toEqual([

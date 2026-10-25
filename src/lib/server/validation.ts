@@ -31,7 +31,9 @@ export const newTransactionSchema = z
 				with: z.array(name).max(20).default([])
 			})
 			.nullable()
-			.default(null)
+			.default(null),
+		// Ontvangen of terugbetaald: de gekozen post uit de koppellijst
+		settle: z.object({ owedId: z.uuid() }).strict().nullable().default(null)
 	})
 	.strict()
 	.refine((t) => (t.origAmountCents === null) === (t.origCurrency === null), {
@@ -43,13 +45,12 @@ export const newTransactionSchema = z
 	.refine((t) => t.share === null || t.amountCents < 0, {
 		message: 'Alleen een uitgave kun je delen'
 	})
-	.refine(
-		(t) =>
-			t.share === null || t.share.with.length === 0 || t.share.with.length === t.share.people - 1,
-		{
-			message: 'Aantal personen klopt niet met de namen'
-		}
-	);
+	.refine((t) => t.share === null || t.share.with.length <= t.share.people - 1, {
+		message: 'Aantal personen klopt niet met de namen'
+	})
+	.refine((t) => t.settle === null || (t.share === null && t.amountCents !== 0), {
+		message: 'Een betaling koppelen kan alleen met een bedrag en zonder verdeling'
+	});
 
 export type NewTransaction = z.infer<typeof newTransactionSchema>;
 
@@ -70,3 +71,21 @@ export const transactionPatchSchema = z
 	.strict();
 
 export type TransactionPatch = z.infer<typeof transactionPatchSchema>;
+
+/** Een https-link (zoals een Tikkie), of leeg. Nooit `javascript:` of iets anders dan https. */
+export const optionalHttpsUrl = z
+	.string()
+	.trim()
+	.max(300)
+	.refine((s) => {
+		if (s === '') return true;
+		try {
+			const url = new URL(s);
+			return url.protocol === 'https:' && url.username === '' && url.password === '';
+		} catch {
+			return false;
+		}
+	}, 'Alleen een https-link')
+	.transform((s) => (s === '' ? null : s));
+
+export const personName = name;
