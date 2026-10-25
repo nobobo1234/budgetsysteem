@@ -10,12 +10,16 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Elke job heeft een timeout van ruim twee keer de normale duur. Zonder timeout geldt de standaard
+# van 6 uur, en een hangende download (zoals apt in `playwright install --with-deps`) kost dan de
+# hele tijd Actions-minuten.
 jobs:
   # Alleen docs (docs/ of een .md in de root) gewijzigd? Dan slaan de zware jobs en stappen over.
   # Overgeslagen jobs tellen als geslaagd voor de verplichte checks; faalt deze job of is het niet
   # zeker, dan draait alles.
   changes:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: read
     outputs:
@@ -52,6 +56,7 @@ jobs:
     needs: changes
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
@@ -78,6 +83,7 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && github.event_name == 'pull_request' && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
@@ -96,6 +102,7 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && github.event_name == 'pull_request' && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: read
     steps:
@@ -125,6 +132,7 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && github.event_name == 'pull_request' && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
@@ -151,6 +159,7 @@ jobs:
   guardrails:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: read
     steps:
@@ -171,6 +180,7 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
@@ -208,6 +218,7 @@ jobs:
     if: ${{ !cancelled() && github.event_name == 'pull_request' && needs.changes.outputs.code != 'false' }}
     # De VPS is arm64; native bouwen op een arm64-runner in plaats van via QEMU-emulatie
     runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
     permissions:
       contents: read
     steps:
