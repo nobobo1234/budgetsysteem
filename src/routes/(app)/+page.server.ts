@@ -14,11 +14,11 @@ import {
 	skipExpected,
 	upcomingThisMonth
 } from '#lib/server/recurring.ts';
+import { inboxCount, reviewInbox } from '#lib/server/review.ts';
 import { confirmReceived, dueReceipts } from '#lib/server/shares.ts';
 import {
 	frequentManual,
 	listTransactions,
-	reviewCount,
 	ValidationError,
 	withRefunds
 } from '#lib/server/transactions.ts';
@@ -33,7 +33,7 @@ export const load: PageServerLoad = ({ setHeaders }) => {
 		today,
 		overview: monthOverview(db(), month, today),
 		recent: withRefunds(db(), listTransactions(db(), { limit: 8, withoutExpected: true })),
-		reviewCount: reviewCount(db()),
+		reviewCount: inboxCount(reviewInbox(db(), today)),
 		owed: owedSummary(db()),
 		expected: awaitingConfirmation(db(), today),
 		receipts: dueReceipts(db(), today),

@@ -116,7 +116,7 @@
 
 <div class="page">
 	<div class="intro">
-		<BackLink parents={['/instellingen', '/']} />
+		<BackLink parents={['/instellingen', '/', '/te-controleren']} />
 		<h1 data-morph-head="titel">Te krijgen</h1>
 		<OwedTabs current="te-krijgen" open={openCount} people={data.people.length} />
 	</div>

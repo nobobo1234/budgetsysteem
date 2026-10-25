@@ -22,7 +22,7 @@ export const MEER_PAGES = [
 ] as const;
 
 const SOURCES: Record<string, Record<string, MorphPart[]>> = {
-	'/': { '/te-krijgen': ['bedrag'], '/saldocheck': ['titel'] },
+	'/': { '/te-krijgen': ['bedrag'], '/te-controleren': ['bedrag'], '/saldocheck': ['titel'] },
 	'/instellingen': Object.fromEntries(MEER_PAGES.map((p) => [p, ['titel']]))
 };
 
@@ -36,7 +36,7 @@ export interface MorphPlan {
 
 /** Detailpagina's met een naam die meeschuift, en de pagina's met een rij die erheen leidt. */
 const DETAILS: [pattern: RegExp, sources: string[]][] = [
-	[/^\/vaste-lasten\/[0-9a-f-]{36}$/, ['/', '/vaste-lasten']]
+	[/^\/vaste-lasten\/[0-9a-f-]{36}$/, ['/', '/vaste-lasten', '/te-controleren']]
 ];
 
 function sourceParts(source: string, target: string): MorphPart[] | undefined {

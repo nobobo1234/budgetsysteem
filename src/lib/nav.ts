@@ -8,6 +8,7 @@ const LABELS: Record<string, string> = {
 	'/import': 'Import',
 	'/instellingen': 'Meer',
 	'/te-krijgen': 'Te krijgen',
+	'/te-controleren': 'Te controleren',
 	'/vaste-lasten': 'Vaste lasten'
 };
 
@@ -37,6 +38,7 @@ export const TABS = ['/', '/transacties', '/budget', '/import', '/instellingen']
 
 /** Pagina's met een vaste tab: een subpagina laat de tab van haar ouder actief. */
 const TAB_OF: [prefix: string, tab: string][] = [
+	['/te-controleren', '/'],
 	['/vaste-lasten', '/budget'],
 	['/categorieen', '/budget'],
 	['/regels', '/budget'],

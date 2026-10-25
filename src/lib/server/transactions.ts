@@ -479,13 +479,3 @@ export function frequentManual(db: DB, today: string, limit = 5): string[] {
 		.all()
 		.map((r) => r.name);
 }
-
-export function reviewCount(db: DB): number {
-	return (
-		db
-			.select({ n: sql<number>`count(*)` })
-			.from(transactions)
-			.where(eq(transactions.status, 'te_controleren'))
-			.get()?.n ?? 0
-	);
-}

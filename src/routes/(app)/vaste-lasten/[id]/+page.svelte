@@ -114,7 +114,7 @@
 </svelte:head>
 
 <div class="page">
-	<BackLink parents={['/vaste-lasten', '/', '/budget']} />
+	<BackLink parents={['/vaste-lasten', '/', '/budget', '/te-controleren']} />
 
 	<header>
 		<h1 data-morph-head="titel">{name}</h1>

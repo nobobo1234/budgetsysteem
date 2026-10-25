@@ -81,7 +81,7 @@
 </svelte:head>
 
 <div class="page">
-	<BackLink parents={['/te-krijgen', '/instellingen', '/', '/import']} />
+	<BackLink parents={['/te-krijgen', '/instellingen', '/', '/import', '/te-controleren']} />
 
 	<div class="intro">
 		<h1 data-morph-head="titel">Terugbetalingen</h1>

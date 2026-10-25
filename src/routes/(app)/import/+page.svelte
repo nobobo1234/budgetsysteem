@@ -248,7 +248,7 @@
 				{#if summary.reversals.reviewCount > 0}
 					<li>
 						<Tile
-							href="/transacties?status=te_controleren"
+							href="/te-controleren"
 							icon={icons.controleren}
 							title={summary.reversals.reviewCount === 1
 								? '1 storno te controleren'

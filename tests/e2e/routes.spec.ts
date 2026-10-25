@@ -15,6 +15,8 @@ const closed = [
 	['GET', '/te-krijgen'],
 	['GET', '/personen'],
 	['GET', '/terugbetalingen'],
+	['GET', '/te-controleren'],
+	['POST', '/te-controleren?/leave'],
 	['POST', '/terugbetalingen?/received'],
 	['POST', '/vaste-lasten/0b7f3c52-6a2e-4c8e-9a43-1f2d3e4c5b6a?/addShare'],
 	['POST', '/te-krijgen?/add'],
