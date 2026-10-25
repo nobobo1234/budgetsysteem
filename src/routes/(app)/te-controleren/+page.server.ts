@@ -1,6 +1,7 @@
 import { fail } from '@sveltejs/kit';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
+import { groupHue } from '#lib/categoryColor.ts';
 import { toIsoDate } from '#lib/dates.ts';
 import { parseAmount } from '#lib/money.ts';
 import { db } from '#lib/server/db/index.ts';
@@ -16,7 +17,23 @@ export const load: PageServerLoad = ({ setHeaders }) => {
 	const today = toIsoDate(new Date());
 	setHeaders({ 'cache-control': 'private, no-cache' });
 	const inbox = reviewInbox(db(), today);
-	return { today, inbox, count: inboxCount(inbox) };
+	// Tinten voor monogrammen en bolletjes hier, zodat de pagina categoryColor.ts niet met het
+	// startscherm deelt: dat gaf een extra chunk in de eerste bundel van het startscherm
+	const hue = (name: string | null) => (name ? groupHue(name) : null);
+	return {
+		today,
+		count: inboxCount(inbox),
+		inbox: {
+			missed: inbox.missed.map((i) => ({ ...i, hue: hue(i.categoryGroup) })),
+			transactions: inbox.transactions.map((t) => ({ ...t, hue: hue(t.categoryGroup) })),
+			late: inbox.late.map((l) => ({ ...l, hue: groupHue(l.personName) })),
+			credit: inbox.credit.map((c) => ({ ...c, hue: groupHue(c.personName) })),
+			reminders: inbox.reminders.map((r) => ({
+				...r,
+				hue: groupHue(r.personName ?? 'Nog niet gekozen')
+			}))
+		}
+	};
 };
 
 const idSchema = z.object({ id: z.uuid() });

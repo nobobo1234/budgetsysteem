@@ -26,17 +26,8 @@
 		pending = false,
 		error,
 		href,
-		showDate = true,
-		showStatus = true
-	}: {
-		tx: Item;
-		pending?: boolean;
-		error?: string;
-		href?: string;
-		showDate?: boolean;
-		/** Zonder label "te controleren", zoals in de review-inbox waar de groep het al zegt */
-		showStatus?: boolean;
-	} = $props();
+		showDate = true
+	}: { tx: Item; pending?: boolean; error?: string; href?: string; showDate?: boolean } = $props();
 
 	const color = $derived(tx.categoryName ? groupColor(tx.categoryGroup ?? tx.categoryName) : null);
 	// Monogram in de tint van de groep; zonder categorie grijs
@@ -85,7 +76,7 @@
 			<span class="badge pending">Wordt opgeslagen</span>
 		{:else if error}
 			<span class="badge error">{error}</span>
-		{:else if tx.status === 'te_controleren' && showStatus}
+		{:else if tx.status === 'te_controleren'}
 			<span class="badge review">Te controleren</span>
 		{:else if tx.status === 'verwacht'}
 			<span class="badge expected">Verwacht</span>
