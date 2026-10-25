@@ -133,11 +133,13 @@
 					title: 'Apparaten',
 					value: t.uploadTokens.blocked
 						? 'Een token is geblokkeerd'
-						: t.uploadTokens.count > 0
-							? `${plural(t.uploadTokens.count, 'apparaat', 'apparaten')} met het deelmenu`
-							: 'Deelmenu nog niet ingesteld',
+						: t.uploadTokens.renewShortcut
+							? 'Opdracht opnieuw ondertekenen'
+							: t.uploadTokens.count > 0
+								? `${plural(t.uploadTokens.count, 'apparaat', 'apparaten')} met het deelmenu`
+								: 'Deelmenu nog niet ingesteld',
 					icon: icons.apparaten,
-					warn: t.uploadTokens.blocked
+					warn: t.uploadTokens.blocked || t.uploadTokens.renewShortcut
 				},
 				{
 					href: '/instellingen/status',

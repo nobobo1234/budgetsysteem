@@ -8,6 +8,7 @@ import type { DB } from './db/index.ts';
 import { db as appDb } from './db/index.ts';
 import { accounts, categories, people, receipts, rules } from './db/schema.ts';
 import { owedSummary } from './owed.ts';
+import { currentShortcutStatus, needsRenewal } from './receipts/shortcut-download.ts';
 import { activeUploadTokens, isBlocked } from './receipts/tokens.ts';
 import { listDevices } from './push/subscriptions.ts';
 import { recurringOverview } from './recurring.ts';
@@ -28,9 +29,17 @@ function statusAttention(): number {
 	return attention(health).length;
 }
 
-/** Vraagt iets in Meer aandacht: een saldocheck, een probleem op de statuspagina, geen herstelcode. */
+/**
+ * Vraagt iets in Meer aandacht: een saldocheck, een probleem op de statuspagina, geen herstelcode,
+ * of de iOS-opdracht moet binnen een maand opnieuw ondertekend worden.
+ */
 export function meerNeedsAttention(db: DB, today = toIsoDate(new Date())): boolean {
-	return balanceCheckDue(db, today).length > 0 || !hasRecoveryCode(db) || statusAttention() > 0;
+	return (
+		balanceCheckDue(db, today).length > 0 ||
+		!hasRecoveryCode(db) ||
+		statusAttention() > 0 ||
+		needsRenewal(currentShortcutStatus())
+	);
 }
 
 export function meerTiles(db: DB, today = toIsoDate(new Date())) {
@@ -59,7 +68,11 @@ export function meerTiles(db: DB, today = toIsoDate(new Date())) {
 			.all()
 			.map((a) => a.name),
 		passkeys: activePasskeys(db).length,
-		uploadTokens: { count: tokens.length, blocked: tokens.some((t) => isBlocked(t)) },
+		uploadTokens: {
+			count: tokens.length,
+			blocked: tokens.some((t) => isBlocked(t)),
+			renewShortcut: needsRenewal(currentShortcutStatus())
+		},
 		receipts: {
 			total: db.select({ n: count() }).from(receipts).get()?.n ?? 0,
 			waiting:
