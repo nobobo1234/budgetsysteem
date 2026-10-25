@@ -149,6 +149,9 @@
 		{#if displayName(tx.counterparty) !== tx.counterparty.trim()}
 			<p class="muted small">Op je afschrift: {tx.counterparty}</p>
 		{/if}
+		{#each data.receipts as receiptId (receiptId)}
+			<a class="more-link bon-link" href="/bonnen/{receiptId}">Bon bekijken</a>
+		{/each}
 		{#if data.merged}
 			{@const m = data.merged}
 			<p class="muted small">
@@ -677,6 +680,10 @@
 
 	.amount.in {
 		color: var(--accent-strong);
+	}
+
+	.bon-link {
+		justify-self: start;
 	}
 
 	.review {

@@ -6,17 +6,31 @@ import { describeError, recordError, telemetryDb } from './telemetry/index.ts';
 
 // Achtergrondtaken in de `jobs`-tabel (spec: Architectuur): geen Redis of aparte queue. Eén
 // proces, dus één worker; een taak wordt geclaimd door zijn status in één update te zetten.
+// Een handler mag async zijn (zoals het lezen van een bon door Haiku); de worker wacht hem af.
 
-export type JobHandler = (db: DB, payload: unknown, now: Date) => void;
+export type JobHandler = (db: DB, payload: unknown, now: Date) => void | Promise<void>;
 
-const handlers = new Map<string, JobHandler>();
-const MAX_ATTEMPTS = 3;
+export interface JobOptions {
+	/**
+	 * Na de laatste mislukte poging, bijvoorbeeld om een bon op "fout" te zetten. Fouten hierin
+	 * worden gelogd en niet doorgegooid.
+	 */
+	onGiveUp?: (db: DB, payload: unknown, now: Date) => void;
+}
+
+const handlers = new Map<string, { run: JobHandler; opts: JobOptions }>();
+export const MAX_ATTEMPTS = 3;
 const TICK_MS = 60_000;
 
 const declared = new Set<string>();
 
-export function registerJob(kind: string, handler: JobHandler): void {
-	handlers.set(kind, handler);
+export function registerJob(kind: string, handler: JobHandler, opts: JobOptions = {}): void {
+	handlers.set(kind, { run: handler, opts });
+}
+
+/** Alleen voor tests: een handler weer weghalen. */
+export function unregisterJob(kind: string): void {
+	handlers.delete(kind);
 }
 
 /**
@@ -56,7 +70,7 @@ export function ensureScheduled(db: DB, kind: string, runAt: Date): void {
  * vertraging; na drie pogingen is hij mislukt. De foutmelding zelf kan data bevatten en
  * gaat niet de database in, alleen de soort fout.
  */
-export function runDueJobs(db: DB, now = new Date()): number {
+export async function runDueJobs(db: DB, now = new Date()): Promise<number> {
 	const skip = waitingForHandler();
 	const due = db
 		.select()
@@ -82,7 +96,7 @@ export function runDueJobs(db: DB, now = new Date()): number {
 		const handler = handlers.get(job.kind);
 		try {
 			if (!handler) throw new Error(`Onbekende taak`);
-			handler(db, job.payload, now);
+			await handler.run(db, job.payload, now);
 			db.update(jobs).set({ status: 'klaar', lastError: null }).where(eq(jobs.id, job.id)).run();
 			ran++;
 		} catch (e) {
@@ -104,26 +118,59 @@ export function runDueJobs(db: DB, now = new Date()): number {
 				route: `job:${job.kind}`
 			});
 			log.error({ errorId, job: job.kind, failed, err: info }, 'taak mislukt');
+			if (failed && handler?.opts.onGiveUp) {
+				try {
+					handler.opts.onGiveUp(db, job.payload, now);
+				} catch (giveUpError) {
+					log.error({ job: job.kind, err: describeError(giveUpError) }, 'opgeven mislukt');
+				}
+			}
 		}
 	}
 	return ran;
 }
 
 let timer: ReturnType<typeof setInterval> | undefined;
+let tick: (() => void) | undefined;
+let soon: ReturnType<typeof setTimeout> | undefined;
 
-/** Start de worker: meteen één keer, daarna elke minuut. */
+/** Start de worker: meteen één keer, daarna elke minuut. Twee rondes lopen nooit door elkaar. */
 export function startJobs(db: () => DB): void {
 	if (timer) return;
 	// Een taak die bezig was toen het proces stopte, mag opnieuw
 	db().update(jobs).set({ status: 'wachtend' }).where(eq(jobs.status, 'bezig')).run();
-	const tick = () => {
-		try {
-			runDueJobs(db());
-		} catch (e) {
-			log.error({ err: describeError(e) }, 'taken draaien mislukt');
+	let running = false;
+	let again = false;
+	tick = () => {
+		if (running) {
+			again = true;
+			return;
 		}
+		running = true;
+		runDueJobs(db())
+			.catch((e) => log.error({ err: describeError(e) }, 'taken draaien mislukt'))
+			.finally(() => {
+				running = false;
+				if (again) {
+					again = false;
+					tick?.();
+				}
+			});
 	};
 	tick();
 	timer = setInterval(tick, TICK_MS);
 	timer.unref();
+}
+
+/**
+ * Draait de wachtrij zo snel mogelijk, in plaats van bij de volgende minuut: een bon wordt zo
+ * meteen na het uploaden gelezen. Zonder gestarte worker (tests, scripts) doet hij niets.
+ */
+export function runJobsSoon(): void {
+	if (!tick || soon) return;
+	soon = setTimeout(() => {
+		soon = undefined;
+		tick?.();
+	}, 0);
+	soon.unref();
 }

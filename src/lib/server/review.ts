@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNotNull, isNull, ne, notExists, sql } from 'drizzle-orm';
 import { addDays, shiftMonth, toIsoDate } from '../dates.ts';
 import { daysBetween, REMIND_AFTER_DAYS } from '../owed.ts';
 import { isActive, receiveDate, shareCents } from '../shares.ts';
@@ -12,6 +12,7 @@ import {
 	owed,
 	owedPayments,
 	people,
+	receipts,
 	recurring,
 	recurringShares,
 	transactions
@@ -19,14 +20,15 @@ import {
 import { ValidationError } from './errors.ts';
 import { ownMatchesFor, type OwnCandidate } from './import/koppellijst.ts';
 import { owedReminders, type OpenPost } from './owed.ts';
+import { receiptStage } from './receipts/outcome.ts';
+import { readStored, type ReceiptField } from './receipts/stored.ts';
 import { awaitingConfirmation, type Awaiting } from './recurring.ts';
 import { dueReceipts, type DueReceipt } from './shares.ts';
 
 // Review-inbox "te controleren" (spec: Dagelijks gebruik, en elke plek die iets naar de
 // review-inbox stuurt). Eén verzameling uit de bronnen die er nu zijn, per soort een groep met
-// zijn eigen actie. Een nieuwe bron, zoals bonnen met status onzeker of controleren (tabel
-// `receipts`), is een functie die zijn items geeft, een veld in `ReviewInbox` en een groep op
-// de pagina; `inboxCount` telt elk veld vanzelf mee.
+// zijn eigen actie. Een nieuwe bron is een functie die zijn items geeft, een veld in
+// `ReviewInbox` en een groep op de pagina; `inboxCount` telt elk veld vanzelf mee.
 
 /** Een post komt hooguit één keer terug nadat je hem liet staan (bij te laat en herinnering). */
 export type LeaveKind = 'te_laat' | 'herinnering' | 'tegoed';
@@ -75,7 +77,29 @@ export interface ReviewCredit {
 
 export type ReviewReminder = OpenPost & { daysOpen: number };
 
+/**
+ * Een bon die op je wacht (spec: Bonnetjes en koppelen): onzeker of niet te lezen, gelezen maar
+ * zonder duidelijke koppeling (kiezen), of verwerkt met twijfel (nakijken). Alleen de
+ * gecontroleerde velden, nooit de ruwe uitvoer van Haiku.
+ */
+export interface ReviewReceipt {
+	id: string;
+	stage: 'nakijken' | 'kiezen' | 'onzeker' | 'fout';
+	source: 'app' | 'deelmenu';
+	store: string | null;
+	date: string | null;
+	totalCents: number | null;
+	currency: string | null;
+	/** Velden waarover Haiku twijfelde of die de controles niet haalden. */
+	doubt: ReceiptField[];
+	/** De transactie die er al bij hoort (bij nakijken), zonder IBAN */
+	transaction: { counterparty: string; date: string; amountCents: number } | null;
+	createdAt: string;
+}
+
 export interface ReviewInbox {
+	/** Bonnen: onzeker, niet te lezen, zelf te koppelen of na te kijken */
+	receipts: ReviewReceipt[];
 	/** Verwachte vaste lasten, een week na de verwachte dag: gemist of opgezegd? */
 	missed: Awaiting[];
 	/** Boekingen op te controleren: storno's, ontbrekend eurobedrag, losgemaakte terugboekingen */
@@ -117,7 +141,18 @@ function reviewTransactions(db: Conn): ReviewTransaction[] {
 		.from(transactions)
 		.innerJoin(accounts, eq(accounts.id, transactions.accountId))
 		.leftJoin(categories, eq(categories.id, transactions.categoryId))
-		.where(eq(transactions.status, 'te_controleren'))
+		.where(
+			and(
+				eq(transactions.status, 'te_controleren'),
+				// Hoort hij bij een bon die nog nagekeken wordt, dan staat hij daar
+				notExists(
+					db
+						.select({ id: receipts.id })
+						.from(receipts)
+						.where(and(eq(receipts.transactionId, transactions.id), isNull(receipts.handledAt)))
+				)
+			)
+		)
 		.orderBy(asc(transactions.date), asc(transactions.createdAt))
 		.all();
 	return rows.map((r, i) => {
@@ -240,12 +275,52 @@ function reviewCredit(db: Conn, today: string, left: Set<string>): ReviewCredit[
 		});
 }
 
+const DOUBT_FIELDS: ReceiptField[] = ['winkel', 'datum', 'totaal', 'valuta'];
+
+function reviewReceipts(db: Conn): ReviewReceipt[] {
+	const rows = db
+		.select({
+			r: receipts,
+			txCounterparty: transactions.counterparty,
+			txDate: transactions.date,
+			txAmount: transactions.amountCents
+		})
+		.from(receipts)
+		.leftJoin(transactions, eq(transactions.id, receipts.transactionId))
+		.where(and(isNull(receipts.handledAt), ne(receipts.status, 'wordt_gelezen')))
+		.orderBy(asc(receipts.createdAt))
+		.all();
+	return rows.flatMap(({ r, txCounterparty, txDate, txAmount }) => {
+		const stage = receiptStage(r);
+		if (stage === 'klaar' || stage === 'wordt_gelezen') return [];
+		const { fields, confidence } = readStored(r.checkedFields, r.fieldConfidence);
+		return [
+			{
+				id: r.id,
+				stage,
+				source: r.source,
+				store: fields.store,
+				date: fields.date,
+				totalCents: fields.totalCents,
+				currency: fields.currency,
+				doubt: stage === 'fout' ? [] : DOUBT_FIELDS.filter((f) => confidence[f].status !== 'zeker'),
+				transaction:
+					txCounterparty !== null && txDate !== null && txAmount !== null
+						? { counterparty: txCounterparty, date: txDate, amountCents: txAmount }
+						: null,
+				createdAt: r.createdAt
+			}
+		];
+	});
+}
+
 /** Alles wat op controle wacht, per soort. */
 export function reviewInbox(db: DB, today = toIsoDate(new Date())): ReviewInbox {
 	const left = leftKeys(db);
 	const due = dueReceipts(db, today);
 	const shareIds = new Set(due.map((d) => d.id));
 	return {
+		receipts: reviewReceipts(db),
 		missed: awaitingConfirmation(db, today).filter((e) => e.missed),
 		transactions: reviewTransactions(db),
 		late: due.filter((d) => d.late && !left.has(keyOf('te_laat', d.id))),

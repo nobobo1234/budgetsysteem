@@ -5,8 +5,11 @@
 	import {
 		formatAge,
 		formatBytes,
+		formatCallDuration,
 		formatDuration,
 		formatPercent,
+		formatTokens,
+		formatUsd,
 		formatVital
 	} from '#lib/status.ts';
 
@@ -14,6 +17,10 @@
 	let refreshing = $state(false);
 
 	const h = $derived(data.health);
+	const bon = $derived(data.receipts);
+	const failed = $derived(
+		bon.outcomes.weigering + bon.outcomes.afgekapt + bon.outcomes.ongeldig + bon.outcomes.fout
+	);
 	const time = new Intl.DateTimeFormat('nl-NL', { timeStyle: 'short' });
 	// FCP en TTFB worden ook opgeslagen, maar passen niet op een telefoonscherm
 	const VITALS = ['LCP', 'INP', 'CLS'] as const;
@@ -128,6 +135,55 @@
 		</dl>
 	</section>
 
+	<section aria-labelledby="bonnen">
+		<h2 id="bonnen">Bonnen lezen</h2>
+		<p class="muted">
+			Elke keer dat Haiku een bon leest, in de laatste {bon.days} dagen. Zeker maar gecorrigeerd hoort
+			bij nul te blijven.
+		</p>
+		{#if bon.calls === 0}
+			<p class="card empty">Nog geen bonnen gelezen.</p>
+		{:else}
+			<dl class="card">
+				<div>
+					<dt>Gelezen</dt>
+					<dd class="num">{bon.calls} keer</dd>
+				</div>
+				<div>
+					<dt>Uitkomst</dt>
+					<dd class="num">
+						{bon.outcomes.zeker} zeker · {bon.outcomes.controleren} controleren · {bon.outcomes
+							.onzeker} onzeker{#if failed > 0}
+							· {failed} mislukt{/if}
+					</dd>
+				</div>
+				<div>
+					<dt>Achteraf gecorrigeerd</dt>
+					<dd class="num">
+						{bon.corrected}
+						{#if bon.correctedSure > 0}
+							<span class="warn-text">({bon.correctedSure} zeker maar fout)</span>
+						{/if}
+					</dd>
+				</div>
+				<div>
+					<dt>Kosten</dt>
+					<dd class="num">{formatUsd(bon.costNanoUsd)}</dd>
+				</div>
+				<div>
+					<dt>Tokens</dt>
+					<dd class="num">
+						{formatTokens(bon.inputTokens)} in · {formatTokens(bon.outputTokens)} uit
+					</dd>
+				</div>
+				<div>
+					<dt>Duur (mediaan)</dt>
+					<dd class="num">{bon.medianMs === null ? '–' : formatCallDuration(bon.medianMs)}</dd>
+				</div>
+			</dl>
+		{/if}
+	</section>
+
 	<section aria-labelledby="snelheid">
 		<h2 id="snelheid">Snelheid</h2>
 		<p class="muted">
@@ -177,6 +233,10 @@
 </div>
 
 <style>
+	.warn-text {
+		color: color-mix(in oklch, var(--warn) 70%, var(--text));
+	}
+
 	.page {
 		display: grid;
 		grid-template-columns: minmax(0, 1fr);

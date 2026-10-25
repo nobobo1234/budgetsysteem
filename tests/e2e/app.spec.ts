@@ -124,6 +124,7 @@ for (const path of [
 	'/personen',
 	'/instellingen/status',
 	'/saldocheck',
+	'/bonnen',
 	'/instellingen/meldingen',
 	'/instellingen/beveiliging',
 	'/instellingen/apparaten',

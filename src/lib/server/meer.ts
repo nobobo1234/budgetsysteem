@@ -1,4 +1,4 @@
-import { count, eq } from 'drizzle-orm';
+import { and, count, eq, isNull, ne } from 'drizzle-orm';
 import { toIsoDate } from '#lib/dates.ts';
 import { activePasskeys } from './auth/passkey.ts';
 import { hasRecoveryCode } from './auth/recovery.ts';
@@ -6,7 +6,7 @@ import { balanceCheckDue } from './balance.ts';
 import { config } from './config.ts';
 import type { DB } from './db/index.ts';
 import { db as appDb } from './db/index.ts';
-import { accounts, categories, people, rules } from './db/schema.ts';
+import { accounts, categories, people, receipts, rules } from './db/schema.ts';
 import { owedSummary } from './owed.ts';
 import { activeUploadTokens, isBlocked } from './receipts/tokens.ts';
 import { listDevices } from './push/subscriptions.ts';
@@ -60,6 +60,15 @@ export function meerTiles(db: DB, today = toIsoDate(new Date())) {
 			.map((a) => a.name),
 		passkeys: activePasskeys(db).length,
 		uploadTokens: { count: tokens.length, blocked: tokens.some((t) => isBlocked(t)) },
+		receipts: {
+			total: db.select({ n: count() }).from(receipts).get()?.n ?? 0,
+			waiting:
+				db
+					.select({ n: count() })
+					.from(receipts)
+					.where(and(isNull(receipts.handledAt), ne(receipts.status, 'wordt_gelezen')))
+					.get()?.n ?? 0
+		},
 		recoveryCode: hasRecoveryCode(db),
 		statusAttention: statusAttention()
 	};

@@ -83,10 +83,20 @@ test('upload-token aanmaken, gebruiken en intrekken', async ({ page, request, ba
 	expect(count("SELECT count(*) AS n FROM receipts WHERE source = 'deelmenu'")).toBe(before + 1);
 	expect(
 		count(
-			"SELECT count(*) AS n FROM jobs WHERE kind = 'bon_lezen' AND status = 'wachtend' AND json_extract(payload, '$.receiptId') = ?",
+			"SELECT count(*) AS n FROM jobs WHERE kind = 'bon_lezen' AND json_extract(payload, '$.receiptId') = ?",
 			body.id
 		)
 	).toBe(1);
+	// De taak wordt meteen opgepakt: de (nagebootste) Haiku leest hem en de bon is niet meer aan
+	// het lezen
+	await expect
+		.poll(() =>
+			count(
+				"SELECT count(*) AS n FROM receipts WHERE id = ? AND status != 'wordt_gelezen'",
+				body.id
+			)
+		)
+		.toBe(1);
 
 	// Een verkeerd bestand komt er niet in
 	const fake = await request.post('/api/ingest', {

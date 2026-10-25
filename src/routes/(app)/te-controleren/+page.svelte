@@ -8,10 +8,11 @@
 	import { centsToInput, formatCents } from '#lib/money.ts';
 	import { daysBetween, formatOpenFor } from '#lib/owed.ts';
 	import { reminderText } from '#lib/remind.ts';
+	import { fieldList, receiptAmount } from '#lib/receipts.ts';
 	import { displayName, initials } from '#lib/text.ts';
 
 	// Review-inbox (spec: Schermen): alles wat op een besluit wacht, per soort een groep met
-	// zijn eigen actie. Een nieuwe bron (bonnen, fase 3) wordt hier een extra groep.
+	// zijn eigen actie. Bonnen staan bovenaan.
 	// De rijen zijn bewust eigen markup en geen ExpectedItem of TransactionItem: deelt deze
 	// pagina die componenten met het startscherm, dan splitst Vite ze in losse chunks en wordt
 	// de eerste JS-bundel van het startscherm zo'n 2,5 kB groter (budget in lighthouse.mjs).
@@ -127,10 +128,11 @@
 	</form>
 {/snippet}
 
-{#snippet groupHead(id: string, title: string, n: number, note: string)}
+{#snippet groupHead(id: string, title: string, n: number, note: string, more?: string)}
 	<div class="head">
 		<h2 {id}>{title}</h2>
 		<span class="count num" aria-label="{n} {n === 1 ? 'post' : 'posten'}">{n}</span>
+		{#if more}<a class="more-link" href={more}>Alle {title.toLowerCase()}</a>{/if}
 	</div>
 	<p class="muted small note">{note}</p>
 {/snippet}
@@ -146,6 +148,94 @@
 			</div>
 		{/if}
 	</div>
+
+	{#if inbox.receipts.length > 0}
+		<section class="group" aria-labelledby="receipts-title">
+			{@render groupHead(
+				'receipts-title',
+				'Bonnen',
+				inbox.receipts.length,
+				'Wat Haiku niet zeker las, of waar je zelf kiest bij welke transactie hij hoort.',
+				'/bonnen'
+			)}
+			<ul class="card list">
+				{#each inbox.receipts as bon (bon.id)}
+					{@const name = bon.store ? displayName(bon.store) || bon.store : 'Bon'}
+					<li class="item">
+						<div class="row">
+							<span class="monogram sm" aria-hidden="true">{initials(bon.store || 'Bon')}</span>
+							<a class="who" href="/bonnen/{bon.id}">
+								<span class="name">{name}</span>
+								<span class="muted small">
+									{bon.date ? formatShortDate(bon.date) : 'Zonder datum'}{bon.source === 'deelmenu'
+										? ' · via deelmenu'
+										: ''}
+								</span>
+							</a>
+							<span class="num amount">{receiptAmount(bon.totalCents, bon.currency)}</span>
+						</div>
+						<div class="why">
+							{#if bon.stage === 'fout'}
+								<p class="small">Kon niet gelezen worden.</p>
+								<div class="actions">
+									<a
+										class="button secondary small"
+										href="/bonnen/{bon.id}"
+										aria-label="{name} zelf invullen">Zelf invullen</a
+									>
+								</div>
+							{:else if bon.stage === 'kiezen'}
+								<p class="small">Gelezen; kies de transactie waar hij bij hoort.</p>
+								<div class="actions">
+									<a
+										class="button secondary small"
+										href="/bonnen/{bon.id}"
+										aria-label="{name} koppelen">Kiezen</a
+									>
+								</div>
+							{:else if bon.stage === 'nakijken'}
+								<p class="small">
+									Verwerkt{bon.transaction
+										? ` bij ${displayName(bon.transaction.counterparty) || 'een transactie'}`
+										: ''}{bon.doubt.length > 0 ? `; twijfel over ${fieldList(bon.doubt)}` : ''}.
+								</p>
+								<div class="actions">
+									<form
+										method="POST"
+										action="?/confirmReceipt"
+										use:enhance={act(`bon:${bon.id}`, `${name} klopt.`)}
+									>
+										<input type="hidden" name="id" value={bon.id} />
+										<button
+											class="button secondary small"
+											disabled={busy === `bon:${bon.id}`}
+											aria-label="Bon van {name} klopt">Klopt</button
+										>
+									</form>
+									<a class="text-button" href="/bonnen/{bon.id}" aria-label="{name} nakijken"
+										>Nakijken</a
+									>
+								</div>
+							{:else}
+								<p class="small">
+									{bon.doubt.length > 0
+										? `Twijfel over ${fieldList(bon.doubt)}.`
+										: 'Haiku twijfelt.'} Er is nog niets geboekt.
+								</p>
+								<div class="actions">
+									<a
+										class="button secondary small"
+										href="/bonnen/{bon.id}"
+										aria-label="{name} nakijken">Nakijken</a
+									>
+								</div>
+							{/if}
+						</div>
+					</li>
+				{/each}
+			</ul>
+		</section>
+	{/if}
 
 	{#if inbox.missed.length > 0}
 		<section class="group" aria-labelledby="missed-title">
@@ -536,7 +626,7 @@
 		<div class="card">
 			<EmptyState
 				icon={icons.controleren}
-				text="Niets te controleren. Wat de app niet zeker weet, zoals een storno of een gemiste vaste last, komt hier te staan."
+				text="Niets te controleren. Wat de app niet zeker weet, zoals een storno, een gemiste vaste last of een onleesbare bon, komt hier te staan."
 			>
 				<a class="button secondary" href="/">Naar het overzicht</a>
 			</EmptyState>
@@ -812,6 +902,16 @@
 
 	.text-button:active {
 		transform: scale(0.96);
+	}
+
+	a.text-button {
+		display: inline-flex;
+		align-items: center;
+		text-decoration: none;
+	}
+
+	.head .more-link {
+		margin-left: auto;
 	}
 
 	.text-button.muted {

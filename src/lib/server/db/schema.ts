@@ -159,30 +159,44 @@ export const budgets = sqliteTable(
 	]
 );
 
-export const receipts = sqliteTable('receipts', {
-	id: id(),
-	// Bestandsnaam is altijd een eigen UUID, nooit een pad uit invoer
-	fileId: text('file_id').notNull(),
-	// Opnieuw gecodeerd door de server; het bestand heet `<fileId>.jpg` of `<fileId>.png`
-	mediaType: text('media_type', { enum: ['image/jpeg', 'image/png'] })
-		.notNull()
-		.default('image/jpeg'),
-	source: text('source', { enum: ['app', 'deelmenu'] }).notNull(),
-	// Bij `deelmenu`: met welk upload-token hij binnenkwam
-	uploadTokenId: text('upload_token_id').references(() => uploadTokens.id, {
-		onDelete: 'set null'
-	}),
-	status: text('status', { enum: ['wordt_gelezen', 'zeker', 'controleren', 'onzeker', 'fout'] })
-		.notNull()
-		.default('wordt_gelezen'),
-	rawAiOutput: text('raw_ai_output', { mode: 'json' }),
-	checkedFields: text('checked_fields', { mode: 'json' }),
-	fieldConfidence: text('field_confidence', { mode: 'json' }),
-	transactionId: text('transaction_id').references(() => transactions.id, {
-		onDelete: 'set null'
-	}),
-	createdAt: createdAt()
-});
+export const receipts = sqliteTable(
+	'receipts',
+	{
+		id: id(),
+		// Bestandsnaam is altijd een eigen UUID, nooit een pad uit invoer
+		fileId: text('file_id').notNull(),
+		// Opnieuw gecodeerd door de server; het bestand heet `<fileId>.jpg` of `<fileId>.png`
+		mediaType: text('media_type', { enum: ['image/jpeg', 'image/png'] })
+			.notNull()
+			.default('image/jpeg'),
+		source: text('source', { enum: ['app', 'deelmenu'] }).notNull(),
+		// Bij `deelmenu`: met welk upload-token hij binnenkwam
+		uploadTokenId: text('upload_token_id').references(() => uploadTokens.id, {
+			onDelete: 'set null'
+		}),
+		status: text('status', { enum: ['wordt_gelezen', 'zeker', 'controleren', 'onzeker', 'fout'] })
+			.notNull()
+			.default('wordt_gelezen'),
+		// Wat Haiku letterlijk teruggaf; alleen voor naslag, nooit naar de pagina of als HTML
+		rawAiOutput: text('raw_ai_output', { mode: 'json' }),
+		// Gecontroleerde velden en de zekerheid per veld (zie receipts/stored.ts)
+		checkedFields: text('checked_fields', { mode: 'json' }),
+		fieldConfidence: text('field_confidence', { mode: 'json' }),
+		// Bij status `fout`: waarom (weigering, afgekapt, ongeldig of api)
+		failure: text('failure'),
+		readAt: text('read_at'),
+		// Verwerkt en nagekeken: staat niet (meer) in de review-inbox
+		handledAt: text('handled_at'),
+		transactionId: text('transaction_id').references(() => transactions.id, {
+			onDelete: 'set null'
+		}),
+		createdAt: createdAt()
+	},
+	(t) => [
+		index('receipts_transaction_idx').on(t.transactionId),
+		index('receipts_status_idx').on(t.status, t.handledAt)
+	]
+);
 
 export const recurring = sqliteTable(
 	'recurring',

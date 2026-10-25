@@ -7,6 +7,7 @@ import { db } from '#lib/server/db/index.ts';
 import {
 	accounts,
 	categories,
+	receipts,
 	rules,
 	transactionSplits,
 	transactions
@@ -73,6 +74,13 @@ export const load: PageServerLoad = ({ params }) => {
 	if (!tx) error(404, 'Niet gevonden');
 	return {
 		tx,
+		// Bonnen die bij deze transactie horen
+		receipts: db()
+			.select({ id: receipts.id })
+			.from(receipts)
+			.where(eq(receipts.transactionId, tx.id))
+			.all()
+			.map((r) => r.id),
 		// De regel die de categorie gaf, zodat je ziet waarom hij er staat
 		rule: tx.categoryRuleId
 			? (db()

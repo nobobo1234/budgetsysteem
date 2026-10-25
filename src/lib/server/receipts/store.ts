@@ -5,7 +5,7 @@ import sharp from 'sharp';
 import { config } from '../config.ts';
 import type { DB } from '../db/index.ts';
 import { receipts } from '../db/schema.ts';
-import { declareJob, enqueue } from '../jobs.ts';
+import { declareJob, enqueue, runJobsSoon } from '../jobs.ts';
 import { log } from '../log.ts';
 import {
 	MAX_UPLOAD_BYTES,
@@ -22,7 +22,8 @@ import {
 
 /** De taak die een bon door Haiku laat lezen. Payload: `{ receiptId }`. */
 export const READ_RECEIPT_JOB = 'bon_lezen';
-// De handler komt met de Haiku-lezer; tot dan blijven de taken wachten
+// De handler (receipts/worker.ts) wordt alleen geregistreerd met een API-sleutel; zonder blijven
+// de taken wachten in plaats van te mislukken
 declareJob(READ_RECEIPT_JOB);
 
 export interface ReadReceiptPayload {
@@ -140,6 +141,8 @@ export async function storeReceipt(
 			return receipt.id;
 		});
 		log.info({ receipt: id, source: input.source }, 'bon ontvangen');
+		// Meteen lezen, niet pas bij de volgende ronde van de worker
+		runJobsSoon();
 		return { id };
 	} catch (e) {
 		await rm(path, { force: true });

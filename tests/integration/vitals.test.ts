@@ -162,7 +162,14 @@ describe('bewaartermijn en p75 per week', () => {
 		const data = (await statusLoad(
 			fakeEvent({ path: '/instellingen/status', routeId: '/(app)/instellingen/status' }) as never
 		)) as Exclude<Awaited<ReturnType<typeof statusLoad>>, void>;
-		expect(Object.keys(data).sort()).toEqual(['attention', 'checkedAt', 'health', 'vitals']);
+		expect(Object.keys(data).sort()).toEqual([
+			'attention',
+			'checkedAt',
+			'health',
+			'receipts',
+			'vitals'
+		]);
+		expect(data.receipts).toMatchObject({ days: 30, calls: 0, corrected: 0, correctedSure: 0 });
 		expect(data.health.database).toBe(true);
 		expect(data.vitals[0]!.metrics.LCP!.p75).toBe(1500);
 		expect(JSON.stringify(data.health)).not.toContain('/');
