@@ -4,7 +4,10 @@ import { formatCents } from '../money.ts';
 import type { DB } from './db/index.ts';
 import { jobs } from './db/schema.ts';
 import { enqueue, ensureScheduled, registerJob } from './jobs.ts';
+import type { NotificationKind } from '../notifications.ts';
+import { notifyBudgetThreshold } from './budget-notify.ts';
 import { log } from './log.ts';
+import { notifyOpenTikkies } from './owed-notify.ts';
 import { notify, type NotifyMessage, type NotifyResult } from './push/notify.ts';
 import { awaitingConfirmation, onRecurringEvent } from './recurring.ts';
 import { dueReceipts } from './shares.ts';
@@ -12,13 +15,14 @@ import { dueReceipts } from './shares.ts';
 // Pushmelding "een verwachte vaste last staat klaar om te bevestigen" (spec: Meldingen). Een
 // post krijgt één melding, zodra zijn verwachte dag gekomen is: niet al op de eerste van de
 // maand, als de post wordt aangemaakt. 's Nachts gaat er niets uit; dan wacht hij tot 9 uur.
+// Dezelfde ochtendjob stuurt ook de meldingen voor Tikkies en budget (owed- en budget-notify).
 
 export const NOTIFY_JOB = 'vaste_lasten_meldingen';
 const MORNING = 9;
 const EVENING = 21;
 
 export type Send = (
-	kind: 'vaste_last' | 'terugbetaling',
+	kind: NotificationKind,
 	message: NotifyMessage,
 	db: DB
 ) => Promise<NotifyResult>;
@@ -93,10 +97,15 @@ export async function notifyLateShares(
 
 /** Op de achtergrond; een fout (bijvoorbeeld een database die net dicht is) komt alleen in de log. */
 function inBackground(db: DB, today: string): void {
-	Promise.all([notifyDueExpected(db, today), notifyLateShares(db, today)]).catch((e: unknown) => {
+	Promise.all([
+		notifyDueExpected(db, today),
+		notifyLateShares(db, today),
+		notifyOpenTikkies(db, today),
+		notifyBudgetThreshold(db, today)
+	]).catch((e: unknown) => {
 		log.warn(
 			{ err: { name: e instanceof Error ? e.name : 'Onbekend' } },
-			'meldingen vaste lasten mislukt'
+			'ochtendmeldingen mislukt'
 		);
 	});
 }

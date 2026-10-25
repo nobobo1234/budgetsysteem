@@ -10,6 +10,7 @@ import {
 	isSafeMethod,
 	unauthorized
 } from '#lib/server/guard.ts';
+import { budgetCheckSoon, startBudgetNotifications } from '#lib/server/budget-notify.ts';
 import { startJobs } from '#lib/server/jobs.ts';
 import { log } from '#lib/server/log.ts';
 import { requestLimiter } from '#lib/server/ratelimit.ts';
@@ -32,6 +33,8 @@ export const init: ServerInit = () => {
 	scheduleRecurringJobs(db());
 	// Pushmelding zodra de dag van een verwachte vaste last gekomen is
 	startRecurringNotifications(db);
+	// Pushmelding als een categorie op 90% komt, kort na een wijziging
+	startBudgetNotifications(db);
 	startJobs(db);
 	log.info('gestart');
 };
@@ -64,6 +67,10 @@ export const handle: Handle = async ({ event, resolve }) => {
 	}
 
 	const response = await resolve(event);
+	// Na een geslaagde wijziging: zit een categorie nu op 90%?
+	if (!isSafeMethod(request.method) && event.locals.session && response.status < 400) {
+		budgetCheckSoon();
+	}
 
 	for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
 		if (!response.headers.has(name)) response.headers.set(name, value);
