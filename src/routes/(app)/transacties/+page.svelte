@@ -1,11 +1,13 @@
 <script lang="ts">
 	import { tick } from 'svelte';
 	import { navigating } from '$app/state';
+	import LinkThreads, { threadGutter } from '#lib/components/LinkThreads.svelte';
 	import Select, { type SelectOption } from '#lib/components/Select.svelte';
 	import TransactionItem from '#lib/components/TransactionItem.svelte';
 	import { groupColor } from '#lib/categoryColor.ts';
 	import { formatDayHeading, formatMonth, formatShortDate } from '#lib/dates.ts';
 	import { formatCents } from '#lib/money.ts';
+	import { threadLayout } from '#lib/refund.ts';
 
 	let { data } = $props();
 
@@ -80,6 +82,9 @@
 		}
 		return out;
 	});
+
+	// Draden tussen terugbetalingen en hun uitgave op deze pagina
+	const threads = $derived(threadLayout(data.transactions));
 
 	const pageHref = (p: number) => {
 		const parts: [string, string][] = [
@@ -269,7 +274,12 @@
 			{/if}
 		</div>
 	{:else}
-		<div class={['days', busy && 'busy']} aria-busy={busy}>
+		<div
+			class={['days', busy && 'busy', threads.lanes > 0 && 'threaded']}
+			style:--gutter="{threadGutter(threads.lanes)}px"
+			aria-busy={busy}
+		>
+			{#if threads.lanes > 0}<LinkThreads layout={threads} />{/if}
 			{#each days as day (day.date)}
 				<section class="day" aria-labelledby="day-{day.date}">
 					<header>
@@ -280,7 +290,9 @@
 					</header>
 					<ul>
 						{#each day.items as tx (tx.id)}
-							<li><TransactionItem {tx} href="/transacties/{tx.id}" showDate={false} /></li>
+							<li data-tx-row={tx.id}>
+								<TransactionItem {tx} href="/transacties/{tx.id}" showDate={false} />
+							</li>
 						{/each}
 					</ul>
 				</section>
@@ -459,9 +471,20 @@
 	}
 
 	.days {
+		position: relative;
 		display: grid;
 		gap: 8px;
 		transition: opacity 160ms var(--ease-out);
+	}
+
+	/* Links een strook voor de draden; die loopt een stukje de rand van de pagina in */
+	.threaded {
+		margin-left: -8px;
+	}
+
+	.threaded .day header,
+	.threaded .day ul {
+		margin-left: var(--gutter);
 	}
 
 	/* Laadstaat bij een nieuwe zoekopdracht: de oude lijst blijft staan, maar zichtbaar oud */

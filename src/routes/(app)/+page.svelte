@@ -5,6 +5,7 @@
 	import BudgetBar from '#lib/components/BudgetBar.svelte';
 	import ExpectedItem from '#lib/components/ExpectedItem.svelte';
 	import HeroAmount from '#lib/components/HeroAmount.svelte';
+	import LinkThreads, { threadGutter } from '#lib/components/LinkThreads.svelte';
 	import QuickEntry from '#lib/components/QuickEntry.svelte';
 	import Toast from '#lib/components/Toast.svelte';
 	import TransactionItem from '#lib/components/TransactionItem.svelte';
@@ -13,6 +14,7 @@
 	import { flush, type QueuedTransaction } from '#lib/offline/queue.ts';
 	import { sync } from '#lib/offline/sync.svelte.ts';
 	import { motion } from '#lib/motion.ts';
+	import { threadLayout } from '#lib/refund.ts';
 
 	let { data } = $props();
 
@@ -24,6 +26,8 @@
 	// Optimistisch: wat in de wachtrij staat verschijnt meteen bovenaan
 	const recentIds = $derived(new Set(data.recent.map((t) => t.id)));
 	const queued = $derived(sync.pending.filter((p) => !recentIds.has(p.payload.id)));
+	// Terugbetalingen met hun uitgave verbonden, als die ook bij Recent staat
+	const threads = $derived(threadLayout(data.recent));
 
 	let toast = $state<{ text: string; error: boolean; key: number } | null>(null);
 	const notify = (text: string, error = false) => (toast = { text, error, key: Date.now() });
@@ -162,39 +166,45 @@
 				{/if}
 			</div>
 		</div>
-		<ul>
-			{#each queued as item (item.payload.id)}
-				<li in:fly={{ y: -12, duration: 220 }}>
-					<TransactionItem
-						tx={{
-							amountCents: item.payload.amountCents,
-							date: item.payload.date,
-							counterparty: item.payload.counterparty,
-							categoryName: category(item.payload.categoryId)?.name ?? null,
-							categoryGroup: category(item.payload.categoryId)?.group ?? null,
-							accountAlias: accountAlias(item.payload.accountId),
-							status: item.payload.amountCents === 0 ? 'te_controleren' : 'bevestigd',
-							origAmountCents: item.payload.origAmountCents,
-							origCurrency: item.payload.origCurrency
-						}}
-						pending={!item.error}
-						error={item.error}
-					/>
-				</li>
-			{/each}
-			{#each data.recent as tx (tx.id)}
-				<li>
-					<TransactionItem {tx} />
-				</li>
-			{:else}
-				{#if queued.length === 0}
-					<li class="muted none">
-						Nog niets ingevoerd. Typ hierboven bijvoorbeeld <strong>12,50 ah</strong>, of
-						<a href="/import">importeer je SNS-historie</a>.
+		<div
+			class={['recent-list', threads.lanes > 0 && 'threaded']}
+			style:--gutter="{threadGutter(threads.lanes)}px"
+		>
+			{#if threads.lanes > 0}<LinkThreads layout={threads} />{/if}
+			<ul>
+				{#each queued as item (item.payload.id)}
+					<li in:fly={{ y: -12, duration: 220 }}>
+						<TransactionItem
+							tx={{
+								amountCents: item.payload.amountCents,
+								date: item.payload.date,
+								counterparty: item.payload.counterparty,
+								categoryName: category(item.payload.categoryId)?.name ?? null,
+								categoryGroup: category(item.payload.categoryId)?.group ?? null,
+								accountAlias: accountAlias(item.payload.accountId),
+								status: item.payload.amountCents === 0 ? 'te_controleren' : 'bevestigd',
+								origAmountCents: item.payload.origAmountCents,
+								origCurrency: item.payload.origCurrency
+							}}
+							pending={!item.error}
+							error={item.error}
+						/>
 					</li>
-				{/if}
-			{/each}
-		</ul>
+				{/each}
+				{#each data.recent as tx (tx.id)}
+					<li data-tx-row={tx.id}>
+						<TransactionItem {tx} />
+					</li>
+				{:else}
+					{#if queued.length === 0}
+						<li class="muted none">
+							Nog niets ingevoerd. Typ hierboven bijvoorbeeld <strong>12,50 ah</strong>, of
+							<a href="/import">importeer je SNS-historie</a>.
+						</li>
+					{/if}
+				{/each}
+			</ul>
+		</div>
 		<a href="/transacties">Alle transacties</a>
 	</section>
 
@@ -286,6 +296,16 @@
 
 	li + li {
 		border-top: 1px solid var(--line);
+	}
+
+	.recent-list {
+		position: relative;
+	}
+
+	/* Links een strook voor de draden; die loopt een stukje de rand van de pagina in */
+	.recent-list.threaded {
+		margin-left: -8px;
+		padding-left: var(--gutter);
 	}
 
 	.none {

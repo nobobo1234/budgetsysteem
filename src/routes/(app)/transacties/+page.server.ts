@@ -6,7 +6,8 @@ import {
 	listTransactions,
 	summarizeTransactions,
 	type ListFilter,
-	transactionMonths
+	transactionMonths,
+	withRefunds
 } from '#lib/server/transactions.ts';
 import type { PageServerLoad } from './$types';
 
@@ -54,7 +55,7 @@ export const load: PageServerLoad = ({ url }) => {
 			: null,
 		page,
 		hasMore: rows.length > PAGE,
-		transactions: rows.slice(0, PAGE),
+		transactions: withRefunds(db(), rows.slice(0, PAGE)),
 		summary: summarizeTransactions(db(), filter),
 		months: transactionMonths(db()),
 		today: toIsoDate(new Date()),

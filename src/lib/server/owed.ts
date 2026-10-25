@@ -1,4 +1,5 @@
 import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/sqlite-core';
 import { rankMatches, type MatchTarget } from '../match.ts';
 import {
 	allocatePayment,
@@ -9,6 +10,7 @@ import {
 	splitEqually,
 	type Share
 } from '../owed.ts';
+import type { RefundInfo } from '../refund.ts';
 import { recordChange } from './audit.ts';
 import type { Conn, DB } from './db/index.ts';
 import {
@@ -32,6 +34,8 @@ export const ADVANCED = 'Voorgeschoten';
 
 export type Direction = 'te_krijgen' | 'te_betalen';
 const OPEN = ['open', 'deels'] as const;
+// De uitgave van een post, naast de betaling zelf in dezelfde query
+const sourceTx = alias(transactions, 'source_tx');
 
 export function refundCategory(db: Conn): string | null {
 	return (
@@ -758,12 +762,20 @@ export function paymentLinks(db: Conn, transactionId: string) {
 			personName: people.name,
 			amountCents: owedPayments.amountCents,
 			description: owed.description,
-			date: owed.date
+			date: owed.date,
+			month: owed.month,
+			// De uitgave waar de post bij hoort, om ernaartoe te kunnen
+			sourceId: owed.sourceTransactionId,
+			sourceCounterparty: sourceTx.counterparty,
+			sourceAmountCents: sourceTx.amountCents,
+			sourceDate: sourceTx.date
 		})
 		.from(owedPayments)
 		.innerJoin(people, eq(people.id, owedPayments.personId))
 		.leftJoin(owed, eq(owed.id, owedPayments.owedId))
+		.leftJoin(sourceTx, eq(sourceTx.id, owed.sourceTransactionId))
 		.where(eq(owedPayments.transactionId, transactionId))
+		.orderBy(asc(owed.date), asc(owedPayments.createdAt))
 		.all();
 }
 
@@ -786,5 +798,81 @@ export function postsOfTransaction(db: Conn, transactionId: string) {
 		db,
 		rows.map((r) => r.id)
 	);
-	return rows.map((r) => ({ ...r, paidCents: paid.get(r.id) ?? 0 }));
+	const payments =
+		rows.length === 0
+			? []
+			: db
+					.select({
+						owedId: owedPayments.owedId,
+						transactionId: owedPayments.transactionId,
+						date: transactions.date
+					})
+					.from(owedPayments)
+					.innerJoin(transactions, eq(transactions.id, owedPayments.transactionId))
+					.where(
+						inArray(
+							owedPayments.owedId,
+							rows.map((r) => r.id)
+						)
+					)
+					.orderBy(asc(transactions.date))
+					.all();
+	return rows.map((r) => ({
+		...r,
+		paidCents: paid.get(r.id) ?? 0,
+		// Betalingen op deze post, oudste eerst, om ernaartoe te kunnen
+		payments: payments
+			.filter((p) => p.owedId === r.id)
+			.map((p) => ({ transactionId: p.transactionId, date: p.date }))
+	}));
+}
+
+/**
+ * Waar gekoppelde betalingen voor waren, per transactie: voor de lijst, waar zo'n betaling geen
+ * categorie nodig heeft maar zijn uitgave of maandaandeel laat zien.
+ */
+export function refundInfo(db: Conn, transactionIds: readonly string[]): Map<string, RefundInfo> {
+	const out = new Map<string, RefundInfo>();
+	if (transactionIds.length === 0) return out;
+	const rows = db
+		.select({
+			transactionId: owedPayments.transactionId,
+			amountCents: owedPayments.amountCents,
+			owedId: owedPayments.owedId,
+			personName: people.name,
+			paymentCents: transactions.amountCents,
+			description: owed.description,
+			month: owed.month,
+			sourceId: owed.sourceTransactionId,
+			sourceCounterparty: sourceTx.counterparty
+		})
+		.from(owedPayments)
+		.innerJoin(people, eq(people.id, owedPayments.personId))
+		.innerJoin(transactions, eq(transactions.id, owedPayments.transactionId))
+		.leftJoin(owed, eq(owed.id, owedPayments.owedId))
+		.leftJoin(sourceTx, eq(sourceTx.id, owed.sourceTransactionId))
+		.where(inArray(owedPayments.transactionId, [...transactionIds]))
+		.orderBy(asc(owed.date), asc(owedPayments.createdAt))
+		.all();
+	const seen = new Set<string>();
+	for (const r of rows) {
+		const info = out.get(r.transactionId) ?? {
+			direction: directionOf(r.paymentCents),
+			people: [],
+			targets: [],
+			creditCents: 0
+		};
+		if (!info.people.includes(r.personName)) info.people.push(r.personName);
+		if (!r.owedId) info.creditCents += r.amountCents;
+		else if (!seen.has(`${r.transactionId}:${r.owedId}`)) {
+			seen.add(`${r.transactionId}:${r.owedId}`);
+			info.targets.push({
+				transactionId: r.sourceId,
+				label: r.sourceCounterparty || r.description || 'Post',
+				month: r.month
+			});
+		}
+		out.set(r.transactionId, info);
+	}
+	return out;
 }
