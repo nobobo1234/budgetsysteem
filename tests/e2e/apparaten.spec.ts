@@ -54,7 +54,7 @@ test('upload-token aanmaken, gebruiken en intrekken', async ({ page, request, ba
 	await expect(shown).toHaveValue(/^bon_[A-Za-z0-9_-]{43}$/);
 	const token = await shown.inputValue();
 
-	// De meegeleverde opdracht stuurt naar finance.mijndomein.nl; deze app draait op localhost,
+	// De meegeleverde opdracht stuurt naar budget.example.nl; deze app draait op localhost,
 	// dus geen download maar een melding (de download zelf staat in tests/integration/opdracht)
 	await expect(page.getByRole('heading', { name: 'Opdracht voor een ander domein' })).toBeVisible();
 	const install = page.getByRole('group', { name: 'Opdracht voor het deelmenu' });

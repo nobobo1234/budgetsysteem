@@ -106,7 +106,7 @@ describe('iOS-opdracht', () => {
 
 describe('status van de opdracht', () => {
 	const signed = { url: INGEST_URL, validUntil: '2027-11-16' };
-	const origin = 'https://finance.mijndomein.nl';
+	const origin = 'https://budget.example.nl';
 	const at = (iso: string) => new Date(iso);
 
 	it('geldig tot een maand voor het verlopen', () => {
@@ -132,13 +132,13 @@ describe('status van de opdracht', () => {
 		for (const other of [
 			'http://localhost:5173',
 			'https://budget.example.org',
-			'http://finance.mijndomein.nl',
-			'https://finance.mijndomein.nl:8443'
+			'http://budget.example.nl',
+			'https://budget.example.nl:8443'
 		]) {
 			expect(shortcutStatus(signed, other, now)).toEqual({
 				state: 'other-host',
 				validUntil: '2027-11-16',
-				host: 'finance.mijndomein.nl'
+				host: 'budget.example.nl'
 			});
 		}
 		// Een pad of slash aan het eind van ORIGIN maakt niet uit

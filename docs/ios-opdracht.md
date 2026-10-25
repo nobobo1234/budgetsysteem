@@ -10,7 +10,7 @@ Per gedeelde afbeelding:
 
 1. Breder of hoger dan 2576 px: verkleinen tot 2576 px aan de lange kant. Kleiner blijft zoals het is.
 2. Omzetten naar JPEG, kwaliteit 0,9, zonder metadata (camera, locatie).
-3. Als ruwe body naar `POST https://finance.mijndomein.nl/api/ingest` met `Authorization: Bearer <token>`
+3. Als ruwe body naar `POST https://budget.example.nl/api/ingest` met `Authorization: Bearer <token>`
    en `Content-Type: image/jpeg`.
 4. Geen `id` in het antwoord: melding "Bon niet verstuurd" met de foutmelding van de server, en stoppen.
 
@@ -40,7 +40,7 @@ dan maakt iOS dat veld leeg; deel de opdracht toch nooit met het token erin.
 - **Juiste host.** De opdracht stuurt naar de host waarvoor hij ondertekend is. Draait de app op een
   andere `ORIGIN` (een eigen installatie, lokaal, de e2e-tests), dan staat de download uit en
   meldt Apparaten dat je hem voor je eigen domein moet ondertekenen. Zo stuurt een andere installatie
-  nooit bonnen en tokens naar `finance.mijndomein.nl`.
+  nooit bonnen en tokens naar `budget.example.nl`.
 - **Herinnering.** Vanaf 30 dagen voor `validUntil` staat er een melding op Apparaten, zegt de tegel
   op Meer "Opdracht opnieuw ondertekenen" en krijgt de tab Meer een stip. De download blijft tot die
   dag werken.
@@ -57,7 +57,8 @@ een Mac met iCloud. De unit-test faalt zodra bron en ondertekend bestand niet me
 node scripts/sign-shortcut.ts
 ```
 
-Andere host: `node scripts/sign-shortcut.ts --url https://<host>/api/ingest` (pas dan ook
+De host in `INGEST_URL` moet gelijk zijn aan `APP_ORIGIN` (zie [DEPLOY.md](DEPLOY.md)); anders staat de
+download in productie uit. Andere host: `node scripts/sign-shortcut.ts --url https://<host>/api/ingest` (pas dan ook
 `INGEST_URL` in `shortcut.ts` aan, anders faalt de test). Met `--bewaar <map>` krijg je ook het
 `.shortcut`-bestand en de bron (JSON) om zelf te bekijken. Commit daarna `shortcut-signed.ts`.
 

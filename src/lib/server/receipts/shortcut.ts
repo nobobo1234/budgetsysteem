@@ -12,7 +12,7 @@ import { createHash } from 'node:crypto';
 // zonder metadata, en als ruwe body naar POST /api/ingest met `Authorization: Bearer <token>`.
 
 export const SHORTCUT_NAME = 'Bon naar Budget';
-export const INGEST_URL = 'https://finance.mijndomein.nl/api/ingest';
+export const INGEST_URL = 'https://budget.example.nl/api/ingest';
 export const MAX_EDGE = 2576;
 export const JPEG_QUALITY = 0.9;
 

@@ -3,7 +3,7 @@
 // Apple een certificaat aan. Daarom draait dit niet in CI; het resultaat wordt gecommit.
 // Uitleg: docs/ios-opdracht.md.
 //
-//   node scripts/sign-shortcut.ts [--url https://finance.mijndomein.nl/api/ingest] [--bewaar <map>]
+//   node scripts/sign-shortcut.ts [--url https://budget.example.nl/api/ingest] [--bewaar <map>]
 //
 // Het bestand bevat geen token: dat vraagt de opdracht bij installeren.
 
