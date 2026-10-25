@@ -40,7 +40,8 @@ import {
 	ValidationError
 } from '../../src/lib/server/transactions.ts';
 import { newTransactionSchema } from '../../src/lib/server/validation.ts';
-import { tempDatabase } from './helpers.ts';
+import { actions as settingsActions } from '../../src/routes/(app)/instellingen/+page.server.ts';
+import { ORIGIN, tempDatabase } from './helpers.ts';
 
 let db: DB;
 let cleanup: () => void;
@@ -331,6 +332,72 @@ describe('kwijtschelden', () => {
 		expect(splits(id)).toEqual({ 'Mijn deel': -1000, Voorgeschoten: -2000 });
 		expect(() => forgiveOwed(db, sanne!.id, true)).toThrow(ValidationError);
 	});
+
+	it('een betaling losmaken na kwijtschelden: ook dat deel komt voor jouw rekening, en terug', () => {
+		const id = tx({ amountCents: -3000, share: { people: 3, with: ['Sanne', 'Tim'] } });
+		const [sanne] = posts(id);
+		const pay = tx({ amountCents: 400, categoryId: null, settle: { owedId: sanne!.id } });
+		forgiveOwed(db, sanne!.id);
+		unlinkPayment(db, pay);
+		// Sanne betaalde niets meer, dus is haar hele €10 kwijtgescholden
+		expect(splits(id)).toEqual({ 'Mijn deel': -2000, Voorgeschoten: -1000 });
+		forgiveOwed(db, sanne!.id, true);
+		expect(splits(id)).toEqual({ 'Mijn deel': -1000, Voorgeschoten: -2000 });
+		expect(spendingByCategory(db, '2026-10').get(cat('Uit eten en bezorgen'))).toBe(1000);
+	});
+
+	it('terugdraaien: tegoed van die persoon gaat meteen naar de post', () => {
+		const sanne = findOrCreatePerson(db, 'Sanne');
+		const post = createOwed(db, {
+			personId: sanne,
+			direction: 'te_krijgen',
+			amountCents: 1000,
+			description: 'Bios',
+			date: '2026-10-01'
+		});
+		forgiveOwed(db, post);
+		const pay = tx({ amountCents: 600, categoryId: null, counterparty: 'Sanne' });
+		db.transaction((t) => settlePayment(t, pay, { personId: sanne }));
+		expect(owedOverview(db, TODAY).creditCents).toBe(600);
+		forgiveOwed(db, post, true);
+		const o = owedOverview(db, TODAY);
+		expect(o.creditCents).toBe(0);
+		expect(o.toReceiveCents).toBe(400);
+		expect(posts()[0]!.status).toBe('deels');
+	});
+});
+
+describe('tegoed', () => {
+	it('een post die weer opengaat krijgt het tegoed van een dubbele betaling', () => {
+		const sanne = findOrCreatePerson(db, 'Sanne');
+		const post = createOwed(db, {
+			personId: sanne,
+			direction: 'te_krijgen',
+			amountCents: 1000,
+			description: 'Bios',
+			date: '2026-10-01'
+		});
+		const first = tx({ amountCents: 1000, categoryId: null, settle: { owedId: post } });
+		const second = tx({ amountCents: 1000, categoryId: null, counterparty: 'Sanne' });
+		db.transaction((t) => settlePayment(t, second, { personId: sanne }));
+		expect(owedOverview(db, TODAY).creditCents).toBe(1000);
+		deleteTransaction(db, first);
+		const o = owedOverview(db, TODAY);
+		expect(o).toMatchObject({ creditCents: 0, toReceiveCents: 0 });
+		expect(payments(second)).toEqual([{ owedId: post, amountCents: 1000 }]);
+		expect(posts()[0]!.status).toBe('betaald');
+	});
+
+	it('inkomend tegoed en wat jij vooruitbetaalde tellen niet bij elkaar op', () => {
+		const sanne = findOrCreatePerson(db, 'Sanne');
+		const incoming = tx({ amountCents: 500, categoryId: null, counterparty: 'Sanne' });
+		db.transaction((t) => settlePayment(t, incoming, { personId: sanne }));
+		const outgoing = tx({ amountCents: -800, categoryId: null, counterparty: 'Sanne' });
+		db.transaction((t) => settlePayment(t, outgoing, { personId: sanne }));
+		const o = owedOverview(db, TODAY);
+		expect(o).toMatchObject({ creditCents: 500, paidAheadCents: 800 });
+		expect(o.people[0]).toMatchObject({ creditCents: 500, paidAheadCents: 800 });
+	});
 });
 
 describe('nog te betalen', () => {
@@ -437,6 +504,33 @@ describe('personen', () => {
 		expect(() => addIban(db, tim, IBAN_SANNE)).toThrow(/iemand anders/);
 		removeIban(db, sanne, IBAN_SANNE);
 		addIban(db, tim, IBAN_SANNE);
+	});
+
+	it('een IBAN van een persoon wordt geen eigen rekening', async () => {
+		const sanne = createPerson(db, 'Sanne');
+		addIban(db, sanne, IBAN_SANNE);
+		const body = new FormData();
+		for (const [k, v] of Object.entries({ id: sns, name: 'SNS', alias: 'sns', iban: IBAN_SANNE }))
+			body.set(k, v);
+		const request = new Request(`${ORIGIN}/instellingen?/account`, { method: 'POST', body });
+		const result = await settingsActions.account!({
+			request,
+			locals: { session: { id: 'test' } }
+		} as never);
+		expect(result).toMatchObject({
+			status: 400,
+			data: { message: expect.stringMatching(/persoon/) }
+		});
+		expect(db.select().from(accounts).where(eq(accounts.id, sns)).get()!.iban).not.toBe(IBAN_SANNE);
+	});
+
+	it('dezelfde persoon kan niet twee keer op één gedeelde uitgave', () => {
+		const id = tx({ share: { people: 3, with: [] } });
+		const eva = createPerson(db, 'Eva');
+		const [a, b] = posts(id);
+		updateOwed(db, a!.id, { personId: eva });
+		expect(() => updateOwed(db, b!.id, { personId: eva })).toThrow(/staat al/);
+		expect(posts(id).map((p) => p.person)).toEqual(['Eva', null]);
 	});
 
 	it('verwijderen kan alleen zonder posten', () => {

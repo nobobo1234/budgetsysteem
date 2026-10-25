@@ -113,10 +113,18 @@
 				</header>
 				{#if p.personId === null}
 					<p class="muted small">Je typte een aantal zonder namen. Kies per post wie het is.</p>
-				{:else if p.creditCents > 0}
-					<p class="muted small">
-						<span class="num">{formatCents(p.creditCents)}</span> tegoed; gaat naar de volgende post.
-					</p>
+				{:else}
+					{#if p.creditCents > 0}
+						<p class="muted small">
+							<span class="num">{formatCents(p.creditCents)}</span> tegoed; gaat naar de volgende post.
+						</p>
+					{/if}
+					{#if p.paidAheadCents > 0}
+						<p class="muted small">
+							<span class="num">{formatCents(p.paidAheadCents)}</span> vooruitbetaald; gaat naar wat je
+							nog moet betalen.
+						</p>
+					{/if}
 				{/if}
 
 				<ul class="posts">

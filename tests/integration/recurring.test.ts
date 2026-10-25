@@ -12,11 +12,14 @@ import {
 	accounts,
 	categories,
 	jobs,
+	owed,
 	recurring,
 	reservations,
+	transactionSplits,
 	transactions
 } from '../../src/lib/server/db/schema.ts';
 import { runDueJobs } from '../../src/lib/server/jobs.ts';
+import { applyShare, shareFromNames } from '../../src/lib/server/owed.ts';
 import {
 	MONTHLY_JOB,
 	awaitingConfirmation,
@@ -334,25 +337,25 @@ describe('bevestigen en verwachte posten', () => {
 	});
 });
 
-describe('reserveringen in het budget', () => {
-	/** Vereniging uit de spec: €90 in januari en juli, €8 dispuut per maand. */
-	function club() {
-		history([
-			['2025-07-01', 9000, 'Vereniging', CLUB_IBAN],
-			['2026-01-02', 9000, 'Vereniging', CLUB_IBAN]
-		]);
-		refreshProposals(db, '2026-01-20');
-		const c = proposal('Vereniging');
-		expect(c).toMatchObject({ interval: 'halfjaar', nextDate: '2026-07-01' });
-		confirmProposal(
-			db,
-			c.id,
-			{ nextDate: '2026-07-01', categoryId: cat('Hobby en entertainment'), spread: true },
-			'2026-02-01'
-		);
-		return c.id;
-	}
+/** Vereniging uit de spec: €90 in januari en juli, €8 dispuut per maand. */
+function club() {
+	history([
+		['2025-07-01', 9000, 'Vereniging', CLUB_IBAN],
+		['2026-01-02', 9000, 'Vereniging', CLUB_IBAN]
+	]);
+	refreshProposals(db, '2026-01-20');
+	const c = proposal('Vereniging');
+	expect(c).toMatchObject({ interval: 'halfjaar', nextDate: '2026-07-01' });
+	confirmProposal(
+		db,
+		c.id,
+		{ nextDate: '2026-07-01', categoryId: cat('Hobby en entertainment'), spread: true },
+		'2026-02-01'
+	);
+	return c.id;
+}
 
+describe('reserveringen in het budget', () => {
 	it('elke maand €15 opzij; in de afschrijfmaand komt de €90 uit de reservering', () => {
 		const id = club();
 		setBudget(db, '2026-02', cat('Hobby en entertainment'), 2300);
@@ -452,6 +455,209 @@ describe('reserveringen in het budget', () => {
 	});
 });
 
+describe('achterstand inhalen', () => {
+	/** Huur op de 1e, bevestigd in december voor januari. */
+	function rent() {
+		history(
+			['2025-10-01', '2025-11-01', '2025-12-01'].map((d) => [d, 85000, 'Woonstichting', RENT_IBAN])
+		);
+		refreshProposals(db, '2025-12-20');
+		const r = proposal('Woonstichting');
+		confirmProposal(
+			db,
+			r.id,
+			{ nextDate: '2026-01-01', categoryId: cat('Wonen'), spread: false },
+			'2025-12-20'
+		);
+		return r.id;
+	}
+	const dates = (id: string) => expectedPosts(id).map((t) => t.date);
+
+	it('een open post van vorige maand houdt de volgende maand niet tegen', () => {
+		const id = rent();
+		for (const month of ['2026-01', '2026-02', '2026-03']) generateMonth(db, month);
+		expect(dates(id)).toEqual(['2026-01-01', '2026-02-01', '2026-03-01']);
+		// Januari pas in maart bevestigen: februari en maart blijven staan, april komt erbij
+		confirmExpected(db, expectedPosts(id)[0]!.id, undefined, '2026-03-05');
+		expect(proposal('Woonstichting').nextDate).toBe('2026-02-01');
+		generateMonth(db, '2026-04');
+		expect(dates(id)).toEqual(['2026-02-01', '2026-03-01', '2026-04-01']);
+	});
+
+	it('een post van vorige maand weggooien laat deze maand en de volgende staan', () => {
+		const id = rent();
+		generateMonth(db, '2026-01');
+		generateMonth(db, '2026-02');
+		deleteTransaction(db, expectedPosts(id)[0]!.id);
+		expect(proposal('Woonstichting').nextDate).toBe('2026-02-01');
+		generateMonth(db, '2026-03');
+		expect(dates(id)).toEqual(['2026-02-01', '2026-03-01']);
+	});
+
+	it('een maand zonder job: de gemiste post komt alsnog, als "gemist of opgezegd?"', () => {
+		const id = rent();
+		generateMonth(db, '2026-01');
+		confirmExpected(db, expectedPosts(id)[0]!.id, undefined, '2026-01-02');
+		// In februari draaide de job niet
+		generateMonth(db, '2026-03');
+		expect(dates(id)).toEqual(['2026-02-01', '2026-03-01']);
+		const awaiting = awaitingConfirmation(db, '2026-03-10');
+		expect(awaiting.map((a) => [a.date, a.missed])).toEqual([
+			['2026-02-01', true],
+			['2026-03-01', true]
+		]);
+		// Overslaan haalt alleen februari weg
+		skipExpected(db, awaiting[0]!.id, 'gemist', '2026-03-10');
+		expect(dates(id)).toEqual(['2026-03-01']);
+		expect(proposal('Woonstichting').nextDate).toBe('2026-03-01');
+	});
+});
+
+describe('categorie van een uitgesmeerde vaste last wijzigen', () => {
+	const hobby = (month: string, today: string) => line(month, today, 'Hobby en entertainment');
+	const abo = (month: string, today: string) => line(month, today, 'Abonnementen');
+
+	it('afgesloten maanden houden hun reservering; vanaf deze maand de nieuwe categorie', () => {
+		const id = club();
+		for (const month of ['2026-03', '2026-04']) generateMonth(db, month);
+		updateRecurring(db, id, { categoryId: cat('Abonnementen') }, '2026-04-10');
+		expect(hobby('2026-03', '2026-04-10').spentCents).toBe(1500);
+		expect(abo('2026-03', '2026-04-10').spentCents).toBe(0);
+		expect(hobby('2026-04', '2026-04-10').spentCents).toBe(0);
+		expect(abo('2026-04', '2026-04-10').spentCents).toBe(1500);
+	});
+
+	it('na de afschrijving blijft de afschrijfmaand zoals hij was', () => {
+		const id = club();
+		for (const month of ['2026-03', '2026-04', '2026-05', '2026-06', '2026-07'])
+			generateMonth(db, month);
+		confirmExpected(db, expectedPosts(id)[0]!.id, undefined, '2026-07-02');
+		updateRecurring(db, id, { categoryId: cat('Abonnementen') }, '2026-08-03');
+		expect(hobby('2026-07', '2026-08-03').spentCents).toBe(1500);
+		expect(abo('2026-07', '2026-08-03').spentCents).toBe(0);
+	});
+});
+
+describe('gedeelde vaste last', () => {
+	function ziggo() {
+		history(['2026-08-05', '2026-09-05', '2026-10-05'].map((d) => [d, 6000, 'Ziggo', RENT_IBAN]));
+		refreshProposals(db, '2026-10-24');
+		const z = proposal('Ziggo');
+		confirmProposal(
+			db,
+			z.id,
+			{ nextDate: '2026-11-05', categoryId: cat('Abonnementen'), spread: false },
+			'2026-10-24'
+		);
+		generateMonth(db, '2026-11');
+		const post = expectedPosts(z.id)[0]!;
+		db.transaction((tx) => applyShare(tx, post.id, shareFromNames(tx, 3, ['Sanne', 'Tim'])));
+		return { id: z.id, post: post.id };
+	}
+	const splits = (id: string) =>
+		db
+			.select({ note: transactionSplits.note, amountCents: transactionSplits.amountCents })
+			.from(transactionSplits)
+			.where(eq(transactionSplits.transactionId, id))
+			.all();
+
+	it('tempo telt alleen jouw deel als gepland', () => {
+		const { post } = ziggo();
+		setBudget(db, '2026-11', cat('Abonnementen'), 10000);
+		// Nog verwacht: jouw deel van €60 is gepland
+		expect(line('2026-11', '2026-11-04', 'Abonnementen').plannedCents).toBe(2000);
+		confirmExpected(db, post, undefined, '2026-11-05');
+		db.insert(transactions)
+			.values({
+				amountCents: -4000,
+				date: '2026-11-06',
+				counterparty: 'Spotify',
+				accountId: sns,
+				source: 'handmatig',
+				categoryId: cat('Abonnementen')
+			})
+			.run();
+		const l = line('2026-11', '2026-11-10', 'Abonnementen');
+		expect(l).toMatchObject({
+			spentCents: 6000,
+			plannedCents: 2000,
+			plannedSpentCents: 2000,
+			otherCents: 4000,
+			freeLimitCents: 8000
+		});
+	});
+
+	it('bevestigen met een ander bedrag: hun deel blijft, jouw deel neemt het verschil', () => {
+		const { post } = ziggo();
+		confirmExpected(db, post, 7500, '2026-11-05');
+		expect(splits(post)).toEqual(
+			expect.arrayContaining([
+				{ note: 'Mijn deel', amountCents: -3500 },
+				{ note: 'Voorgeschoten', amountCents: -4000 }
+			])
+		);
+		// Lager dan wat de anderen moeten kan niet; de post blijft verwacht
+		const second = ziggo2();
+		expect(() => confirmExpected(db, second, 3000, '2026-12-05')).toThrow(ValidationError);
+		expect(db.select().from(transactions).where(eq(transactions.id, second)).get()!.status).toBe(
+			'verwacht'
+		);
+	});
+
+	it('overslaan of stoppen laat geen open posten van anderen achter', () => {
+		const { id, post } = ziggo();
+		skipExpected(db, post, 'gemist', '2026-11-12');
+		expect(db.select().from(owed).all()).toEqual([]);
+		generateMonth(db, '2026-12');
+		const dec = expectedPosts(id)[0]!;
+		db.transaction((tx) => applyShare(tx, dec.id, shareFromNames(tx, 2, ['Sanne'])));
+		stopRecurring(db, id, '2026-12-01');
+		expect(db.select().from(owed).all()).toEqual([]);
+	});
+
+	/** December: de volgende post van Ziggo, gedeeld met Sanne en Tim. */
+	function ziggo2() {
+		const z = proposal('Ziggo');
+		generateMonth(db, '2026-12');
+		const post = expectedPosts(z.id).find((t) => t.date.startsWith('2026-12'))!;
+		db.transaction((tx) => applyShare(tx, post.id, shareFromNames(tx, 3, ['Sanne', 'Tim'])));
+		return post.id;
+	}
+});
+
+describe('afschrijving van een vaste last verwijderen', () => {
+	it('een prijsverhoging van die afschrijving gaat terug; het geld staat weer opzij', () => {
+		const id = club();
+		for (const month of ['2026-03', '2026-04', '2026-05', '2026-06', '2026-07'])
+			generateMonth(db, month);
+		const post = expectedPosts(id)[0]!;
+		expect(confirmExpected(db, post.id, 9900, '2026-07-02').signal).toBe('prijsverhoging');
+		expect(proposal('Vereniging').medianCents).toBe(9900);
+		deleteTransaction(db, post.id);
+		expect(proposal('Vereniging')).toMatchObject({
+			medianCents: 9000,
+			lastCents: 9000,
+			signal: null,
+			// Weggooien is "deze keer niet": de vaste last schuift niet terug
+			nextDate: '2027-01-01'
+		});
+		expect(reserveBalance(db, id, '2026-07')).toBe(9000);
+	});
+});
+
+describe('vrijval in een categorie zonder limiet', () => {
+	it('stoppen geeft alles wat opzij stond terug in nog vrij', () => {
+		const id = club();
+		setBudget(db, '2026-02', cat('Boodschappen'), 30000);
+		for (const month of ['2026-03', '2026-04']) generateMonth(db, month);
+		const before = monthOverview(db, '2026-04', '2026-04-15').freeCents;
+		stopRecurring(db, id, '2026-04-15');
+		const after = monthOverview(db, '2026-04', '2026-04-15').freeCents;
+		// Februari, maart en april stond er elk €15 opzij
+		expect(after - before).toBe(4500);
+	});
+});
+
 describe('migratie', () => {
 	it('een bestaande rij in recurring overleeft de migratie naar vaste lasten (0004)', () => {
 		const dir = mkdtempSync(join(tmpdir(), 'budget-migratie-'));
@@ -479,6 +685,45 @@ describe('migratie', () => {
 				match_key: 'oud:r1',
 				status: 'voorstel',
 				spread: 0
+			});
+			sqlite.close();
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	it('bestaande reserveringen krijgen de categorie van hun vaste last (0006)', () => {
+		const dir = mkdtempSync(join(tmpdir(), 'budget-migratie-'));
+		try {
+			cpSync('drizzle', join(dir, 'drizzle'), { recursive: true });
+			const journalPath = join(dir, 'drizzle', 'meta', '_journal.json');
+			const journal = JSON.parse(readFileSync(journalPath, 'utf8'));
+			const full = structuredClone(journal);
+			journal.entries = journal.entries.filter((e: { tag: string }) => e.tag < '0006');
+			writeFileSync(journalPath, JSON.stringify(journal));
+
+			const sqlite = new Database(join(dir, 'budget.db'));
+			const old = drizzle(sqlite);
+			migrate(old, { migrationsFolder: join(dir, 'drizzle') });
+			sqlite
+				.prepare(`INSERT INTO categories (id, name, "group") VALUES ('c1', 'Club', 'Vrije tijd')`)
+				.run();
+			sqlite
+				.prepare(
+					`INSERT INTO recurring (id, counterparty, interval, expected_day, median_cents, min_cents, max_cents, kind, match_key, category_id)
+					 VALUES ('r1', 'Club', 'halfjaar', 1, 9000, 9000, 9000, 'vast', 'club', 'c1')`
+				)
+				.run();
+			sqlite
+				.prepare(
+					`INSERT INTO reservations (id, recurring_id, month, amount_cents) VALUES ('x1', 'r1', '2026-03', 1500)`
+				)
+				.run();
+
+			writeFileSync(journalPath, JSON.stringify(full));
+			migrate(old, { migrationsFolder: join(dir, 'drizzle') });
+			expect(sqlite.prepare('SELECT category_id FROM reservations').get()).toEqual({
+				category_id: 'c1'
 			});
 			sqlite.close();
 		} finally {

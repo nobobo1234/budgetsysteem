@@ -30,6 +30,11 @@ describe('bedrag (50%)', () => {
 	it('een lager bedrag: afwijking, deelbetaling of geen afwijking (retour)', () => {
 		expect(amountScore(500, 2000)).toBe(0);
 		expect(amountScore(500, 2000, { lower: 'deels' })).toBeCloseTo(0.125);
+		// Iets minder, binnen de marge, telt als een fooiverschil en niet als deelbetaling
+		expect(amountScore(1499, 1500, { lower: 'deels' })).toBeCloseTo(0.896);
+		expect(amountScore(1499, 1500, { lower: 'deels' })).toBeGreaterThan(
+			amountScore(1550, 1500, { lower: 'deels' })
+		);
 		expect(amountScore(500, 2000, { lower: 'vol' })).toBe(1);
 		// Meer dan de post blijft een gewone afwijking
 		expect(amountScore(3000, 2000, { lower: 'vol' })).toBe(0);

@@ -140,15 +140,18 @@ export function monthOverview(db: DB, month: string, today: string): MonthOvervi
 		};
 	});
 
-	// Uitgaven zonder categorie tellen als uitgave; inkomsten zonder categorie niet als ruimte
-	const uncategorizedCents = Math.max(
-		0,
-		(spending.get(null) ?? 0) + (planned.get(null)?.reservedCents ?? 0)
-	);
+	// Uitgaven zonder categorie tellen als uitgave; inkomsten zonder categorie niet als ruimte.
+	// Een reservering die vrijvalt (stoppen, goedkoper afgeschreven) geeft wel ruimte terug:
+	// alleen de transacties worden op nul afgekapt, niet de reserveringen.
+	const uncategorizedCents =
+		Math.max(0, spending.get(null) ?? 0) + (planned.get(null)?.reservedCents ?? 0);
 	const withLimit = lines.filter((l) => l.limitCents > 0);
 	const withoutLimitSpent = lines
 		.filter((l) => l.limitCents === 0)
-		.reduce((sum, l) => sum + Math.max(0, l.spentCents), 0);
+		.reduce((sum, l) => {
+			const reserved = planned.get(l.categoryId)?.reservedCents ?? 0;
+			return sum + Math.max(0, l.spentCents - reserved) + reserved;
+		}, 0);
 
 	return {
 		month,

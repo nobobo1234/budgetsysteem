@@ -55,12 +55,13 @@ export function amountScore(query: number, target: number, opts: MatchOptions = 
 	const b = Math.abs(target);
 	if (a === b) return 1;
 	if (a < b && opts.lower === 'vol') return 1;
-	if (a < b && opts.lower === 'deels') return b === 0 ? 0 : 0.5 * (a / b);
 	const tolerance = Math.max(100, Math.round(Math.min(a, b) * 0.02));
 	const diff = Math.abs(a - b);
-	if (diff > tolerance) return 0;
 	// Binnen de marge (fooi): gedeeltelijk, van bijna vol tot de helft aan de rand
-	return 0.9 - 0.4 * (diff / tolerance);
+	const near = diff > tolerance ? 0 : 0.9 - 0.4 * (diff / tolerance);
+	// Een deelbetaling telt naar verhouding, maar nooit lager dan een bedrag binnen de marge
+	if (a < b && opts.lower === 'deels') return Math.max(near, b === 0 ? 0 : 0.5 * (a / b));
+	return near;
 }
 
 export function dateScore(a: string, b: string): number {
