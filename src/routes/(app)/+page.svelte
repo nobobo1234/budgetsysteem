@@ -62,10 +62,11 @@
 				morph: 'bedrag'
 			},
 			data.reviewCount > 0 && {
-				href: '/transacties?status=te_controleren',
+				href: '/te-controleren',
 				icon: icons.controleren,
 				big: String(data.reviewCount),
-				small: 'te controleren'
+				small: 'te controleren',
+				morph: 'bedrag'
 			},
 			data.balanceCheckDue.length > 0 && {
 				href: '/saldocheck',

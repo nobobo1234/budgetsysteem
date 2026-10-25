@@ -29,6 +29,7 @@ describe('actieve tab', () => {
 		expect(activeTab('/saldocheck')).toBe('/instellingen');
 		expect(activeTab('/instellingen/beveiliging')).toBe('/instellingen');
 		expect(activeTab('/transacties/0b7f3c52')).toBe('/transacties');
+		expect(activeTab('/te-controleren')).toBe('/');
 		// Geen voorvoegsel-fout: /te-krijgen is niet /te
 		expect(activeTab('/bestaat-niet')).toBe('');
 	});
@@ -47,6 +48,7 @@ describe('meeschuiven tussen pagina’s', () => {
 
 	it('het bedrag te krijgen schuift van het startscherm naar zijn pagina', () => {
 		expect(morphPlan('/', '/te-krijgen')?.parts).toEqual(['bedrag']);
+		expect(morphPlan('/te-controleren', '/')?.parts).toEqual(['bedrag']);
 		expect(morphPlan('/budget', '/te-krijgen')).toBeNull();
 	});
 

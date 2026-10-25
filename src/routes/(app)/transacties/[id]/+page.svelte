@@ -127,7 +127,7 @@
 		{#key form}<Toast text={form.ibanMessage} />{/key}
 	{/if}
 
-	<BackLink parents={['/transacties', '/']} />
+	<BackLink parents={['/transacties', '/', '/te-controleren']} />
 
 	<header>
 		<h1><span data-tx-name={tx.id}>{name}</span></h1>

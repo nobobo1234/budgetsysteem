@@ -38,6 +38,7 @@ function details(): { tx: string; recurring: string } {
 function routes(ids: { tx: string; recurring: string }) {
 	const sub = [
 		...MEER_PAGES,
+		'/te-controleren',
 		`/transacties/${ids.tx}`,
 		`/vaste-lasten/${ids.recurring}`
 	] as string[];
