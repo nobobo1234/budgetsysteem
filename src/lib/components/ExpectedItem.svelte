@@ -18,7 +18,16 @@
 		missed: boolean;
 	}
 
-	let { item, ondone }: { item: Item; ondone: (text: string, error?: boolean) => void } = $props();
+	let {
+		item,
+		ondone,
+		grouped = false
+	}: {
+		item: Item;
+		ondone: (text: string, error?: boolean) => void;
+		/** In de groep "gemist of opgezegd?": dan zegt de kop het al */
+		grouped?: boolean;
+	} = $props();
 
 	let editing = $state(false);
 	let done = $state(false);
@@ -131,7 +140,7 @@
 					>
 				</form>
 			{:else}
-				<span class="badge">Gemist of opgezegd?</span>
+				{#if !grouped}<span class="badge">Gemist of opgezegd?</span>{/if}
 				<button type="button" class="text-button" onclick={() => (askMissed = true)}
 					>Niet afgeschreven</button
 				>

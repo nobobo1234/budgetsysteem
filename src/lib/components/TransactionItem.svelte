@@ -72,10 +72,12 @@
 			<span class="badge error">{error}</span>
 		{:else if tx.status === 'te_controleren'}
 			<span class="badge review">Te controleren</span>
+		{:else if tx.status === 'verwacht'}
+			<span class="badge expected">Verwacht</span>
 		{/if}
 	</div>
 	<div
-		class={['amount', 'num', tx.amountCents > 0 && 'in']}
+		class={['amount', 'num', tx.amountCents > 0 && 'in', tx.status === 'verwacht' && 'planned']}
 		data-tx-amount={href ? tx.id : undefined}
 	>
 		{#if tx.amountCents === 0 && orig}
@@ -180,6 +182,16 @@
 		border-radius: 999px;
 		font-size: 0.8rem;
 		font-weight: 600;
+	}
+
+	/* Een verwachte post is nog niet uitgegeven: gestippeld en rustiger */
+	.expected {
+		border: 1px dashed var(--muted);
+		color: var(--muted);
+	}
+
+	.amount.planned {
+		color: var(--muted);
 	}
 
 	.review {

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { tick } from 'svelte';
 	import { enhance, type SubmitFunction } from '$app/forms';
+	import BackLink from '#lib/components/BackLink.svelte';
 	import OwedTabs from '#lib/components/OwedTabs.svelte';
 	import Toast from '#lib/components/Toast.svelte';
 	import { formatCents } from '#lib/money.ts';
@@ -52,7 +53,8 @@
 
 <div class="page">
 	<div class="intro">
-		<h1>Personen</h1>
+		<BackLink parents={['/instellingen', '/', '/te-krijgen']} />
+		<h1 data-morph-head="titel">Personen</h1>
 		<OwedTabs current="personen" open={data.openCount} people={data.people.length} />
 		<p class="muted">
 			Met wie je voorschiet of deelt. Met een IBAN herkent de koppellijst hun betalingen.

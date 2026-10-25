@@ -18,12 +18,12 @@ export type SecurityEvent =
 // zo merk je het als iemand anders een passkey toevoegt of met je herstelcode binnenkomt.
 const PUSH: Partial<Record<SecurityEvent, NotifyMessage>> = {
 	passkey_toegevoegd: {
-		text: 'Er is een passkey toegevoegd. Was jij dit niet? Verwijder hem bij Meer.',
-		url: '/instellingen'
+		text: 'Er is een passkey toegevoegd. Was jij dit niet? Verwijder hem bij Beveiliging.',
+		url: '/instellingen/beveiliging'
 	},
 	herstelcode_gebruikt: {
-		text: 'Er is ingelogd met je herstelcode. Was jij dit niet? Trek de sessie in bij Meer.',
-		url: '/instellingen'
+		text: 'Er is ingelogd met je herstelcode. Was jij dit niet? Trek de sessie in bij Beveiliging.',
+		url: '/instellingen/beveiliging'
 	}
 };
 

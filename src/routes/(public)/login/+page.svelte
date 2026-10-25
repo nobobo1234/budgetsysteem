@@ -57,7 +57,7 @@
 			message = result.message;
 			return;
 		}
-		location.assign('/instellingen?herstel=1');
+		location.assign('/instellingen/beveiliging?herstel=1');
 	}
 </script>
 

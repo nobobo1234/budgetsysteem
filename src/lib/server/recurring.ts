@@ -695,21 +695,28 @@ export function awaitingConfirmation(db: DB, today = toIsoDate(new Date())): Awa
 }
 
 /** Verwachte posten later deze maand: tellen al mee in de planning, nog niet in je uitgaven. */
-export function upcomingThisMonth(db: DB, today = toIsoDate(new Date())): number {
-	return (
-		db
-			.select({ n: sql<number>`count(*)` })
-			.from(transactions)
-			.where(
-				and(
-					eq(transactions.status, 'verwacht'),
-					isNotNull(transactions.recurringId),
-					sql`${transactions.date} > ${today}`,
-					lte(transactions.date, monthRange(today.slice(0, 7))[1])
-				)
+export function upcomingThisMonth(db: DB, today = toIsoDate(new Date())) {
+	return db
+		.select({
+			id: transactions.id,
+			date: transactions.date,
+			amountCents: transactions.amountCents,
+			counterparty: transactions.counterparty,
+			categoryName: categories.name,
+			categoryGroup: categories.group
+		})
+		.from(transactions)
+		.leftJoin(categories, eq(categories.id, transactions.categoryId))
+		.where(
+			and(
+				eq(transactions.status, 'verwacht'),
+				isNotNull(transactions.recurringId),
+				sql`${transactions.date} > ${today}`,
+				lte(transactions.date, monthRange(today.slice(0, 7))[1])
 			)
-			.get()?.n ?? 0
-	);
+		)
+		.orderBy(asc(transactions.date), asc(transactions.counterparty))
+		.all();
 }
 
 export function proposalCount(db: DB): number {

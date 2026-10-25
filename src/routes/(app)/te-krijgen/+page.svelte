@@ -2,6 +2,7 @@
 	import { tick } from 'svelte';
 	import { enhance, type SubmitFunction } from '$app/forms';
 	import { fly } from 'svelte/transition';
+	import BackLink from '#lib/components/BackLink.svelte';
 	import HeroAmount from '#lib/components/HeroAmount.svelte';
 	import OwedTabs from '#lib/components/OwedTabs.svelte';
 	import Select, { type SelectOption } from '#lib/components/Select.svelte';
@@ -76,12 +77,13 @@
 
 <div class="page">
 	<div class="intro">
-		<h1>Te krijgen</h1>
+		<BackLink parents={['/instellingen', '/']} />
+		<h1 data-morph-head="titel">Te krijgen</h1>
 		<OwedTabs current="te-krijgen" open={openCount} people={data.people.length} />
 	</div>
 
 	<div class="total">
-		<HeroAmount cents={o.toReceiveCents} label="Nog te krijgen" />
+		<HeroAmount cents={o.toReceiveCents} label="Nog te krijgen" morph="bedrag" />
 		{#if subtitle}<p class="muted">{subtitle}</p>{/if}
 		<p>
 			<a href="/terugbetalingen"

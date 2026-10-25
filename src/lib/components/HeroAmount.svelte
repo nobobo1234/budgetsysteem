@@ -2,7 +2,16 @@
 	import { untrack } from 'svelte';
 	import { formatCents } from '#lib/money.ts';
 
-	let { cents, label }: { cents: number; label: string } = $props();
+	let {
+		cents,
+		label,
+		morph
+	}: {
+		cents: number;
+		label: string;
+		/** Kop voor een meeschuivend bedrag (zie morph.ts) */
+		morph?: 'bedrag';
+	} = $props();
 
 	// Het getal telt vloeiend mee bij elke wijziging. GSAP wordt pas geladen na de eerste
 	// weergave, zodat het niet in de eerste bundel zit.
@@ -42,11 +51,15 @@
 	const display = $derived(
 		formatCents(shown ?? cents, { whole: Math.abs(shown ?? cents) >= 100_000 })
 	);
+	// De centen kleiner en rustiger, zodat de euro's het verhaal vertellen
+	const parts = $derived(/^(.*?)(,\d{2})$/.exec(display));
 </script>
 
 <section aria-label={label}>
 	<p class="label">{label}</p>
-	<p class="amount num" class:negative={cents < 0} aria-live="polite">{display}</p>
+	<p class="amount num" class:negative={cents < 0} aria-live="polite" data-morph-head={morph}>
+		{#if parts}{parts[1]}<span class="cents">{parts[2]}</span>{:else}{display}{/if}
+	</p>
 </section>
 
 <style>
@@ -65,6 +78,14 @@
 		font-weight: 650;
 		letter-spacing: -0.035em;
 		line-height: 1;
+	}
+
+	.cents {
+		font-size: 0.5em;
+		font-weight: 600;
+		letter-spacing: -0.01em;
+		vertical-align: 0.72em;
+		opacity: 0.55;
 	}
 
 	.negative {

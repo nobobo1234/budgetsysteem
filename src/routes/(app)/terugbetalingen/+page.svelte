@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { enhance, type SubmitFunction } from '$app/forms';
 	import { fly } from 'svelte/transition';
+	import BackLink from '#lib/components/BackLink.svelte';
 	import HeroAmount from '#lib/components/HeroAmount.svelte';
 	import Select, { type SelectOption } from '#lib/components/Select.svelte';
 	import Toast from '#lib/components/Toast.svelte';
@@ -76,22 +77,10 @@
 </svelte:head>
 
 <div class="page">
-	<a class="back" href="/te-krijgen">
-		<svg viewBox="0 0 20 20" aria-hidden="true">
-			<path
-				d="M12.5 4.5L7 10l5.5 5.5"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="1.8"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-			/>
-		</svg>
-		Te krijgen
-	</a>
+	<BackLink parents={['/te-krijgen', '/instellingen', '/', '/import']} />
 
 	<div class="intro">
-		<h1>Terugbetalingen</h1>
+		<h1 data-morph-head="titel">Terugbetalingen</h1>
 		<HeroAmount cents={o.arrearsCents} label="Achterstand" />
 		<p class="muted">
 			Vervallen en nog niet volledig binnen{#if o.creditCents > 0}
@@ -398,22 +387,6 @@
 		grid-template-columns: minmax(0, 1fr);
 		gap: 28px;
 		max-width: 44rem;
-	}
-
-	.back {
-		display: inline-flex;
-		align-items: center;
-		gap: 2px;
-		justify-self: start;
-		min-height: var(--tap);
-		margin: 0 0 -16px -6px;
-		text-decoration: none;
-		font-weight: 550;
-	}
-
-	.back svg {
-		width: 20px;
-		height: 20px;
 	}
 
 	.intro,

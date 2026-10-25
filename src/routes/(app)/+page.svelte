@@ -2,14 +2,18 @@
 	import { enhance, type SubmitFunction } from '$app/forms';
 	import { refreshAll } from '$app/navigation';
 	import { fly } from 'svelte/transition';
+	import { homeBars, monthStory, storySentence } from '#lib/budget.ts';
+	import { groupColor } from '#lib/categoryColor.ts';
 	import BudgetBar from '#lib/components/BudgetBar.svelte';
 	import ExpectedItem from '#lib/components/ExpectedItem.svelte';
 	import HeroAmount from '#lib/components/HeroAmount.svelte';
 	import LinkThreads, { threadGutter } from '#lib/components/LinkThreads.svelte';
+	import MonthLine from '#lib/components/MonthLine.svelte';
 	import QuickEntry from '#lib/components/QuickEntry.svelte';
 	import Toast from '#lib/components/Toast.svelte';
 	import TransactionItem from '#lib/components/TransactionItem.svelte';
-	import { formatMonth, formatShortDate } from '#lib/dates.ts';
+	import { daysInMonth, formatMonth, formatShortDate, fromIsoDate } from '#lib/dates.ts';
+	import { ICONS, type IconName } from '#lib/icons.ts';
 	import { formatCents } from '#lib/money.ts';
 	import { flush, type QueuedTransaction } from '#lib/offline/queue.ts';
 	import { sync } from '#lib/offline/sync.svelte.ts';
@@ -18,8 +22,11 @@
 
 	let { data } = $props();
 
-	const lines = $derived(data.overview.lines.filter((l) => l.limitCents > 0 || l.spentCents > 0));
 	const hasBudget = $derived(data.overview.totalLimitCents > 0);
+	const day = $derived(Number(data.today.slice(8, 10)));
+	const days = $derived(daysInMonth(data.overview.month));
+	const story = $derived(monthStory(data.overview.lines, data.overview.freeCents, day, days));
+	const bars = $derived(homeBars(data.overview.lines, day, days));
 	const category = (id: string | null) => data.context.categories.find((c) => c.id === id);
 	const accountAlias = (id: string) => data.context.accounts.find((a) => a.id === id)?.alias ?? '';
 
@@ -31,9 +38,84 @@
 
 	let toast = $state<{ text: string; error: boolean; key: number } | null>(null);
 	const notify = (text: string, error = false) => (toast = { text, error, key: Date.now() });
-	const showFixed = $derived(
-		data.expected.length > 0 || data.receipts.length > 0 || data.upcoming > 0 || data.proposals > 0
+
+	// Signaalkaartjes: wat op je wacht, alleen als er iets is (spec: Startscherm)
+	interface Signal {
+		href: string;
+		icon: IconName;
+		big: string;
+		small: string;
+		morph?: 'bedrag' | 'titel';
+		warn?: boolean;
+	}
+	const plural = (n: number, one: string, more: string) => (n === 1 ? one : more);
+	const signals = $derived.by(() => {
+		const all: (Signal | false)[] = [
+			data.owed.toReceiveCents > 0 && {
+				href: '/te-krijgen',
+				icon: 'teKrijgen',
+				big: formatCents(data.owed.toReceiveCents),
+				small: `te krijgen van ${data.owed.people} ${plural(data.owed.people, 'persoon', 'personen')}`,
+				morph: 'bedrag'
+			},
+			data.reviewCount > 0 && {
+				href: '/transacties?status=te_controleren',
+				icon: 'controleren',
+				big: String(data.reviewCount),
+				small: 'te controleren'
+			},
+			data.balanceCheckDue.length > 0 && {
+				href: '/saldocheck',
+				icon: 'saldocheck',
+				big: 'Saldocheck',
+				small: `nog te doen voor ${data.balanceCheckDue.map((a) => a.name).join(' en ')}`,
+				morph: 'titel',
+				warn: true
+			},
+			data.proposals > 0 && {
+				href: '/vaste-lasten',
+				icon: 'vasteLasten',
+				big: String(data.proposals),
+				small: plural(
+					data.proposals,
+					'voorstel voor een vaste last',
+					'voorstellen voor vaste lasten'
+				)
+			}
+		];
+		return all.filter((s): s is Signal => s !== false);
+	});
+
+	// Te bevestigen: de eerste drie, de rest op verzoek; gemiste posten als eigen groep
+	const FIRST = 3;
+	type Entry =
+		| { kind: 'vast'; key: string; date: string; item: (typeof data.expected)[number] }
+		| { kind: 'ontvangen'; key: string; date: string; item: (typeof data.receipts)[number] };
+	const entries = $derived<Entry[]>(
+		[
+			...data.expected
+				.filter((e) => !e.missed)
+				.map((item) => ({ kind: 'vast' as const, key: item.id, date: item.date, item })),
+			...data.receipts.map((item) => ({
+				kind: 'ontvangen' as const,
+				key: item.id,
+				date: item.dueDate,
+				item
+			}))
+		].sort((a, b) => a.date.localeCompare(b.date))
 	);
+	const missed = $derived(data.expected.filter((e) => e.missed));
+	let showAll = $state(false);
+	let showMissed = $state(false);
+	const visible = $derived(showAll ? entries : entries.slice(0, FIRST));
+	const waiting = $derived(entries.length + missed.length);
+	const showFixed = $derived(waiting > 0 || data.upcoming.length > 0);
+
+	const weekday = new Intl.DateTimeFormat('nl-NL', { weekday: 'short' });
+	const dayParts = (iso: string) => ({
+		day: Number(iso.slice(8, 10)),
+		weekday: weekday.format(fromIsoDate(iso)).replace('.', '')
+	});
 
 	// Eén tik "ontvangen" voor een aandeel in een gedeelde vaste last
 	let receiving = $state<string | null>(null);
@@ -69,10 +151,18 @@
 <div class="home">
 	<div class="top">
 		{#if hasBudget}
-			<HeroAmount
-				cents={data.overview.freeCents}
-				label="Nog vrij in {formatMonth(data.overview.month)}"
-			/>
+			<section class="hero" aria-label="Deze maand">
+				<HeroAmount
+					cents={data.overview.freeCents}
+					label="Nog vrij in {formatMonth(data.overview.month)}"
+				/>
+				<MonthLine
+					{story}
+					spentCents={data.overview.totalLimitCents - data.overview.freeCents}
+					over={data.overview.freeCents < 0}
+				/>
+				<p class="story">{storySentence(story, data.overview.freeCents)}</p>
+			</section>
 		{:else}
 			<section class="empty">
 				<h1>Nog geen budget</h1>
@@ -81,90 +171,168 @@
 			</section>
 		{/if}
 
-		<QuickEntry context={data.context} onsaved={saved} />
+		<QuickEntry context={data.context} onsaved={saved} suggestions={data.suggestions} />
 	</div>
+
+	{#if signals.length > 0}
+		<ul class="signals" aria-label="Wacht op je">
+			{#each signals as signal (signal.href)}
+				<li>
+					<a
+						class={['signal', 'hue', signal.warn && 'warn']}
+						href={signal.href}
+						style:--h={ICONS[signal.icon].hue}
+					>
+						<span class="icon-badge" aria-hidden="true">
+							<svg viewBox="0 0 24 24">
+								<path
+									d={ICONS[signal.icon].path}
+									fill="none"
+									stroke="currentColor"
+									stroke-width="1.7"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								/>
+							</svg>
+						</span>
+						<span class="signal-text">
+							<span
+								class="big num"
+								data-morph-to={signal.morph ? signal.href : undefined}
+								data-morph-part={signal.morph}>{signal.big}</span
+							>
+							<span class="small">{signal.small}</span>
+						</span>
+					</a>
+				</li>
+			{/each}
+		</ul>
+	{/if}
 
 	{#if showFixed}
 		<section class="fixed" aria-labelledby="fixed-title">
 			<div class="head">
-				<h2 id="fixed-title">
-					{data.expected.length > 0 || data.receipts.length > 0 ? 'Te bevestigen' : 'Vaste lasten'}
-				</h2>
-				<a href="/vaste-lasten">Alle vaste lasten</a>
+				<div class="title">
+					<h2 id="fixed-title">{waiting > 0 ? 'Te bevestigen' : 'Later deze maand'}</h2>
+					{#if waiting > 0}<span class="count num" aria-label="{waiting} posten">{waiting}</span
+						>{/if}
+				</div>
+				<a class="more-link" href="/vaste-lasten">Vaste lasten</a>
 			</div>
-			{#if data.expected.length > 0}
+
+			{#if visible.length > 0}
 				<ul class="card expected">
-					{#each data.expected as item (item.id)}
-						<li out:fly={{ x: 32, duration: motion(220) }}>
-							<ExpectedItem {item} ondone={notify} />
-						</li>
-					{/each}
-				</ul>
-			{/if}
-			{#if data.receipts.length > 0}
-				<ul class="card expected" aria-label="Terugbetalingen om te bevestigen">
-					{#each data.receipts as item (item.id)}
-						<li class="receipt" out:fly={{ x: 32, duration: motion(220) }}>
-							<a class="who" href="/terugbetalingen">
-								<span class="name">{item.personName}</span>
-								<span class="muted small">
-									{item.counterparty} · verwacht {formatShortDate(item.dueDate)}{item.late
-										? ' · te laat'
-										: ''}
-								</span>
-							</a>
-							<span class="num in">+{formatCents(item.outstandingCents)}</span>
-							<form method="POST" action="?/received" use:enhance={receive}>
-								<input type="hidden" name="id" value={item.id} />
-								<button
-									class="button secondary small"
-									disabled={receiving === item.id}
-									aria-label="{formatCents(item.outstandingCents)} van {item.personName} ontvangen"
-									>Ontvangen</button
-								>
-							</form>
-						</li>
-					{/each}
-				</ul>
-			{/if}
-			{#if data.upcoming > 0 || data.proposals > 0}
-				<p class="muted">
-					{#if data.upcoming > 0}
-						Nog {data.upcoming} verwacht deze maand.
-					{/if}
-					{#if data.proposals > 0}
-						<a href="/vaste-lasten"
-							>{data.proposals}
-							{data.proposals === 1 ? 'voorstel' : 'voorstellen'} voor vaste lasten</a
+					{#each visible as entry (entry.key)}
+						<li
+							class={entry.kind === 'ontvangen' ? 'receipt' : undefined}
+							in:fly={{ y: -10, duration: motion(220) }}
+							out:fly={{ x: 32, duration: motion(220) }}
 						>
+							{#if entry.kind === 'vast'}
+								<ExpectedItem item={entry.item} ondone={notify} />
+							{:else}
+								{@const item = entry.item}
+								<a class="who" href="/terugbetalingen">
+									<span class="name">{item.personName}</span>
+									<span class="muted small">
+										{item.counterparty} · verwacht {formatShortDate(item.dueDate)}{item.late
+											? ' · te laat'
+											: ''}
+									</span>
+								</a>
+								<span class="num in">+{formatCents(item.outstandingCents)}</span>
+								<form method="POST" action="?/received" use:enhance={receive}>
+									<input type="hidden" name="id" value={item.id} />
+									<button
+										class="button secondary small"
+										disabled={receiving === item.id}
+										aria-label="{formatCents(
+											item.outstandingCents
+										)} van {item.personName} ontvangen">Ontvangen</button
+									>
+								</form>
+							{/if}
+						</li>
+					{/each}
+					{#if entries.length > FIRST}
+						<li class="toggle">
+							<button type="button" class="show-more" onclick={() => (showAll = !showAll)}>
+								{showAll ? 'Minder tonen' : `Nog ${entries.length - FIRST} meer`}
+								<svg class={['chevron', showAll && 'open']} viewBox="0 0 20 20" aria-hidden="true"
+									><path d="M5.5 7.5 10 12l4.5-4.5" /></svg
+								>
+							</button>
+						</li>
 					{/if}
-				</p>
+				</ul>
+			{/if}
+
+			{#if missed.length > 0}
+				<div class="card missed-group">
+					<button
+						type="button"
+						class="show-more missed-toggle"
+						aria-expanded={showMissed}
+						aria-controls="missed-list"
+						onclick={() => (showMissed = !showMissed)}
+					>
+						<span class="badge">{missed.length}</span>
+						<span class="label"
+							>Gemist of opgezegd?
+							<span class="muted">Al meer dan een week niet afgeschreven</span></span
+						>
+						<svg class={['chevron', showMissed && 'open']} viewBox="0 0 20 20" aria-hidden="true"
+							><path d="M5.5 7.5 10 12l4.5-4.5" /></svg
+						>
+					</button>
+					{#if showMissed}
+						<ul id="missed-list" class="expected">
+							{#each missed as item (item.id)}
+								<li
+									in:fly={{ y: -10, duration: motion(220) }}
+									out:fly={{ x: 32, duration: motion(220) }}
+								>
+									<ExpectedItem {item} ondone={notify} grouped />
+								</li>
+							{/each}
+						</ul>
+					{/if}
+				</div>
+			{/if}
+
+			{#if data.upcoming.length > 0}
+				<div class="upcoming">
+					{#if waiting > 0}<h3>Later deze maand</h3>{/if}
+					<ul>
+						{#each data.upcoming as item (item.id)}
+							{@const d = dayParts(item.date)}
+							<li>
+								<span class="date num" aria-label={formatShortDate(item.date)}>
+									<span class="d">{d.day}</span><span class="wd">{d.weekday}</span>
+								</span>
+								<span class="what">
+									<span class="name">{item.counterparty}</span>
+									<span class="muted small">
+										<span
+											class={['dot', !item.categoryGroup && 'none']}
+											style:--dot={item.categoryGroup ? groupColor(item.categoryGroup) : null}
+										></span>
+										{item.categoryName ?? 'Geen categorie'}
+									</span>
+								</span>
+								<span class="num amount">{formatCents(item.amountCents, { sign: true })}</span>
+							</li>
+						{/each}
+					</ul>
+				</div>
 			{/if}
 		</section>
-	{/if}
-
-	{#if data.balanceCheckDue.length > 0}
-		<p class="card reminder">
-			<span>
-				Saldocheck voor {formatMonth(data.overview.month)}: nog te doen voor {data.balanceCheckDue
-					.map((a) => a.name)
-					.join(' en ')}.
-			</span>
-			<a href="/saldocheck">Saldo invullen</a>
-		</p>
 	{/if}
 
 	<section class="recent" aria-labelledby="recent-title">
 		<div class="head">
 			<h2 id="recent-title">Recent</h2>
-			<div class="links">
-				{#if data.owed.toReceiveCents > 0}
-					<a href="/te-krijgen">{`${formatCents(data.owed.toReceiveCents)} te krijgen`}</a>
-				{/if}
-				{#if data.reviewCount > 0}
-					<a href="/transacties?status=te_controleren">{data.reviewCount} te controleren</a>
-				{/if}
-			</div>
+			<a class="more-link" href="/transacties">Alle transacties</a>
 		</div>
 		<div
 			class={['recent-list', threads.lanes > 0 && 'threaded']}
@@ -205,17 +373,27 @@
 				{/each}
 			</ul>
 		</div>
-		<a href="/transacties">Alle transacties</a>
 	</section>
 
-	{#if lines.length > 0}
+	{#if bars.fixed || bars.top.length > 0}
 		<section class="budget" aria-labelledby="budget-title">
-			<h2 id="budget-title">Per categorie</h2>
+			<div class="head">
+				<h2 id="budget-title">Per categorie</h2>
+				<a class="more-link" href="/budget">Budget</a>
+			</div>
 			<div class="bars">
-				{#each lines as line (line.categoryId)}
+				{#if bars.fixed}
+					<BudgetBar name="Vaste lasten" {...bars.fixed} />
+				{/if}
+				{#each bars.top as line (line.categoryId)}
 					<BudgetBar {...line} />
 				{/each}
 			</div>
+			{#if bars.more > 0}
+				<a class="more-link quiet" href="/budget"
+					>Nog {bars.more} {plural(bars.more, 'categorie', 'categorieën')}</a
+				>
+			{/if}
 		</section>
 	{/if}
 
@@ -236,20 +414,19 @@
 		gap: 24px;
 	}
 
-	.reminder {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		justify-content: space-between;
-		gap: 4px 16px;
-		border-left: 4px solid var(--accent);
+	.hero {
+		display: grid;
+		gap: 14px;
 	}
 
-	.reminder a {
-		display: inline-flex;
-		align-items: center;
-		min-height: var(--tap);
-		font-weight: 600;
+	/* De zin onder het getal: het verhaal van de maand, in de display-font */
+	.story {
+		font-family: var(--font-display);
+		font-style: italic;
+		font-size: 1.2rem;
+		font-variation-settings: 'opsz' 24;
+		line-height: 1.35;
+		max-width: 34ch;
 	}
 
 	.empty {
@@ -261,22 +438,134 @@
 	.head {
 		display: flex;
 		justify-content: space-between;
-		align-items: baseline;
+		align-items: center;
 		gap: 12px;
 	}
 
-	.links {
-		display: flex;
-		flex-wrap: wrap;
-		justify-content: flex-end;
-		gap: 0 14px;
+	.head .more-link {
+		margin-right: -4px;
 	}
 
-	.links a {
-		font-variant-numeric: tabular-nums;
-		display: inline-flex;
+	.title {
+		display: flex;
 		align-items: center;
-		min-height: var(--tap);
+		gap: 10px;
+	}
+
+	.count {
+		display: inline-grid;
+		place-items: center;
+		min-width: 26px;
+		height: 26px;
+		padding: 0 8px;
+		border-radius: 999px;
+		background: var(--accent-soft);
+		color: var(--accent-strong);
+		font-size: 0.88rem;
+		font-weight: 650;
+	}
+
+	/* Signaalkaartjes */
+	/* Op een telefoon een strook om te vegen, die tot de rand van het scherm loopt */
+	.signals {
+		list-style: none;
+		margin: -20px -16px 0;
+		padding: 4px 16px 10px;
+		display: grid;
+		grid-auto-flow: column;
+		grid-auto-columns: minmax(150px, 1fr);
+		gap: 10px;
+		overflow-x: auto;
+		overscroll-behavior-x: contain;
+		scroll-snap-type: x mandatory;
+		scroll-padding-inline: 16px;
+		scrollbar-width: none;
+	}
+
+	.signals::-webkit-scrollbar {
+		display: none;
+	}
+
+	.signals li {
+		scroll-snap-align: start;
+	}
+
+	@container (min-width: 600px) {
+		.signals {
+			margin: -16px 0 0;
+			padding: 0;
+			grid-auto-flow: row;
+			grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+			overflow: visible;
+		}
+
+		.signal {
+			flex-direction: row;
+			align-items: center;
+			gap: 12px;
+		}
+	}
+
+	.signal {
+		position: relative;
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 10px;
+		height: 100%;
+		min-height: 72px;
+		padding: 12px 14px;
+		border-radius: var(--radius);
+		background: var(--surface);
+		box-shadow: var(--shadow);
+		color: var(--text);
+		text-decoration: none;
+		transition:
+			transform 220ms var(--ease-spring),
+			box-shadow 220ms var(--ease-out);
+	}
+
+	.signal:active {
+		transform: scale(0.97);
+	}
+
+	@media (hover: hover) {
+		.signal:hover {
+			transform: translateY(-2px);
+		}
+
+		.signal:hover .icon-badge {
+			transform: rotate(-6deg) scale(1.06);
+		}
+	}
+
+	.signal.warn::after {
+		content: '';
+		position: absolute;
+		top: 10px;
+		right: 10px;
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+		background: var(--warn);
+	}
+
+	.signal-text {
+		display: grid;
+		min-width: 0;
+	}
+
+	.big {
+		font-size: 1.15rem;
+		font-weight: 650;
+		letter-spacing: -0.01em;
+		line-height: 1.2;
+	}
+
+	.signal-text .small {
+		color: var(--muted);
+		font-size: 0.86rem;
+		line-height: 1.3;
 	}
 
 	.fixed,
@@ -296,6 +585,10 @@
 
 	li + li {
 		border-top: 1px solid var(--line);
+	}
+
+	.signals li + li {
+		border-top: 0;
 	}
 
 	.recent-list {
@@ -354,9 +647,171 @@
 		font-size: 0.92rem;
 	}
 
+	/* "Nog 4 meer" en de groep gemiste posten */
+	.show-more {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 6px;
+		width: 100%;
+		min-height: var(--tap);
+		padding: 0;
+		border: 0;
+		background: none;
+		color: var(--accent-strong);
+		font-weight: 600;
+		cursor: pointer;
+	}
+
+	.toggle {
+		padding: 2px 0;
+	}
+
+	.chevron {
+		width: 18px;
+		height: 18px;
+		fill: none;
+		stroke: currentColor;
+		stroke-width: 1.8;
+		stroke-linecap: round;
+		stroke-linejoin: round;
+		transition: transform 220ms var(--ease-spring);
+	}
+
+	.chevron.open {
+		transform: rotate(180deg);
+	}
+
+	.missed-group {
+		display: grid;
+		padding: 4px 16px;
+	}
+
+	.missed-toggle {
+		justify-content: flex-start;
+		gap: 12px;
+		padding: 8px 0;
+		color: var(--text);
+		text-align: left;
+	}
+
+	.missed-toggle .label {
+		display: grid;
+		flex: 1;
+		font-weight: 600;
+	}
+
+	.missed-toggle .label .muted {
+		font-size: 0.86rem;
+		font-weight: 400;
+	}
+
+	.missed-toggle .badge {
+		display: inline-grid;
+		place-items: center;
+		min-width: 28px;
+		height: 28px;
+		border-radius: 999px;
+		background: color-mix(in oklch, var(--warn) 22%, transparent);
+		color: color-mix(in oklch, var(--warn) 60%, var(--text));
+		font-weight: 650;
+		font-size: 0.9rem;
+	}
+
+	.missed-group .expected {
+		padding: 0;
+		border-top: 1px solid var(--line);
+	}
+
+	/* Later deze maand: rustig, gestippeld, nog niet uitgegeven */
+	.upcoming {
+		display: grid;
+		gap: 6px;
+	}
+
+	.upcoming h3 {
+		margin-top: 8px;
+		font-size: 1.05rem;
+	}
+
+	.upcoming li {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		padding: 8px 0;
+	}
+
+	.upcoming li + li {
+		border-top-style: dashed;
+	}
+
+	.upcoming .date {
+		display: grid;
+		place-items: center;
+		flex: none;
+		width: 44px;
+		height: 44px;
+		border: 1px dashed var(--line);
+		border-radius: 12px;
+		line-height: 1;
+	}
+
+	.upcoming .d {
+		font-weight: 650;
+		font-size: 1.05rem;
+	}
+
+	.upcoming .wd {
+		color: var(--muted);
+		font-size: 0.72rem;
+	}
+
+	.upcoming .what {
+		display: grid;
+		flex: 1;
+		min-width: 0;
+	}
+
+	.upcoming .name {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.upcoming .small {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		font-size: 0.86rem;
+	}
+
+	.dot {
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+		background: var(--dot);
+	}
+
+	.dot.none {
+		background: none;
+		box-shadow: inset 0 0 0 1.5px var(--muted);
+	}
+
+	.upcoming .amount {
+		color: var(--muted);
+		white-space: nowrap;
+	}
+
 	.bars {
 		display: grid;
 		gap: 18px;
+	}
+
+	.more-link.quiet {
+		justify-self: start;
+		margin-left: -12px;
+		color: var(--muted);
+		font-weight: 550;
 	}
 
 	@container (min-width: 900px) {
@@ -365,11 +820,17 @@
 			column-gap: 56px;
 		}
 
-		/* Meldingen over de volle breedte, boven de twee kolommen */
+		/* Bovenaan over de volle breedte, daaronder twee kolommen */
 		.top,
-		.fixed,
-		.reminder {
+		.signals,
+		.fixed {
 			grid-column: 1 / -1;
+		}
+
+		.top {
+			grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+			column-gap: 56px;
+			align-items: end;
 		}
 	}
 </style>

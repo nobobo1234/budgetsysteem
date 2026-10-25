@@ -16,6 +16,7 @@ import {
 } from '#lib/server/recurring.ts';
 import { confirmReceived, dueReceipts } from '#lib/server/shares.ts';
 import {
+	frequentManual,
 	listTransactions,
 	reviewCount,
 	ValidationError,
@@ -31,7 +32,7 @@ export const load: PageServerLoad = ({ setHeaders }) => {
 	return {
 		today,
 		overview: monthOverview(db(), month, today),
-		recent: withRefunds(db(), listTransactions(db(), { limit: 8 })),
+		recent: withRefunds(db(), listTransactions(db(), { limit: 8, withoutExpected: true })),
 		reviewCount: reviewCount(db()),
 		owed: owedSummary(db()),
 		expected: awaitingConfirmation(db(), today),
@@ -39,7 +40,8 @@ export const load: PageServerLoad = ({ setHeaders }) => {
 		upcoming: upcomingThisMonth(db(), today),
 		proposals: proposalCount(db()),
 		balanceCheckDue: balanceCheckDue(db(), today),
-		context: quickEntryContext(db())
+		context: quickEntryContext(db()),
+		suggestions: frequentManual(db(), today)
 	};
 };
 

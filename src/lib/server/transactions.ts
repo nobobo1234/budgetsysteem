@@ -1,4 +1,5 @@
 import { and, desc, eq, gte, isNull, lte, ne, or, sql, type SQL } from 'drizzle-orm';
+import { addDays } from '../dates.ts';
 import { advancePast } from '../recurring.ts';
 import { recordChange } from './audit.ts';
 import { correctedCents, linkCorrection, releaseCorrectionsOf } from './corrections.ts';
@@ -311,6 +312,8 @@ export interface ListFilter {
 	month?: string;
 	categoryId?: string | 'geen';
 	status?: 'bevestigd' | 'verwacht' | 'te_controleren';
+	/** Zonder verwachte posten, zoals Recent op het startscherm */
+	withoutExpected?: boolean;
 	accountId?: string;
 	/** Datums `YYYY-MM-DD`, beide inclusief */
 	from?: string;
@@ -345,6 +348,7 @@ function filterWhere(filter: ListFilter): SQL | undefined {
 	if (filter.categoryId === 'geen') where.push(isNull(transactions.categoryId));
 	else if (filter.categoryId) where.push(eq(transactions.categoryId, filter.categoryId));
 	if (filter.status) where.push(eq(transactions.status, filter.status));
+	if (filter.withoutExpected) where.push(ne(transactions.status, 'verwacht'));
 	if (filter.accountId) where.push(eq(transactions.accountId, filter.accountId));
 	if (filter.from) where.push(gte(transactions.date, filter.from));
 	if (filter.to) where.push(lte(transactions.date, filter.to));
@@ -420,6 +424,28 @@ export function knownCounterparties(db: DB, limit = 300): string[] {
 		.select({ name: transactions.counterparty, n: sql<number>`count(*)` })
 		.from(transactions)
 		.where(sql`${transactions.counterparty} != ''`)
+		.groupBy(transactions.counterparty)
+		.orderBy(desc(sql`count(*)`), desc(sql`max(${transactions.date})`))
+		.limit(limit)
+		.all()
+		.map((r) => r.name);
+}
+
+/**
+ * Tegenpartijen die je de laatste 60 dagen het vaakst zelf invoerde: suggesties onder een lege
+ * snelinvoer (spec: Snelinvoer). Alleen namen.
+ */
+export function frequentManual(db: DB, today: string, limit = 5): string[] {
+	return db
+		.select({ name: transactions.counterparty })
+		.from(transactions)
+		.where(
+			and(
+				eq(transactions.source, 'handmatig'),
+				gte(transactions.date, addDays(today, -60)),
+				sql`${transactions.counterparty} != ''`
+			)
+		)
 		.groupBy(transactions.counterparty)
 		.orderBy(desc(sql`count(*)`), desc(sql`max(${transactions.date})`))
 		.limit(limit)

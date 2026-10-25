@@ -215,8 +215,10 @@ Het startscherm toont één getal, wat je deze maand nog vrij hebt, met daaronde
 **Startscherm**
 
 - Bovenaan: nog vrij deze maand (som van de limieten min de uitgaven en reserveringen in budgetcategorieën).
-- Per categorie een balk met tempo: uitgegeven als deel van de limiet tegenover het deel van de maand dat voorbij is. Boodschappen op 70% bij dag 19 van 31 kleurt oranje. Geplande vaste lasten en reserveringen tellen niet mee in het tempo (zie Vaste lasten).
-- Daaronder: verwachte vaste lasten die op bevestiging wachten en het aantal items in de review-inbox.
+- Per categorie een balk met tempo: uitgegeven als deel van de limiet tegenover het deel van de maand dat voorbij is. Boodschappen op 70% bij dag 19 van 31 kleurt oranje. Geplande vaste lasten en reserveringen tellen niet mee in het tempo (zie Vaste lasten). Op het startscherm staan de categorieën uit de groep Vaste lasten samen als één balk, en daarnaast de vier categorieën die het dichtst bij hun limiet zitten; alle balken staan op Budget.
+- Onder het getal een maandlijn: uitgegeven, de vaste lasten die nog komen en wat vrij is, met een streepje voor vandaag. Daaronder één zin, zoals "Nog 7 dagen, ongeveer € 68 per dag. Je ligt op schema." Per dag is wat vrij is min de vaste lasten die deze maand nog komen, gedeeld door de resterende dagen (vandaag telt mee).
+- Daaronder signaalkaartjes voor wat op je wacht: te krijgen, te controleren (de review-inbox), de saldocheck en voorstellen voor vaste lasten. Een kaartje staat er alleen als er iets is.
+- Dan verwachte vaste lasten die op bevestiging wachten, maximaal drie tegelijk, en wat later deze maand nog komt.
 
 **Snelinvoer** — één veld, lokaal geparsed, zonder AI:
 
@@ -228,7 +230,7 @@ Het startscherm toont één getal, wat je deze maand nog vrij hebt, met daaronde
 | `+15 tikkie sanne` | €15 binnen; stelt de openstaande post van Sanne voor |
 | `+25 retour zalando` | €25 terug; stelt de uitgave bij Zalando voor waar het bij hoort |
 
-**Zoals Todoist.** Terwijl je typt, herkent een lokale parser de onderdelen en kleurt ze in het invoerveld; eronder staan ze als chips. Tik op een chip om hem aan te passen, of op het kruisje om dat stuk weer gewone tekst te maken. Parsen kost minder dan een milliseconde per toetsaanslag en gebeurt zonder netwerk of AI. Opslaan werkt ook offline en synct zodra er verbinding is.
+**Zoals Todoist.** Terwijl je typt, herkent een lokale parser de onderdelen en kleurt ze in het invoerveld; eronder staan ze als chips. Tik op een chip om hem aan te passen, of op het kruisje om dat stuk weer gewone tekst te maken. Parsen kost minder dan een milliseconde per toetsaanslag en gebeurt zonder netwerk of AI. Opslaan werkt ook offline en synct zodra er verbinding is. Is het veld leeg, dan staan op de plek van de chips de tegenpartijen die je de laatste 60 dagen het vaakst zelf invoerde; een tik zet de naam in het veld, zodat je alleen het bedrag nog typt.
 
 | Herkent | Voorbeelden |
 | --- | --- |
@@ -502,7 +504,7 @@ Elk scherm staat in deze tabel. Een nieuw scherm krijgt eerst een regel hier, in
 
 | Scherm | Route | Bovenaan | Hoofdactie | Verder |
 | --- | --- | --- | --- | --- |
-| Overzicht | `/` | Nog vrij deze maand, daaronder de snelinvoer | Uitgave invoeren | Te bevestigen vaste lasten (met "gemist of opgezegd?" na 7 dagen) en terugbetalingen op hun ontvangstdag (één tik "ontvangen"), Recent (8 posten), aantal te controleren, balken per categorie |
+| Overzicht | `/` | Nog vrij deze maand met de maandlijn en één zin over het tempo, daaronder de snelinvoer | Uitgave invoeren | Signaalkaartjes (te krijgen, te controleren, saldocheck, voorstellen voor vaste lasten), alleen als er iets is; te bevestigen: vaste lasten en terugbetalingen op hun ontvangstdag (één tik "ontvangen"), de eerste drie en de rest via "Nog … meer", met "gemist of opgezegd?" (na 7 dagen) als eigen ingeklapte groep; binnenkort: verwachte posten later deze maand; Recent (8 posten, zonder verwachte posten); per categorie de vaste lasten als één balk en de vier categorieën die het dichtst bij hun limiet zitten, met een link naar Budget |
 | Transacties | `/transacties` | Zoekveld met filters op maand en categorie, die direct filteren | Zoeken | Lijst per dag met dagsaldo, aantal en totalen voor het hele filter, pagina's van 50 |
 | Transactie | `/transacties/[id]` | Tegenpartij en bedrag, groot | Opslaan | Bedrag, richting, datum, categorie, tegenpartij, notitie; voorgeschoten (gelijk of per persoon); bij een betaling de koppellijst met open posten; verwijderen met bevestiging |
 | Budget | `/budget` | Maand met vorige en volgende, totalen | Limiet instellen | Per groep een balk met tempo en een limietveld; link naar categorieën |
@@ -514,7 +516,9 @@ Elk scherm staat in deze tabel. Een nieuw scherm krijgt eerst een regel hier, in
 | Te krijgen | `/te-krijgen` | Tabs Te krijgen en Personen; totaal nog te krijgen | — | Link naar Terugbetalingen; per persoon een kaart met de open posten (waarvoor, sinds wanneer, hoe lang open, deels betaald), Tikkie-link en notitie; herinnering na 14 dagen; aanpassen en kwijtschelden in de post; onderaan "Nieuwe post" (ook te betalen). Bereikbaar via het startscherm en Meer |
 | Terugbetalingen | `/terugbetalingen` | Terug naar Te krijgen; totale achterstand, met het tegoed eronder | Ontvangen | Klaar om te bevestigen (één tik "ontvangen"); voorstellen uit de historie ("Krijg je van S. elke maand €20 voor Ziggo?"); per persoon zes maanden als vakjes met icoon en tekst (binnen, deels, open, te laat, kwijtgescholden), verwacht tegenover ontvangen en de achterstand; tik op een maand voor de betalingen, loskoppelen en kwijtschelden; tegoed als post te betalen; per gedeelde last bruto, aandelen en jouw deel. Eigen scherm en geen derde tab naast Te krijgen en Personen, omdat die op 375 px niet past. Bereikbaar via Te krijgen, het startscherm, de import en Meer |
 | Personen | `/personen` | Tabs Te krijgen en Personen | — | Lijst met wat ieder nog moet of krijgt; naam, actief en IBANs bewerken in de rij; onderaan "Nieuwe persoon" |
-| Meer | `/instellingen` | Passkeys | — | Herstelcode, actieve apparaten, rekeningen, links naar Te krijgen, personen, terugbetalingen, saldocheck, meldingen, categorieën en regels, uitloggen |
+| Meer | `/instellingen` | Tegels per onderwerp, elk met een icoon en een actuele waarde ("€ 69,30 van 2 personen") | — | Drie groepen: geld (te krijgen, terugbetalingen, vaste lasten, saldocheck), ordenen (categorieën, regels, personen) en app (meldingen, rekeningen, beveiliging, status); een tegel die aandacht vraagt krijgt een stip en een waarschuwende waarde; onderaan uitloggen |
+| Beveiliging | `/instellingen/beveiliging` | Passkeys | Passkey toevoegen | Herstelcode, actieve apparaten; na inloggen met de herstelcode kom je hier. Bereikbaar via Meer |
+| Rekeningen | `/instellingen/rekeningen` | Per rekening naam, alias en IBAN | Opslaan | Uitleg over de alias in de snelinvoer; bereikbaar via Meer |
 | Saldocheck | `/saldocheck` | Per rekening het verwachte saldo van vandaag en de uitkomst van de laatste check | Saldo invullen | Bij een verschil links naar de transacties van die rekening in die periode en naar de import; eerdere checks; startsaldo aanpassen. Bereikbaar via Meer en de herinnering op het startscherm |
 | Meldingen | `/instellingen/meldingen` | Dit apparaat: meldingen aan of uit | Meldingen aanzetten | Schakelaar per soort (geld, server, beveiliging), bedragen en namen op het vergrendelscherm, apparaten met meldingen, testmelding |
 | Status | `/instellingen/status` | Of alles werkt, en anders wat aandacht vraagt | — | Backups (Litestream, restic), server (database, schijf, starts en herstarts), fouten in 24 uur en 7 dagen, web-vitals p75 per week; bereikbaar via Meer, geen eigen tab; alleen cijfers en tijden |
@@ -522,7 +526,7 @@ Elk scherm staat in deze tabel. Een nieuw scherm krijgt eerst een regel hier, in
 
 Schermen uit latere fasen (Te krijgen, review-inbox, analyses) komen in de tabel zodra die fase begint.
 
-**Navigatie.** Een tabbalk met vijf tabs (icoon en label) onderin op een telefoon en bovenin op desktop. Hoort een onderwerp bij meerdere pagina's, zoals categorieën en regels, dan krijgen die bovenaan een tab-schakelaar met het aantal per pagina. Geen ankerlinks naar plekken op één lange pagina: wordt een pagina op 375 px breed langer dan ongeveer drie schermhoogtes met verschillende onderwerpen, dan wordt hij gesplitst.
+**Navigatie.** Een tabbalk met vijf tabs (icoon en label) onderin op een telefoon en bovenin op desktop. Hoort een onderwerp bij meerdere pagina's, zoals categorieën en regels, dan krijgen die bovenaan een tab-schakelaar met het aantal per pagina. Een pagina die geen eigen tab heeft, krijgt bovenaan een terugknop: naar de pagina waar je vandaan kwam als dat binnen de app was, anders naar een vaste ouder (Meer, Budget of Te krijgen). De tab van die ouder blijft actief. Staat er in Meer iets dat aandacht vraagt (een saldocheck, een probleem op de statuspagina, geen herstelcode), dan krijgt de tab Meer een stip. Geen ankerlinks naar plekken op één lange pagina: wordt een pagina op 375 px breed langer dan ongeveer drie schermhoogtes met verschillende onderwerpen, dan wordt hij gesplitst.
 
 **Indeling**
 
@@ -569,7 +573,9 @@ Beweging vertelt waar je bent en wat er net gebeurde. Elke beweging hieronder du
 | Keuzelijst of sheet opent | Komt van onder (telefoon) of schaalt licht op (desktop) | `@starting-style`, 180 ms |
 | Melding | Komt omhoog en verdwijnt na 4 seconden | CSS-animatie |
 | Nieuwe post in een lijst | Schuift de lijst in | Svelte-transitie, 220 ms |
-| Nog vrij deze maand | Telt mee naar het nieuwe getal | GSAP, 600 ms |
+| Nog vrij deze maand | Telt mee naar het nieuwe getal; de maandlijn eronder vult mee | GSAP, 600 ms; de maandlijn met CSS, 700 ms |
+| Van een tegel of signaalkaartje naar zijn pagina | De titel of het bedrag schuift mee naar de kop van die pagina, en terug | View Transition met een eigen `view-transition-name`, alleen tijdens de overgang |
+| Meer te bevestigen tonen | De extra posten schuiven de lijst in | Svelte-transitie, 220 ms |
 | Budgetbalk | Vult met een veer; de kleur verloopt bij de limiet | CSS, 700 ms |
 | Snelinvoer | Chips verschijnen terwijl je typt | CSS, 160 ms |
 

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { tick } from 'svelte';
 	import { enhance, type SubmitFunction } from '$app/forms';
+	import BackLink from '#lib/components/BackLink.svelte';
 	import ManageTabs from '#lib/components/ManageTabs.svelte';
 	import Select, { type SelectOption } from '#lib/components/Select.svelte';
 	import Toast from '#lib/components/Toast.svelte';
@@ -129,7 +130,8 @@
 
 <div class="page">
 	<div class="intro">
-		<h1>Categorieën</h1>
+		<BackLink parents={['/budget', '/instellingen']} />
+		<h1 data-morph-head="titel">Categorieën</h1>
 		<p class="muted">
 			Categorieën bepalen je budget. Elke categorie hoort bij een groep; buiten budget telt niet mee
 			als uitgave.
