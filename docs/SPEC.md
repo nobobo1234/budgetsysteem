@@ -154,6 +154,8 @@ Bedragen staan altijd als hele centen (integer) in euro; een vreemde valuta is e
 | budgets | maand, categorie, limiet\_cent |
 | reservations | vaste last, maand, bedrag\_cent, afschrijving (transactie, alleen in de afschrijfmaand) |
 | receipts | bestand (eigen UUID), type (JPEG / PNG), bron (app / deelmenu), upload-token, status (wordt gelezen / zeker / controleren / onzeker / fout), ruwe AI-uitvoer, gecontroleerde velden, zekerheid per veld, transactie |
+| receipt\_lines (fase 4) | bon, volgnummer, omschrijving zoals op de bon, soort (artikel / korting / bonus / statiegeld / statiegeld-retour / fooi / overig), bedrag\_cent, aantal\_milli en eenheid (stuk / kg / l; optioneel), prijs\_per\_eenheid\_cent (optioneel), hoort bij (optioneel; de artikelregel waar een korting bij hoort), product (optioneel) |
+| products (fase 4) | naam (netjes, zonder winkelafkortingen), productgroep (optioneel); aliassen in `product_aliases` (winkel, genormaliseerde omschrijving, product), elke alias per winkel bij precies één product |
 | upload\_tokens | naam van het apparaat, hash van het token, laatst gebruikt, geblokkeerd tot, ingetrokken |
 | recurring | tegenpartij, interval (maandelijks / kwartaal / halfjaarlijks / jaarlijks), verwachte dag, mediaan + min/max bedrag, soort (vast / wisselend), volgende datum, uitsmeren (ja/nee; standaard ja bij een interval langer dan een maand) |
 | owed | persoon (verwijzing naar people; leeg zolang je bij `voor 3` nog niet koos wie), bedrag\_cent, richting (te krijgen / te betalen), bron-transactie, omschrijving, datum (open sinds), aandeel + maand (optioneel, samen uniek), status (open / deels / betaald / kwijtgescholden), Tikkie-link, notitie |
@@ -477,6 +479,19 @@ De vaste analyses draaien als SQL op je eigen server en zijn direct; AI komt er 
 - Verwachting einde maand: uitgegeven + verwachte vaste lasten (bij uitgesmeerde lasten de reservering in plaats van de afschrijving) + je gemiddelde variabele uitgaven per resterende dag.
 - Jaaroverzicht, en wat een tag (bijvoorbeeld een reis) in totaal kostte.
 
+**Per product** (uit bonregels)
+
+Een bon met regels laat zien wat je kocht, niet alleen waar. Dat is vooral nuttig bij de supermarkt.
+
+- **Bonregels als eigen tabel.** Zodra een bon verwerkt is (zeker, controleren of na de review-inbox), gaan de gecontroleerde regels naar `receipt_lines`. Bonnen van voor fase 4 komen er één keer in via een migratie uit de bewaarde gecontroleerde velden. Een correctie van een regel in de interface past de tabel aan, niet de ruwe AI-uitvoer.
+- **Aantal.** Haiku leest per regel ook het aantal en de prijs per eenheid als die op de bon staan ("2 x 1,29", "0,512 kg x 2,49/kg"). Het aantal staat als hele duizendsten (`aantal_milli`), zodat gewicht past zonder kommagetallen. Code controleert dat aantal × prijs per eenheid gelijk is aan het regelbedrag (tolerantie 1 cent). Klopt dat niet, dan blijven aantal en prijs per eenheid leeg; het regelbedrag telt gewoon mee.
+- **Normalisatie.** Elke keten kort anders af, dus een omschrijving wordt per winkel herkend. Code normaliseert eerst: hoofdletters, spaties, leestekens, en gewicht of inhoud apart ("HALFV MLK 1L"). Een bekende alias (winkel + genormaliseerde omschrijving) wijst direct naar een product. Een nieuwe omschrijving krijgt een voorstel voor een nette naam: Haiku geeft die in dezelfde aanroep mee per regel, uit de foto zelf, zodat er geen extra data naar de API gaat. Het voorstel is onbetrouwbare invoer (Zod, maximale lengte, nooit als HTML) en maakt een nieuw product of koppelt aan een bestaand product met dezelfde naam. Producten zijn later samen te voegen of te hernoemen; de aliassen gaan mee.
+- **Kortingen.** Een korting of bonus die op de bon direct onder een artikel staat, hoort bij dat artikel (`hoort bij`), en het overzicht toont dan de netto prijs. Is dat niet duidelijk, dan blijft de korting een losse regel op bonniveau en telt hij niet bij een product.
+- **Overzicht per product.** Wat je het vaakst koopt (aantal keer en totaal per maand of jaar), het prijsverloop per product per winkel (prijs per eenheid over tijd, met hetzelfde prijsverhogingssignaal als bij vaste lasten), uitgaven per productgroep binnen een categorie zoals Boodschappen, en wanneer je iets voor het laatst kocht.
+- **Dekking.** Het overzicht ziet alleen aankopen met een bon die regels heeft. Daarom staat erbij welk deel van de uitgaven in die categorie een bon met regels heeft ("68% van je boodschappen deze maand"), zodat een laag getal niet als weinig uitgeven leest.
+- **Testen.** De Haiku-eval meet ook de regels: hoe vaak alle regels gevuld zijn, of de som klopt, en of aantal en prijs per eenheid goed zijn. Unit-tests dekken de normalisatie, de controle op aantal × prijs en het toewijzen van kortingen.
+- **Privacy.** Productdata blijft op de server. Latere AI-analyses krijgen hooguit totalen per product of productgroep, nooit bonfoto's of IBANs.
+
 **Met AI** (later)
 
 - Maandsamenvatting: wat viel op tegenover vorige maanden. Het model krijgt alleen totalen per categorie en tegenpartij, geen IBANs.
@@ -769,7 +784,7 @@ Bij elke fase hoort naast "Klaar als" ook Klaar voor UI (zie Design en interacti
    - Daarna, als laatste blok van deze fase: **gedeelde vaste lasten** (personen, aandelen, terugbetalingen koppelen en het overzicht). Het bouwt direct op vaste lasten en Te krijgen, en levert elke maand iets op; het hoort niet in het klaar-criterium hierboven, zodat dat niet wacht. Tot dan telt de wifi bruto mee. Klaar als: twee maanden lang per huisgenoot klopt wat er binnen is, met alleen bevestigen als handwerk.
 3. **Bonnetjes.** Eerst het testplan op je eigen bonnen, dan de verwerking, de review-inbox, de koppellijst en de opdracht voor het deelmenu. Telemetrie: per Haiku-aanroep tokens, kosten, duur, uitkomst en of je velden achteraf corrigeerde.
    - Klaar als: de test het doel haalt, of we bewust kiezen voor altijd reviewen.
-4. **Analyses.** Grafieken, trends, verwachting einde maand, jaaroverzicht, tags. Telemetrie: je eigen gebruik (dagen met invoer, tijd van openen tot opslaan).
+4. **Analyses.** Grafieken, trends, verwachting einde maand, jaaroverzicht, tags, en productanalyse uit bonregels: een aparte tabel voor bonregels, normalisatie van productnamen, aantal en prijs per eenheid, en een overzicht per product (zie Analyses → Per product). Telemetrie: je eigen gebruik (dagen met invoer, tijd van openen tot opslaan).
 5. **AI en extra's.** Maandsamenvatting, vraagveld, MCP-server, garantie-herinneringen.
 
 Het testplan voor de bonnetjes kan parallel met fase 1: je verzamelt de bonnen toch al.
