@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { refreshAll } from '$app/navigation';
 	import { flush } from '#lib/offline/queue.ts';
@@ -40,6 +41,13 @@
 
 	$effect(() => {
 		void trySync();
+	});
+
+	// Web-vitals pas laden als de browser even niets te doen heeft, buiten de eerste bundel
+	onMount(() => {
+		const start = () => void import('#lib/vitals.ts').then((m) => m.startVitals());
+		if ('requestIdleCallback' in window) requestIdleCallback(start, { timeout: 3000 });
+		else setTimeout(start, 1000);
 	});
 </script>
 

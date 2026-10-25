@@ -13,6 +13,8 @@ export default ts.config(
 			'drizzle/',
 			'test-results/',
 			'.e2e/',
+			'.lhci/',
+			'.lighthouseci/',
 			'playwright-report/',
 			'history/',
 			'data/'

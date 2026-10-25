@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { count, login } from './helpers.ts';
+import { count, countTelemetry, login } from './helpers.ts';
 
 test.beforeEach(async ({ context }) => {
 	await login(context);
@@ -107,7 +107,8 @@ for (const path of [
 	'/import',
 	'/categorieen',
 	'/regels',
-	'/instellingen'
+	'/instellingen',
+	'/instellingen/status'
 ]) {
 	test(`${path} past op een telefoonscherm`, async ({ page }) => {
 		await page.goto(path);
@@ -200,3 +201,25 @@ test(
 		expect(total).toBeLessThan(100 * 1024);
 	}
 );
+
+// Web-vitals worden na de eerste weergave geladen, gaan bij het verlaten van de pagina naar
+// /api/vitals en staan daarna als p75 per week op de statuspagina.
+test('web-vitals komen op de statuspagina', async ({ page }) => {
+	const before = countTelemetry('SELECT count(*) AS n FROM web_vitals');
+	await page.goto('/');
+	await page.waitForLoadState('networkidle');
+	// requestIdleCallback heeft een timeout van 3 s; zonder (WebKit) is het 1 s
+	await page.waitForTimeout(3500);
+	await page.goto('/budget');
+	await expect
+		.poll(() => countTelemetry('SELECT count(*) AS n FROM web_vitals'))
+		.toBeGreaterThan(before);
+
+	await page.goto('/instellingen');
+	await page.getByRole('link', { name: 'Status' }).click();
+	await expect(page.getByRole('heading', { level: 1 })).toHaveText('Status');
+	await expect(page.getByRole('heading', { name: 'Backups' })).toBeVisible();
+	const vitals = page.getByRole('table');
+	await expect(vitals).toBeVisible();
+	await expect(vitals.getByRole('row')).not.toHaveCount(1);
+});

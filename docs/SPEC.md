@@ -499,7 +499,8 @@ Elk scherm staat in deze tabel. Een nieuw scherm krijgt eerst een regel hier, in
 | Categorieën | `/categorieen` | Tabs Categorieën en Regels | Nieuwe categorie | Per groep een kaart; bewerken in de rij (naam, groep, telt mee); gearchiveerd ingeklapt |
 | Regels | `/regels` | Tabs Categorieën en Regels | Nieuwe regel | Lijst als zin ("Tegenpartij bevat … → categorie") met filter; nieuwe regel als "Als … dan …", prioriteit ingeklapt; onderaan "Regels opnieuw toepassen" |
 | Import | `/import` | Sleepvak voor het bankbestand | Importeren | Overzicht na import, tegenpartijen zonder categorie met één klik een regel, eerdere imports |
-| Meer | `/instellingen` | Passkeys | — | Herstelcode, actieve apparaten, rekeningen, links naar categorieën en regels, uitloggen |
+| Meer | `/instellingen` | Passkeys | — | Herstelcode, actieve apparaten, rekeningen, links naar categorieën, regels en status, uitloggen |
+| Status | `/instellingen/status` | Of alles werkt, en anders wat aandacht vraagt | — | Backups (Litestream, restic), server (database, schijf, starts en herstarts), fouten in 24 uur en 7 dagen, web-vitals p75 per week; bereikbaar via Meer, geen eigen tab; alleen cijfers en tijden |
 | Inloggen | `/login` | Titel en uitleg | Inloggen met passkey | Herstelcode als terugval |
 
 Schermen uit latere fasen (vaste lasten, Te krijgen, review-inbox, analyses) komen in de tabel zodra die fase begint.

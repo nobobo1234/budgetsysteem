@@ -185,6 +185,7 @@
 		<h2>Overig</h2>
 		<a href="/categorieen">Categorieën</a>
 		<a href="/regels">Regels</a>
+		<a href="/instellingen/status">Status</a>
 		<form method="POST" action="?/logout">
 			<button class="button secondary">Uitloggen</button>
 		</form>

@@ -10,9 +10,11 @@ const closed = [
 	['GET', '/categorieen'],
 	['GET', '/regels'],
 	['GET', '/instellingen'],
+	['GET', '/instellingen/status'],
 	['GET', '/__data.json'],
 	['GET', '/bestaat-niet'],
 	['POST', '/api/transactions'],
+	['POST', '/api/vitals'],
 	['POST', '/api/auth/passkeys/options'],
 	['POST', '/instellingen?/logout']
 ] as const;

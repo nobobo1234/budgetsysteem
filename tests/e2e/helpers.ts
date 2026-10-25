@@ -45,3 +45,12 @@ export function count(sql: string, ...params: unknown[]): number {
 	db.close();
 	return row.n;
 }
+
+/** Telling in de telemetrie-database (standaard naast de hoofddatabase). */
+export function countTelemetry(sql: string, ...params: unknown[]): number {
+	const db = new Database('.e2e/telemetry.db', { fileMustExist: true });
+	db.pragma('busy_timeout = 5000');
+	const row = db.prepare(sql).get(...params) as { n: number };
+	db.close();
+	return row.n;
+}
