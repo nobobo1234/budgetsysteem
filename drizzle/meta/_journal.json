@@ -19,8 +19,15 @@
     {
       "idx": 2,
       "version": "6",
-      "when": 1792862553334,
-      "tag": "0002_te_krijgen",
+      "when": 1792862764755,
+      "tag": "0002_saldocheck",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1792909463862,
+      "tag": "0003_te_krijgen",
       "breakpoints": true
     }
   ]

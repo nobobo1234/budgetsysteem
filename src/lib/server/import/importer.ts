@@ -3,7 +3,9 @@ import { and, eq, isNull, like, notExists, or, sql } from 'drizzle-orm';
 import { matchRule, sortRules } from '../../rules.ts';
 import { normalizeCounterparty } from '../../text.ts';
 import { keywordCategory } from '../../quickentry/resolve.ts';
+import { addDays } from '../../dates.ts';
 import { recordChange } from '../audit.ts';
+import { anchorFromImport } from '../balance.ts';
 import type { Conn, DB } from '../db/index.ts';
 import {
 	accounts,
@@ -15,7 +17,7 @@ import {
 } from '../db/schema.ts';
 import { INTERNAL_TRANSFER } from '../db/seed.ts';
 import { mccCategory, parseCardPayment } from './card.ts';
-import { ImportError, type ImportFormat, type ImportRecord } from './types.ts';
+import { ImportError, type ImportFormat, type ImportRecord, type OpeningBalance } from './types.ts';
 
 export interface UncategorizedGroup {
 	/** Voorstel voor het regelpatroon: de genormaliseerde tegenpartij */
@@ -36,6 +38,8 @@ export interface ImportSummary {
 	periodStart: string | null;
 	periodEnd: string | null;
 	uncategorized: UncategorizedGroup[];
+	/** Startsaldo's die deze import vastlegde, voor de saldocheck */
+	anchors: { accountName: string; date: string; amountCents: number }[];
 }
 
 const MAX_RECORDS = 100_000;
@@ -99,12 +103,14 @@ function unreliableReferences(records: ImportRecord[]): Set<string> {
  * rekening, datum, bedrag, tegen-IBAN, omschrijving en het hoeveelste exemplaar in het bestand.
  * Met `from` worden alleen boekingen vanaf die datum geïmporteerd; de parser heeft het hele
  * bestand dan al gelezen, zodat bijvoorbeeld de wisselkoersen van Revolut kloppen.
+ * Noemt het bestand een saldo (`balances`), dan wordt dat het startsaldo van een rekening die er
+ * nog geen heeft: het saldo vlak vóór de eerste geïmporteerde boeking.
  */
 export function importRecords(
 	db: DB,
 	all: ImportRecord[],
 	format: ImportFormat,
-	{ from }: { from?: string } = {}
+	{ from, balances = [] }: { from?: string; balances?: OpeningBalance[] } = {}
 ): ImportSummary {
 	if (all.length === 0) throw new ImportError('Het bestand bevat geen boekingen.');
 	if (all.length > MAX_RECORDS) throw new ImportError('Te veel boekingen in één bestand.');
@@ -224,6 +230,26 @@ export function importRecords(
 			.set({ newCount, duplicateCount, periodStart, periodEnd })
 			.where(eq(importBatches.id, batch.id))
 			.run();
+
+		const anchors: ImportSummary['anchors'] = [];
+		for (const b of balances) {
+			const accountId = accountIds.get(b.accountKind ?? b.accountIban);
+			if (!accountId) continue;
+			// Met een begindatum: het saldo op die dag, dus plus wat er in het bestand eerder geboekt is
+			const start = from && from > b.firstDate ? from : b.firstDate;
+			const earlier = all
+				.filter((r) => accountKey(r) === (b.accountKind ?? b.accountIban) && r.date < start)
+				.reduce((sum, r) => sum + r.amountCents, 0);
+			const anchor = { accountId, date: addDays(start, -1), amountCents: b.amountCents + earlier };
+			if (anchorFromImport(tx, { ...anchor, importBatchId: batch.id })) {
+				const name = tx
+					.select({ name: accounts.name })
+					.from(accounts)
+					.where(eq(accounts.id, accountId))
+					.get()!.name;
+				anchors.push({ accountName: name, date: anchor.date, amountCents: anchor.amountCents });
+			}
+		}
 		recordChange(tx, 'import', 'import_batches', batch.id, null, { newCount, duplicateCount });
 
 		return {
@@ -233,7 +259,8 @@ export function importRecords(
 			earlierCount,
 			periodStart,
 			periodEnd,
-			uncategorized: uncategorizedGroups(tx)
+			uncategorized: uncategorizedGroups(tx),
+			anchors
 		};
 	});
 }

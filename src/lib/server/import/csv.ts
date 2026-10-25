@@ -2,7 +2,13 @@ import { isValidDate } from '../../dates.ts';
 import { parseDecimal } from '../../money.ts';
 import { normalizeIban } from '../../text.ts';
 import { counterpartyOrMerchant } from './card.ts';
-import { ImportError, MAX_IMPORT_BYTES, type ImportRecord } from './types.ts';
+import {
+	ImportError,
+	MAX_IMPORT_BYTES,
+	type ImportRecord,
+	type OpeningBalance,
+	type ParsedBankFile
+} from './types.ts';
 
 // Terugvaloptie: de CSV-download van Mijn SNS. Kolommen volgens "Uitleg transactieoverzicht in
 // Mijn SNS" (2025). Oudere exports hebben drie extra adreskolommen; die herkennen we aan het aantal.
@@ -69,6 +75,8 @@ interface Layout {
 	amount: number;
 	sequence: number;
 	description: number;
+	/** "Saldo voor boeking"; zonder die kolom halen we geen startsaldo uit het bestand */
+	balance?: number;
 }
 
 // Nieuwe layout (17 kolommen): Datum, Je rekening, Van/naar, Naam, Valuta saldo,
@@ -81,7 +89,8 @@ const LAYOUT_17: Layout = {
 	name: 3,
 	amount: 7,
 	sequence: 12,
-	description: 14
+	description: 14,
+	balance: 5
 };
 // Oude layout (19 kolommen): met adres, postcode en plaats na de naam.
 const LAYOUT_19: Layout = {
@@ -91,10 +100,11 @@ const LAYOUT_19: Layout = {
 	name: 3,
 	amount: 10,
 	sequence: 15,
-	description: 17
+	description: 17,
+	balance: 8
 };
 
-const HEADER_NAMES: Record<keyof Layout, string[]> = {
+const HEADER_NAMES: Record<Exclude<keyof Layout, 'balance'>, string[]> = {
 	date: ['datum', 'boekdatum'],
 	account: ['je rekening', 'rekening'],
 	counterIban: ['van / naar', 'van/naar', 'tegenrekening'],
@@ -112,10 +122,49 @@ function layoutFromHeader(header: string[]): Layout | null {
 		if (idx === -1) return null;
 		out[key] = idx;
 	}
+	const balance = lower.indexOf('saldo voor boeking');
+	if (balance !== -1) out.balance = balance;
 	return out as Layout;
 }
 
+/**
+ * Startsaldo per rekening uit "Saldo voor boeking". De volgorde binnen een dag staat niet vast,
+ * dus volgen we de keten: elke boeking begint bij het saldo waar de vorige eindigde. Is die keten
+ * niet sluitend te maken, dan geven we geen saldo (de import zelf gaat gewoon door).
+ */
+function openingBalances(rows: { record: ImportRecord; before: number }[]): OpeningBalance[] {
+	const out: OpeningBalance[] = [];
+	for (const [accountIban, own] of Map.groupBy(rows, (r) => r.record.accountIban)) {
+		const days = [...Map.groupBy(own, (r) => r.record.date)].sort(([a], [b]) => a.localeCompare(b));
+		const [firstDate, firstDay] = days[0]!;
+		// Het begin van de eerste dag: een saldo vóór een boeking waar geen andere boeking op uitkomt
+		const starts = firstDay.filter(
+			(r) => !firstDay.some((o) => o !== r && o.before + o.record.amountCents === r.before)
+		);
+		if (starts.length !== 1) continue;
+		let balance = starts[0]!.before;
+		const opening = balance;
+		const chained = days.every(([, day]) => {
+			const left = [...day];
+			while (left.length > 0) {
+				const next = left.findIndex((r) => r.before === balance);
+				if (next === -1) return false;
+				balance += left[next]!.record.amountCents;
+				left.splice(next, 1);
+			}
+			return true;
+		});
+		if (chained) out.push({ accountIban, firstDate, amountCents: opening });
+	}
+	return out;
+}
+
 export function parseSnsCsv(text: string): ImportRecord[] {
+	return readSnsCsv(text).records;
+}
+
+/** Leest boekingen en, als de kolom "Saldo voor boeking" er is, het startsaldo per rekening. */
+export function readSnsCsv(text: string): ParsedBankFile {
 	if (Buffer.byteLength(text, 'utf8') > MAX_IMPORT_BYTES) {
 		throw new ImportError('Het bestand is groter dan 20 MB.');
 	}
@@ -133,6 +182,8 @@ export function parseSnsCsv(text: string): ImportRecord[] {
 	}
 
 	const records: ImportRecord[] = [];
+	const withBalance: { record: ImportRecord; before: number }[] = [];
+	let everyBalance = true;
 	for (const row of body) {
 		const l = layout ?? (row.length >= 19 ? LAYOUT_19 : row.length >= 17 ? LAYOUT_17 : null);
 		if (!l) throw new ImportError('Onbekende CSV-indeling; gebruik bij voorkeur CAMT.053.');
@@ -145,7 +196,7 @@ export function parseSnsCsv(text: string): ImportRecord[] {
 		const sequence = (row[l.sequence] ?? '').trim();
 		const counterIban = normalizeIban(row[l.counterIban] ?? '');
 		const description = (row[l.description] ?? '').trim().slice(0, 500);
-		records.push({
+		const record: ImportRecord = {
 			accountIban,
 			date,
 			amountCents: amount,
@@ -154,7 +205,12 @@ export function parseSnsCsv(text: string): ImportRecord[] {
 			counterIban: counterIban || null,
 			description,
 			bankReference: sequence ? `${accountIban}:${sequence}` : null
-		});
+		};
+		records.push(record);
+		const before =
+			l.balance === undefined ? null : parseDecimal((row[l.balance] ?? '').replace(',', '.'));
+		if (before === null) everyBalance = false;
+		else withBalance.push({ record, before });
 	}
-	return records;
+	return { records, balances: everyBalance ? openingBalances(withBalance) : [] };
 }

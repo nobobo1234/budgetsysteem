@@ -23,6 +23,40 @@ export interface ImportRecord {
 	needsReview?: boolean;
 }
 
+/**
+ * Saldo van een eigen rekening volgens het bankbestand, vlak vóór de eerste boeking erin.
+ * De saldocheck gebruikt het als startsaldo (anker); zie `src/lib/balance.ts`.
+ */
+export interface OpeningBalance {
+	/** Zoals bij `ImportRecord`: leeg met `accountKind` als de export geen IBAN noemt */
+	accountIban: string;
+	accountKind?: 'revolut';
+	/** Datum van de eerste boeking in het bestand; het saldo geldt aan het begin van die dag */
+	firstDate: string;
+	amountCents: number;
+}
+
+/** Wat een parser uit een bankbestand haalt. Een saldo alleen als het bestand het noemt én het klopt. */
+export interface ParsedBankFile {
+	records: ImportRecord[];
+	balances: OpeningBalance[];
+}
+
+/** Startsaldo = saldo na de laatste boeking min alle boekingen; per rekening, met de vroegste datum. */
+export function openingFromClosing(
+	records: ImportRecord[],
+	closing: number,
+	key: Pick<OpeningBalance, 'accountIban' | 'accountKind'>
+): OpeningBalance | null {
+	const own = records.filter(
+		(r) => r.accountIban === key.accountIban && r.accountKind === key.accountKind
+	);
+	if (own.length === 0) return null;
+	const firstDate = own.reduce((min, r) => (r.date < min ? r.date : min), own[0]!.date);
+	const total = own.reduce((sum, r) => sum + r.amountCents, 0);
+	return { ...key, firstDate, amountCents: closing - total };
+}
+
 export class ImportError extends Error {
 	constructor(message: string) {
 		super(message);

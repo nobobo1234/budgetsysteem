@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { centsToInput, formatCents, MAX_CENTS, parseAmount, parseDecimal } from './money.ts';
+import {
+	centsToInput,
+	formatCents,
+	MAX_CENTS,
+	parseAmount,
+	parseDecimal,
+	parseSignedAmount
+} from './money.ts';
 
 describe('parseAmount', () => {
 	it.each([
@@ -47,6 +54,23 @@ describe('parseAmount', () => {
 
 	it('weigert lange invoer zonder te parsen', () => {
 		expect(parseAmount('1'.repeat(17))).toBeNull();
+	});
+});
+
+describe('parseSignedAmount', () => {
+	it.each([
+		['1.234,56', 123456],
+		['-12,50', -1250],
+		['−12,50', -1250],
+		['- 3', -300],
+		[' 0 ', 0],
+		['-0', 0]
+	])('%s wordt %i cent', (input, cents) => {
+		expect(parseSignedAmount(input)).toBe(cents);
+	});
+
+	it.each(['', '-', '--5', '+5', '12,345', '5-', '1e3'])('weigert %s', (input) => {
+		expect(parseSignedAmount(input)).toBeNull();
 	});
 });
 

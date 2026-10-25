@@ -185,6 +185,7 @@
 		<h2>Overig</h2>
 		<a href="/te-krijgen">Te krijgen</a>
 		<a href="/personen">Personen</a>
+		<a href="/saldocheck">Saldocheck</a>
 		<a href="/categorieen">Categorieën</a>
 		<a href="/regels">Regels</a>
 		<form method="POST" action="?/logout">

@@ -109,7 +109,8 @@ for (const path of [
 	'/regels',
 	'/instellingen',
 	'/te-krijgen',
-	'/personen'
+	'/personen',
+	'/saldocheck'
 ]) {
 	test(`${path} past op een telefoonscherm`, async ({ page }) => {
 		await page.goto(path);
