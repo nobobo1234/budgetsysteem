@@ -2,6 +2,7 @@ import { toIsoDate } from '#lib/dates.ts';
 import { monthOverview } from '#lib/server/budgets.ts';
 import { quickEntryContext } from '#lib/server/context.ts';
 import { db } from '#lib/server/db/index.ts';
+import { owedSummary } from '#lib/server/owed.ts';
 import { listTransactions, reviewCount } from '#lib/server/transactions.ts';
 import type { PageServerLoad } from './$types';
 
@@ -15,6 +16,7 @@ export const load: PageServerLoad = ({ setHeaders }) => {
 		overview: monthOverview(db(), month, today),
 		recent: listTransactions(db(), { limit: 8 }),
 		reviewCount: reviewCount(db()),
+		owed: owedSummary(db()),
 		context: quickEntryContext(db())
 	};
 };

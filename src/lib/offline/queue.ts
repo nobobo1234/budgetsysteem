@@ -14,6 +14,8 @@ export interface QueuedTransaction {
 	origCurrency: 'USD' | null;
 	note: string;
 	share: { people: number; with: string[] } | null;
+	/** Ontvangen of terugbetaald: de gekozen post. Ontbreekt bij posten van vóór Te krijgen. */
+	settle?: { owedId: string } | null;
 }
 
 export interface OutboxItem {

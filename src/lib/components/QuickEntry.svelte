@@ -3,6 +3,7 @@
 	import Select from '#lib/components/Select.svelte';
 	import { groupColor } from '#lib/categoryColor.ts';
 	import { formatShortDate, toIsoDate } from '#lib/dates.ts';
+	import { splitEqually } from '#lib/owed.ts';
 	import { centsToInput, formatCents, parseAmount } from '#lib/money.ts';
 	import { enqueue, type QueuedTransaction } from '#lib/offline/queue.ts';
 	import { MAX_INPUT, parseQuickEntry, type SpanKind } from '#lib/quickentry/parser.ts';
@@ -29,6 +30,10 @@
 	let categoryOverride = $state<string | null | undefined>(undefined);
 	let accountOverride = $state<string | undefined>(undefined);
 	let literalCounterparty = $state(false);
+	// `voor 3` zonder (alle) namen: wie je erbij tikt
+	let picked = $state<string[]>([]);
+	// Gekozen post in de koppellijst; undefined is de voorselectie
+	let chosenPost = $state<string | null | undefined>(undefined);
 	let saving = $state(false);
 	let input: HTMLInputElement;
 	let mirror: HTMLDivElement;
@@ -37,10 +42,43 @@
 
 	const today = $derived(toIsoDate(new Date()));
 	const aliases = $derived(context.accounts.map((a) => a.alias));
-	const parsed = $derived(parseQuickEntry(value, today, { accountAliases: aliases, plain }));
+	const peopleNames = $derived((context.people ?? []).map((p) => p.name));
+	const parsed = $derived(
+		parseQuickEntry(value, today, { accountAliases: aliases, plain, people: peopleNames })
+	);
 	const draft = $derived(resolveEntry(parsed, context));
 
-	const categoryId = $derived(categoryOverride !== undefined ? categoryOverride : draft.categoryId);
+	// Delen: namen uit de tekst, aangevuld met wie je aantikt, nooit meer dan er plek is
+	const sharing = $derived(draft.people > 1 && draft.amountCents !== null);
+	const withNames = $derived(
+		sharing
+			? [...draft.sharedWith, ...picked.filter((n) => !draft.sharedWith.includes(n))].slice(
+					0,
+					draft.people - 1
+				)
+			: []
+	);
+	const openSeats = $derived(sharing ? draft.people - 1 - withNames.length : 0);
+	const pickable = $derived(
+		peopleNames.filter((n) => !draft.sharedWith.some((w) => w.toLowerCase() === n.toLowerCase()))
+	);
+	const shareLine = $derived.by(() => {
+		if (!sharing || draft.amountCents === null) return [];
+		const { others } = splitEqually(-draft.amountCents, draft.people);
+		return others.map((cents, i) => ({ name: withNames[i] ?? null, cents }));
+	});
+
+	const post = $derived(chosenPost === undefined ? draft.preselect : chosenPost);
+	const linking = $derived(post !== null && draft.candidates.some((c) => c.id === post));
+	const refundId = $derived(context.categories.find((c) => c.name === 'Terugbetaling')?.id ?? null);
+
+	const categoryId = $derived(
+		categoryOverride !== undefined
+			? categoryOverride
+			: linking && parsed.direction === 'in' && !draft.categoryId
+				? refundId
+				: draft.categoryId
+	);
 	const accountId = $derived(accountOverride ?? draft.accountId);
 	const counterparty = $derived(literalCounterparty ? parsed.text.trim() : draft.counterparty);
 	const eurCents = $derived(eurInput.trim() ? parseAmount(eurInput.trim()) : null);
@@ -78,7 +116,13 @@
 		categoryOverride = undefined;
 		accountOverride = undefined;
 		literalCounterparty = false;
+		picked = [];
+		chosenPost = undefined;
 		plain.clear();
+	}
+
+	function togglePick(name: string) {
+		picked = picked.includes(name) ? picked.filter((n) => n !== name) : [...picked, name];
 	}
 
 	function makePlain(kind: SpanKind) {
@@ -104,7 +148,7 @@
 			amountCents,
 			date: parsed.date,
 			counterparty: counterparty.slice(0, 100),
-			description: '',
+			description: draft.description.slice(0, 300),
 			categoryId,
 			accountId,
 			origAmountCents: draft.origAmountCents,
@@ -112,8 +156,9 @@
 			note: '',
 			share:
 				draft.people > 1 && amountCents < 0
-					? { people: draft.people, with: draft.sharedWith.slice(0, 20) }
-					: null
+					? { people: draft.people, with: withNames.slice(0, 20) }
+					: null,
+			settle: linking && amountCents !== 0 && post ? { owedId: post } : null
 		};
 		try {
 			await enqueue(item);
@@ -130,7 +175,14 @@
 		datum: 'Datum',
 		categorie: 'Categorie',
 		rekening: 'Rekening',
-		delen: 'Delen'
+		delen: 'Delen',
+		persoon: 'Persoon'
+	};
+
+	const labelText = {
+		waarschijnlijk: 'Waarschijnlijk',
+		mogelijk: 'Mogelijk',
+		onwaarschijnlijk: 'Onwaarschijnlijk'
 	};
 </script>
 
@@ -178,7 +230,7 @@
 			</span>
 		{/if}
 
-		{#if counterparty}
+		{#if counterparty && !parsed.person}
 			<button
 				type="button"
 				class="chip naam"
@@ -211,6 +263,19 @@
 			</span>
 		{/if}
 
+		{#if parsed.person}
+			<span class="chip persoon">
+				<span class="visually-hidden">{kindLabel.persoon}:</span>
+				{parsed.person}
+				<button
+					type="button"
+					class="x"
+					aria-label="Persoon weer tekst maken"
+					onclick={() => makePlain('persoon')}>×</button
+				>
+			</span>
+		{/if}
+
 		{#if parsed.dateExplicit}
 			<span class="chip datum">
 				{formatShortDate(parsed.date)}
@@ -223,16 +288,87 @@
 			</span>
 		{/if}
 
-		{#if draft.people > 1 && draft.myShareCents !== null}
+		{#if sharing && draft.myShareCents !== null}
 			<span class="chip delen">
 				Jouw deel <span class="num">{formatCents(-draft.myShareCents)}</span>
-				{#if draft.sharedWith.length}· met {draft.sharedWith.join(', ')}{:else}· {draft.people} personen{/if}
+				{#if withNames.length}· met {withNames.join(', ')}{:else}· {draft.people} personen{/if}
 				<button type="button" class="x" aria-label="Niet delen" onclick={() => makePlain('delen')}
 					>×</button
 				>
 			</span>
 		{/if}
 	</div>
+
+	{#if sharing}
+		<div class="share" role="group" aria-label="Voorgeschoten">
+			<p class="share-line">
+				{#each shareLine as s, i (i)}
+					<span>
+						{s.name ?? 'Nog onbekend'} <span class="num">{formatCents(s.cents)}</span>
+					</span>
+				{/each}
+			</p>
+			{#if openSeats > 0 || picked.length > 0}
+				<div class="who">
+					<span class="muted"
+						>{openSeats > 0
+							? `Wie nog meer? ${openSeats === 1 ? 'Eén plek' : `${openSeats} plekken`} over`
+							: 'Met'}</span
+					>
+					{#each pickable as name (name)}
+						{@const on = picked.includes(name)}
+						<button
+							type="button"
+							class="pick"
+							aria-pressed={on}
+							disabled={!on && openSeats === 0}
+							onclick={() => togglePick(name)}>{name}</button
+						>
+					{/each}
+					{#if pickable.length === 0}
+						<span class="muted">Typ <strong>met sanne</strong>, of kies later bij Te krijgen.</span>
+					{/if}
+				</div>
+			{/if}
+		</div>
+	{/if}
+
+	{#if draft.candidates.length > 0}
+		<fieldset class="match">
+			<legend>
+				{parsed.direction === 'in' ? 'Ontvangen voor' : 'Terugbetaald voor'}
+			</legend>
+			{#each draft.candidates as c (c.id)}
+				<label class="option">
+					<input
+						type="radio"
+						name="quick-post"
+						value={c.id}
+						checked={post === c.id}
+						onchange={() => (chosenPost = c.id)}
+					/>
+					<span class="who-what">
+						<strong>{c.personName}</strong>
+						<span class="muted">{c.description || 'Post'} · {formatShortDate(c.date)}</span>
+					</span>
+					<span class="side">
+						<span class="num">{formatCents(c.outstandingCents)}</span>
+						<span class={['tag', c.label]}>{labelText[c.label]}</span>
+					</span>
+				</label>
+			{/each}
+			<label class="option">
+				<input
+					type="radio"
+					name="quick-post"
+					value=""
+					checked={!linking}
+					onchange={() => (chosenPost = null)}
+				/>
+				<span class="who-what"><strong>Niet koppelen</strong></span>
+			</label>
+		</fieldset>
+	{/if}
 
 	{#if draft.origCurrency === 'USD'}
 		<label class="eur">
@@ -321,6 +457,9 @@
 	.delen {
 		--chip-bg: var(--chip-delen);
 	}
+	.persoon {
+		--chip-bg: var(--chip-persoon);
+	}
 	.naam {
 		--chip-bg: var(--surface-2);
 	}
@@ -365,6 +504,122 @@
 		background: transparent;
 		font-size: 1.1rem;
 		cursor: pointer;
+	}
+
+	.share {
+		display: grid;
+		gap: 8px;
+		font-size: 0.95rem;
+	}
+
+	.share-line {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 4px 14px;
+	}
+
+	.who {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 6px;
+	}
+
+	.pick {
+		min-height: var(--tap);
+		padding: 0 14px;
+		border: 1px solid var(--line);
+		border-radius: 999px;
+		background: var(--surface);
+		font-weight: 550;
+		cursor: pointer;
+		transition: transform 160ms var(--ease-spring);
+	}
+
+	.pick:active {
+		transform: scale(0.96);
+	}
+
+	.pick[aria-pressed='true'] {
+		border-color: transparent;
+		background: var(--chip-delen);
+	}
+
+	.pick:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.match {
+		display: grid;
+		gap: 2px;
+		margin: 0;
+		padding: 12px;
+		border: 0;
+		border-radius: var(--radius);
+		background: var(--surface);
+		animation: chip-in 160ms var(--ease-out);
+	}
+
+	.match legend {
+		float: left;
+		width: 100%;
+		margin-bottom: 4px;
+		padding: 0;
+		font-weight: 600;
+	}
+
+	.option {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		min-height: 52px;
+		padding: 4px 6px;
+		border-radius: var(--radius-sm);
+		cursor: pointer;
+	}
+
+	.option:has(input:checked) {
+		background: var(--accent-soft);
+	}
+
+	.option input {
+		flex: none;
+		width: 20px;
+		height: 20px;
+		min-height: 0;
+		margin: 0;
+		accent-color: var(--accent);
+	}
+
+	.who-what {
+		flex: 1;
+		min-width: 0;
+		display: grid;
+		line-height: 1.3;
+	}
+
+	.who-what .muted {
+		font-size: 0.88rem;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.side {
+		display: grid;
+		justify-items: end;
+		gap: 2px;
+	}
+
+	.tag {
+		font-size: 0.78rem;
+		font-weight: 600;
+		color: var(--muted);
+	}
+
+	.tag.waarschijnlijk {
+		color: var(--accent-strong);
 	}
 
 	.eur {

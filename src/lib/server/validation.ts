@@ -71,3 +71,21 @@ export const transactionPatchSchema = z
 	.strict();
 
 export type TransactionPatch = z.infer<typeof transactionPatchSchema>;
+
+/** Een https-link (zoals een Tikkie), of leeg. Nooit `javascript:` of iets anders dan https. */
+export const optionalHttpsUrl = z
+	.string()
+	.trim()
+	.max(300)
+	.refine((s) => {
+		if (s === '') return true;
+		try {
+			const url = new URL(s);
+			return url.protocol === 'https:' && url.username === '' && url.password === '';
+		} catch {
+			return false;
+		}
+	}, 'Alleen een https-link')
+	.transform((s) => (s === '' ? null : s));
+
+export const personName = name;

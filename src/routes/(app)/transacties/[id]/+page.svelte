@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import Select, { type SelectOption } from '#lib/components/Select.svelte';
+	import ShareForm from '#lib/components/ShareForm.svelte';
 	import { groupColor } from '#lib/categoryColor.ts';
 	import { formatShortDate } from '#lib/dates.ts';
 	import { centsToInput, formatCents } from '#lib/money.ts';
@@ -31,6 +32,34 @@
 
 	let saving = $state(false);
 	let confirmDelete = $state(false);
+	let editingShare = $state(false);
+	let confirmUnshare = $state(false);
+
+	const myShare = $derived(data.splits.find((s) => s.note === 'Mijn deel'));
+	const anyPaid = $derived(
+		data.posts.some((p) => p.paidCents > 0 || p.status === 'kwijtgescholden')
+	);
+	const postStatus = (p: (typeof data.posts)[number]) =>
+		p.status === 'kwijtgescholden'
+			? 'Kwijtgescholden'
+			: p.status === 'betaald'
+				? 'Betaald'
+				: p.status === 'deels'
+					? `${formatCents(p.paidCents)} betaald`
+					: 'Open';
+	const labelText = {
+		waarschijnlijk: 'Waarschijnlijk',
+		mogelijk: 'Mogelijk',
+		onwaarschijnlijk: 'Onwaarschijnlijk'
+	};
+	// Koppellijst: voorgeselecteerd als de bovenste duidelijk voorloopt
+	let chosen = $derived(data.match?.preselect ?? '');
+	const showLinks = $derived(
+		tx.amountCents !== 0 &&
+			data.posts.length === 0 &&
+			(data.links.length > 0 || (data.match?.candidates.length ?? 0) > 0)
+	);
+	const groups = (iban: string) => iban.replace(/(.{4})/g, '$1 ').trim();
 
 	const categoryOptions = $derived<SelectOption[]>([
 		{ value: '', label: 'Geen categorie', dot: null },
@@ -167,19 +196,143 @@
 		</div>
 	</form>
 
-	{#if data.splits.length > 0}
-		<section class="card">
-			<h2>Verdeling</h2>
-			<ul>
-				{#each data.splits as s (s.id)}
-					<li><span>{s.note}</span><span class="num">{formatCents(s.amountCents)}</span></li>
-				{/each}
-			</ul>
-			{#each data.owed as o (o.id)}
+	{#if tx.amountCents < 0}
+		<section class="card section" aria-labelledby="share-title">
+			<h2 id="share-title">Voorgeschoten</h2>
+			{#if editingShare}
+				<ShareForm
+					totalCents={-tx.amountCents}
+					people={data.people}
+					initial={data.posts
+						.filter((p) => p.personName)
+						.map((p) => ({ name: p.personName!, amountCents: p.amountCents }))}
+					message={form && 'shareMessage' in form ? form.shareMessage : undefined}
+					onclose={() => (editingShare = false)}
+				/>
+			{:else if data.posts.length > 0}
+				<ul class="lines">
+					{#if myShare}
+						<li class="mine">
+							<span>Jouw deel <span class="muted small">telt in je budget</span></span>
+							<span class="num">{formatCents(-myShare.amountCents)}</span>
+						</li>
+					{/if}
+					{#each data.posts as p (p.id)}
+						<li>
+							<span>
+								{p.personName ?? 'Nog onbekend'}
+								<span class="muted small">{postStatus(p)}</span>
+							</span>
+							<span class="num">{formatCents(p.amountCents)}</span>
+						</li>
+					{/each}
+				</ul>
+				{#if anyPaid}
+					<p class="muted small">
+						Er is al betaald, dus de verdeling ligt vast. Aanpassen of kwijtschelden doe je bij
+						<a href="/te-krijgen">Te krijgen</a>.
+					</p>
+				{:else if confirmUnshare}
+					<form method="POST" action="?/unshare" use:enhance class="confirm-row">
+						<p>Niet meer delen? Het hele bedrag telt dan als jouw uitgave.</p>
+						<div class="buttons">
+							<button class="button danger">Ja, niet meer delen</button>
+							<button
+								type="button"
+								class="button secondary"
+								onclick={() => (confirmUnshare = false)}>Annuleren</button
+							>
+						</div>
+					</form>
+				{:else}
+					<div class="buttons">
+						<button type="button" class="button secondary" onclick={() => (editingShare = true)}
+							>Verdeling aanpassen</button
+						>
+						<button type="button" class="button danger" onclick={() => (confirmUnshare = true)}
+							>Niet meer delen</button
+						>
+					</div>
+				{/if}
+				{#if form && 'shareMessage' in form && form.shareMessage}
+					<p class="error-text" role="alert">{form.shareMessage}</p>
+				{/if}
+			{:else}
 				<p class="muted">
-					Te krijgen van {o.person}: <span class="num">{formatCents(o.amountCents)}</span>
+					Betaalde je ook voor anderen? Dan telt alleen jouw deel in je budget en zie je bij Te
+					krijgen wat de rest nog moet.
 				</p>
-			{/each}
+				<button type="button" class="button secondary start" onclick={() => (editingShare = true)}
+					>Voorgeschoten</button
+				>
+			{/if}
+		</section>
+	{/if}
+
+	{#if showLinks}
+		<section class="card section" aria-labelledby="link-title">
+			<h2 id="link-title">{tx.amountCents > 0 ? 'Ontvangen voor' : 'Terugbetaald voor'}</h2>
+			{#if data.links.length > 0}
+				<ul class="lines">
+					{#each data.links as l (l.id)}
+						<li>
+							<span>
+								{l.personName}
+								<span class="muted small"
+									>{l.owedId
+										? `${l.description || 'Post'} · ${formatShortDate(l.date!)}`
+										: 'Tegoed voor de volgende post'}</span
+								>
+							</span>
+							<span class="num">{formatCents(l.amountCents)}</span>
+						</li>
+					{/each}
+				</ul>
+				{#if data.ibanSuggestion}
+					<form method="POST" action="?/saveIban" use:enhance class="confirm-row">
+						<p>
+							Hoort <span class="num">{groups(data.ibanSuggestion.iban)}</span> bij {data
+								.ibanSuggestion.name}? Dan herkent de koppellijst die rekening voortaan.
+						</p>
+						<div class="buttons">
+							<button class="button secondary">IBAN bewaren bij {data.ibanSuggestion.name}</button>
+						</div>
+					</form>
+				{/if}
+				<form method="POST" action="?/unlink" use:enhance>
+					<button class="button secondary">Losmaken</button>
+				</form>
+			{:else if data.match}
+				<form method="POST" action="?/link" use:enhance class="match">
+					<fieldset>
+						<legend class="visually-hidden">Kies de post</legend>
+						{#each data.match.candidates as c (c.id)}
+							<label class="option">
+								<input type="radio" name="owedId" value={c.id} bind:group={chosen} />
+								<span class="who-what">
+									<strong>{c.personName}</strong>
+									<span class="muted small"
+										>{c.description || 'Post'} · {formatShortDate(c.date)}</span
+									>
+								</span>
+								<span class="side">
+									<span class="num">{formatCents(c.outstandingCents)}</span>
+									<span class={['tag', c.label]}>{labelText[c.label]}</span>
+								</span>
+							</label>
+						{/each}
+					</fieldset>
+					<p class="muted small">
+						Een deelbetaling laat de rest open; meer dan er openstaat wordt tegoed.
+					</p>
+					<div class="buttons">
+						<button class="button" disabled={!chosen}>Koppelen</button>
+					</div>
+				</form>
+			{/if}
+			{#if form && 'linkMessage' in form && form.linkMessage}
+				<p class="error-text" role="alert">{form.linkMessage}</p>
+			{/if}
 		</section>
 	{/if}
 
@@ -396,17 +549,118 @@
 		}
 	}
 
-	ul {
-		list-style: none;
-		padding: 0;
-		margin: 12px 0 0;
+	.section {
 		display: grid;
-		gap: 6px;
+		gap: 14px;
+		padding: 20px;
 	}
 
-	li {
+	.small {
+		font-size: 0.88rem;
+	}
+
+	.lines {
+		list-style: none;
+		padding: 0;
+		margin: 0;
+		display: grid;
+	}
+
+	.lines li {
 		display: flex;
+		align-items: center;
 		justify-content: space-between;
+		gap: 12px;
+		min-height: 48px;
+		border-top: 1px solid var(--line);
+	}
+
+	.lines li:first-child {
+		border-top: 0;
+	}
+
+	.lines li > span:first-child {
+		display: grid;
+		line-height: 1.3;
+	}
+
+	.mine {
+		font-weight: 600;
+	}
+
+	.buttons {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+	}
+
+	.start {
+		justify-self: start;
+	}
+
+	.confirm-row {
+		display: grid;
+		gap: 10px;
+	}
+
+	.match {
+		display: grid;
+		gap: 10px;
+	}
+
+	.match fieldset {
+		display: grid;
+		gap: 2px;
+		margin: 0;
+		padding: 0;
+		border: 0;
+		min-width: 0;
+	}
+
+	.option {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		min-height: 52px;
+		padding: 4px 6px;
+		border-radius: var(--radius-sm);
+		cursor: pointer;
+	}
+
+	.option:has(input:checked) {
+		background: var(--accent-soft);
+	}
+
+	.option input {
+		flex: none;
+		width: 20px;
+		height: 20px;
+		min-height: 0;
+		margin: 0;
+		accent-color: var(--accent);
+	}
+
+	.who-what {
+		flex: 1;
+		min-width: 0;
+		display: grid;
+		line-height: 1.3;
+	}
+
+	.side {
+		display: grid;
+		justify-items: end;
+		gap: 2px;
+	}
+
+	.tag {
+		font-size: 0.78rem;
+		font-weight: 600;
+		color: var(--muted);
+	}
+
+	.tag.waarschijnlijk {
+		color: var(--accent-strong);
 	}
 
 	.delete {

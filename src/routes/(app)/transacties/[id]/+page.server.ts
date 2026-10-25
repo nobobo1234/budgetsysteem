@@ -3,12 +3,49 @@ import { asc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { parseAmount } from '#lib/money.ts';
 import { db } from '#lib/server/db/index.ts';
-import { categories, owed, rules, transactionSplits, transactions } from '#lib/server/db/schema.ts';
+import {
+	accounts,
+	categories,
+	rules,
+	transactionSplits,
+	transactions
+} from '#lib/server/db/schema.ts';
+import {
+	applyShare,
+	matchCandidates,
+	paymentLinks,
+	postsOfTransaction,
+	settlePayment,
+	unlinkPayment
+} from '#lib/server/owed.ts';
+import { addIban, findOrCreatePerson, listPeople, personByIban } from '#lib/server/people.ts';
 import { deleteTransaction, updateTransaction, ValidationError } from '#lib/server/transactions.ts';
-import { transactionPatchSchema } from '#lib/server/validation.ts';
+import { personName, transactionPatchSchema } from '#lib/server/validation.ts';
 import type { Actions, PageServerLoad } from './$types';
 
 const idSchema = z.uuid();
+
+/**
+ * Na een koppeling met een betaling van een onbekende IBAN: vragen of die bij de persoon hoort.
+ * Alleen als de IBAN nog bij niemand hoort en geen eigen rekening is.
+ */
+function ibanSuggestion(transactionId: string, iban: string | null) {
+	if (!iban || personByIban(db(), iban)) return null;
+	if (db().select({ id: accounts.id }).from(accounts).where(eq(accounts.iban, iban)).get())
+		return null;
+	const people = new Map(
+		paymentLinks(db(), transactionId).map((l) => [l.personId, l.personName] as const)
+	);
+	const [only, ...rest] = [...people];
+	if (!only || rest.length > 0) return null;
+	return { personId: only[0], name: only[1], iban };
+}
+
+const shareSchema = z.object({
+	mode: z.enum(['gelijk', 'bedrag']),
+	names: z.array(personName).min(1).max(20),
+	amounts: z.array(z.string().trim().max(16)).max(20)
+});
 
 export const load: PageServerLoad = ({ params }) => {
 	if (!idSchema.safeParse(params.id).success) error(404, 'Niet gevonden');
@@ -29,7 +66,11 @@ export const load: PageServerLoad = ({ params }) => {
 			.from(transactionSplits)
 			.where(eq(transactionSplits.transactionId, tx.id))
 			.all(),
-		owed: db().select().from(owed).where(eq(owed.sourceTransactionId, tx.id)).all(),
+		posts: postsOfTransaction(db(), tx.id),
+		links: paymentLinks(db(), tx.id),
+		match: tx.amountCents !== 0 ? matchCandidates(db(), tx.id) : null,
+		people: listPeople(db()).filter((p) => p.active),
+		ibanSuggestion: ibanSuggestion(tx.id, tx.counterIban),
 		categories: db()
 			.select({ id: categories.id, name: categories.name, group: categories.group })
 			.from(categories)
@@ -62,6 +103,70 @@ export const actions: Actions = {
 			throw e;
 		}
 		return { saved: true };
+	},
+	share: async ({ request, params }) => {
+		const form = await request.formData();
+		const parsed = shareSchema.safeParse({
+			mode: form.get('mode'),
+			names: form.getAll('name').map(String),
+			amounts: form.getAll('amount').map(String)
+		});
+		if (!parsed.success) return fail(400, { shareMessage: 'Kies minstens één persoon.' });
+		const { mode, names } = parsed.data;
+		let amounts: number[] | null = null;
+		if (mode === 'bedrag') {
+			if (parsed.data.amounts.length !== names.length)
+				return fail(400, { shareMessage: 'Vul per persoon een bedrag in.' });
+			amounts = [];
+			for (const text of parsed.data.amounts) {
+				const cents = parseAmount(text);
+				if (cents === null || cents === 0)
+					return fail(400, { shareMessage: `Het bedrag “${text}” kan ik niet lezen.` });
+				amounts.push(cents);
+			}
+		}
+		try {
+			db().transaction((tx) => {
+				const personIds = names.map((n) => findOrCreatePerson(tx, n));
+				applyShare(tx, params.id, { personIds, amounts });
+			});
+		} catch (e) {
+			if (e instanceof ValidationError) return fail(400, { shareMessage: `${e.message}.` });
+			throw e;
+		}
+		return { shared: true };
+	},
+	unshare: async ({ params }) => {
+		try {
+			db().transaction((tx) => applyShare(tx, params.id, null));
+		} catch (e) {
+			if (e instanceof ValidationError) return fail(400, { shareMessage: `${e.message}.` });
+			throw e;
+		}
+		return { unshared: true };
+	},
+	link: async ({ request, params }) => {
+		const owedId = idSchema.safeParse((await request.formData()).get('owedId'));
+		if (!owedId.success) return fail(400, { linkMessage: 'Kies een post.' });
+		const ok = db().transaction((tx) => settlePayment(tx, params.id, { owedId: owedId.data }));
+		if (!ok) return fail(400, { linkMessage: 'Deze post past niet bij deze transactie.' });
+		return { linked: true };
+	},
+	unlink: async ({ params }) => {
+		db().transaction((tx) => unlinkPayment(tx, params.id));
+		return { unlinked: true };
+	},
+	saveIban: async ({ params }) => {
+		const tx = db().select().from(transactions).where(eq(transactions.id, params.id)).get();
+		const suggestion = tx ? ibanSuggestion(tx.id, tx.counterIban) : null;
+		if (!suggestion) return fail(400, { linkMessage: 'Er is geen IBAN om te bewaren.' });
+		try {
+			addIban(db(), suggestion.personId, suggestion.iban);
+		} catch (e) {
+			if (e instanceof ValidationError) return fail(400, { linkMessage: `${e.message}.` });
+			throw e;
+		}
+		return { ibanSaved: true };
 	},
 	delete: async ({ params }) => {
 		deleteTransaction(db(), params.id);
