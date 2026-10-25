@@ -236,6 +236,45 @@ describe('personen', () => {
 	});
 });
 
+describe('retour', () => {
+	it('+25 retour zalando: inkomend, retour herkend, de rest is de tegenpartij', () => {
+		const r = parse('+25 retour zalando');
+		expect(r.amountCents).toBe(2500);
+		expect(r.direction).toBe('in');
+		expect(r.refund).toBe(true);
+		expect(r.text).toBe('zalando');
+		expect(r.spans.find((s) => s.kind === 'retour')?.text).toBe('retour');
+	});
+
+	it('retour zonder plusteken is ook geld terug, in elke volgorde', () => {
+		expect(parse('25 retour zalando').direction).toBe('in');
+		expect(parse('retour 25 zalando').direction).toBe('in');
+		expect(parse('Retour zalando 25').refund).toBe(true);
+	});
+
+	it('met een minteken blijft het uitgaand', () => {
+		const r = parse('-25 retour zalando');
+		expect(r.direction).toBe('uit');
+		expect(r.refund).toBe(true);
+	});
+
+	it('alleen het losse woord; retourtje of retourzending blijft tekst', () => {
+		expect(parse('25 retourzending zalando').refund).toBe(false);
+		expect(parse('25 retourzending zalando').direction).toBe('uit');
+	});
+
+	it('met het kruisje weer gewone tekst', () => {
+		const first = parse('+25 retour zalando');
+		const span = first.spans.find((s) => s.kind === 'retour')!;
+		const r = parseQuickEntry('+25 retour zalando', TODAY, {
+			...opts,
+			plain: new Set([span.start])
+		});
+		expect(r.refund).toBe(false);
+		expect(r.text).toBe('retour zalando');
+	});
+});
+
 describe('gewone tekst maken', () => {
 	it('een token met het kruisje weer tekst maken', () => {
 		const r = parseQuickEntry('12,50 gisteren', TODAY, { plain: new Set([6]) });

@@ -21,6 +21,10 @@ export interface ImportRecord {
 	origCurrency?: string;
 	/** Het eurobedrag is geschat en moet nagekeken worden */
 	needsReview?: boolean;
+	/** Terugboeking volgens de bank (CAMT.053 `RvslInd`), zoals een gestorneerde incasso */
+	reversal?: boolean;
+	/** End-to-end-kenmerk van de betaling; een storno draagt dat van de oorspronkelijke boeking */
+	endToEndId?: string | null;
 }
 
 /**

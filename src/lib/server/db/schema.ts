@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import {
+	type AnySQLiteColumn,
 	blob,
 	check,
 	index,
@@ -63,7 +64,9 @@ export const transactions = sqliteTable(
 		categoryId: text('category_id').references(() => categories.id, { onDelete: 'set null' }),
 		// Wie de categorie koos. Regels mogen een categorie van een regel overschrijven en
 		// terugzetten, maar blijven af van een handmatige keuze en van eigen overboekingen.
-		categorySource: text('category_source', { enum: ['handmatig', 'regel', 'intern'] }),
+		categorySource: text('category_source', {
+			enum: ['handmatig', 'regel', 'intern', 'correctie']
+		}),
 		categoryRuleId: text('category_rule_id').references(() => rules.id, { onDelete: 'set null' }),
 		accountId: text('account_id')
 			.notNull()
@@ -80,10 +83,19 @@ export const transactions = sqliteTable(
 		note: text('note').notNull().default(''),
 		// De vaste last waar deze (verwachte) post bij hoort
 		recurringId: text('recurring_id').references(() => recurring.id, { onDelete: 'set null' }),
+		// Terugboeking of retour (spec: `correctie_van`): de boeking die hij verrekent. Telt in de
+		// categorie en de maand van die boeking, en in het saldo op zijn eigen datum.
+		correctionOf: text('correction_of').references((): AnySQLiteColumn => transactions.id, {
+			onDelete: 'set null'
+		}),
+		// End-to-end-kenmerk uit CAMT.053, om een storno aan de oorspronkelijke boeking te koppelen
+		endToEndId: text('end_to_end_id'),
 		createdAt: createdAt(),
 		updatedAt: text('updated_at')
 	},
 	(t) => [
+		index('transactions_correction_idx').on(t.correctionOf),
+		index('transactions_end_to_end_idx').on(t.counterIban, t.endToEndId),
 		index('transactions_date_idx').on(t.date),
 		index('transactions_recurring_idx').on(t.recurringId, t.date),
 		index('transactions_category_date_idx').on(t.categoryId, t.date),

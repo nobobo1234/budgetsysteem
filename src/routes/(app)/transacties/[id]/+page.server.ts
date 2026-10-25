@@ -18,6 +18,12 @@ import {
 	settlePayment,
 	unlinkPayment
 } from '#lib/server/owed.ts';
+import {
+	correctionCandidates,
+	correctionInfo,
+	linkCorrection,
+	unlinkCorrection
+} from '#lib/server/corrections.ts';
 import { addIban, findOrCreatePerson, listPeople, personByIban } from '#lib/server/people.ts';
 import { deleteTransaction, updateTransaction, ValidationError } from '#lib/server/transactions.ts';
 import { personName, transactionPatchSchema } from '#lib/server/validation.ts';
@@ -40,6 +46,17 @@ function ibanSuggestion(transactionId: string, iban: string | null) {
 	if (!only || rest.length > 0) return null;
 	return { personId: only[0], name: only[1], iban };
 }
+
+const linkSchema = z.object({
+	// `post:<id>` voor een openstaande post, `retour:<id>` voor de uitgave bij een retour
+	target: z
+		.string()
+		.max(50)
+		.transform((t) => t.split(':'))
+		.pipe(z.tuple([z.enum(['post', 'retour']), z.uuid()])),
+	mode: z.enum(['verhouding', 'mijn_deel']).optional(),
+	categoryId: z.uuid().optional()
+});
 
 const shareSchema = z.object({
 	mode: z.enum(['gelijk', 'bedrag']),
@@ -68,7 +85,11 @@ export const load: PageServerLoad = ({ params }) => {
 			.all(),
 		posts: postsOfTransaction(db(), tx.id),
 		links: paymentLinks(db(), tx.id),
-		match: tx.amountCents !== 0 ? matchCandidates(db(), tx.id) : null,
+		match: tx.amountCents !== 0 && !tx.correctionOf ? matchCandidates(db(), tx.id) : null,
+		// Terugboekingen: wat deze boeking verrekent, of wat erop terugkwam
+		correction: correctionInfo(db(), tx.id),
+		refundMatch:
+			tx.amountCents !== 0 && !tx.correctionOf ? correctionCandidates(db(), tx.id) : null,
 		people: listPeople(db()).filter((p) => p.active),
 		ibanSuggestion: ibanSuggestion(tx.id, tx.counterIban),
 		categories: db()
@@ -146,14 +167,55 @@ export const actions: Actions = {
 		return { unshared: true };
 	},
 	link: async ({ request, params }) => {
-		const owedId = idSchema.safeParse((await request.formData()).get('owedId'));
-		if (!owedId.success) return fail(400, { linkMessage: 'Kies een post.' });
-		const ok = db().transaction((tx) => settlePayment(tx, params.id, { owedId: owedId.data }));
+		const form = await request.formData();
+		const target = linkSchema.safeParse({
+			target: form.get('target'),
+			mode: form.get('onlyMine') ? 'mijn_deel' : form.get('mode') || undefined,
+			categoryId: form.get('categoryId') || undefined
+		});
+		if (!target.success) return fail(400, { linkMessage: 'Kies een post of uitgave.' });
+		const [kind, id] = target.data.target;
+		if (kind === 'retour') {
+			try {
+				db().transaction((tx) =>
+					linkCorrection(tx, params.id, id, {
+						mode: target.data.mode,
+						categoryId: target.data.categoryId
+					})
+				);
+			} catch (e) {
+				if (e instanceof ValidationError) return fail(400, { linkMessage: `${e.message}.` });
+				throw e;
+			}
+			return { linked: true };
+		}
+		const ok = db().transaction((tx) => settlePayment(tx, params.id, { owedId: id }));
 		if (!ok) return fail(400, { linkMessage: 'Deze post past niet bij deze transactie.' });
 		return { linked: true };
 	},
 	unlink: async ({ params }) => {
 		db().transaction((tx) => unlinkPayment(tx, params.id));
+		return { unlinked: true };
+	},
+	/** Andere verdeling van een retour: naar verhouding of alleen van jouw deel */
+	correctionMode: async ({ request, params }) => {
+		const mode = z
+			.enum(['verhouding', 'mijn_deel'])
+			.safeParse((await request.formData()).get('mode'));
+		if (!mode.success) return fail(400, { linkMessage: 'Kies hoe de retour verdeeld wordt.' });
+		const row = db().select().from(transactions).where(eq(transactions.id, params.id)).get();
+		if (!row?.correctionOf) return fail(400, { linkMessage: 'Deze boeking is geen retour.' });
+		try {
+			db().transaction((tx) => linkCorrection(tx, row.id, row.correctionOf!, { mode: mode.data }));
+		} catch (e) {
+			if (e instanceof ValidationError) return fail(400, { linkMessage: `${e.message}.` });
+			throw e;
+		}
+		return { linked: true };
+	},
+	/** Losmaken: een gewone boeking op te controleren */
+	unlinkCorrection: async ({ params }) => {
+		db().transaction((tx) => unlinkCorrection(tx, params.id));
 		return { unlinked: true };
 	},
 	saveIban: async ({ params }) => {

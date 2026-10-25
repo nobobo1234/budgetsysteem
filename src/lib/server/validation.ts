@@ -33,7 +33,16 @@ export const newTransactionSchema = z
 			.nullable()
 			.default(null),
 		// Ontvangen of terugbetaald: de gekozen post uit de koppellijst
-		settle: z.object({ owedId: z.uuid() }).strict().nullable().default(null)
+		settle: z.object({ owedId: z.uuid() }).strict().nullable().default(null),
+		// Retour: de uitgave die deze boeking verrekent (spec: Terugboekingen en retouren)
+		correct: z
+			.object({
+				transactionId: z.uuid(),
+				mode: z.enum(['verhouding', 'mijn_deel']).default('verhouding')
+			})
+			.strict()
+			.nullable()
+			.default(null)
 	})
 	.strict()
 	.refine((t) => (t.origAmountCents === null) === (t.origCurrency === null), {
@@ -50,7 +59,13 @@ export const newTransactionSchema = z
 	})
 	.refine((t) => t.settle === null || (t.share === null && t.amountCents !== 0), {
 		message: 'Een betaling koppelen kan alleen met een bedrag en zonder verdeling'
-	});
+	})
+	.refine(
+		(t) => t.correct === null || (t.share === null && t.settle === null && t.amountCents !== 0),
+		{
+			message: 'Een retour koppelen kan alleen met een bedrag, zonder verdeling of post'
+		}
+	);
 
 export type NewTransaction = z.infer<typeof newTransactionSchema>;
 

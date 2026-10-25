@@ -10,6 +10,8 @@
 	let uploading = $state(false);
 	let dragging = $state(false);
 	let file = $state<{ name: string; size: number } | null>(null);
+	// Storno's die je na de import weer losmaakte
+	let undone = $state<string[]>([]);
 	let fileInput: HTMLInputElement;
 	const summary = $derived(form && 'summary' in form ? form.summary : null);
 
@@ -169,6 +171,48 @@
 					>; bevestig welke het zijn.
 				</p>
 			{/if}
+			{#if summary.reversals.linked.length > 0}
+				<div class="reversals">
+					<p>
+						{summary.reversals.linked.length === 1
+							? 'Eén storno automatisch verrekend'
+							: `${summary.reversals.linked.length} storno's automatisch verrekend`} met de boeking waar
+						{summary.reversals.linked.length === 1 ? 'hij' : 'ze'} bij hoort, in die maand.
+					</p>
+					<ul>
+						{#each summary.reversals.linked as r (r.id)}
+							<li>
+								<a href="/transacties/{r.id}">{r.counterparty || 'Zonder naam'}</a>
+								<span class="num">{formatCents(r.amountCents, { sign: true })}</span>
+								<span class="muted">bij {fullDate(r.originalDate)}</span>
+								{#if undone.includes(r.id)}
+									<span class="muted">Losgemaakt</span>
+								{:else}
+									<form
+										method="POST"
+										action="?/undoReversal"
+										use:enhance={() =>
+											async ({ result }) => {
+												if (result.type === 'success') undone = [...undone, r.id];
+											}}
+									>
+										<input type="hidden" name="id" value={r.id} />
+										<button class="button secondary">Ongedaan maken</button>
+									</form>
+								{/if}
+							</li>
+						{/each}
+					</ul>
+				</div>
+			{/if}
+			{#if summary.reversals.reviewCount > 0}
+				<p>
+					<a href="/transacties?status=te_controleren"
+						>{summary.reversals.reviewCount}
+						{summary.reversals.reviewCount === 1 ? 'storno' : "storno's"} te controleren</a
+					>: kies bij welke boeking {summary.reversals.reviewCount === 1 ? 'hij' : 'ze'} horen.
+				</p>
+			{/if}
 			{#each summary.anchors as anchor (anchor.accountName)}
 				<p class="muted">
 					Startsaldo {anchor.accountName}:
@@ -275,6 +319,31 @@
 </div>
 
 <style>
+	.reversals {
+		display: grid;
+		gap: 6px;
+	}
+
+	.reversals ul {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: grid;
+		gap: 4px;
+	}
+
+	.reversals li {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 4px 10px;
+		min-height: var(--tap);
+	}
+
+	.reversals form {
+		margin-left: auto;
+	}
+
 	.page {
 		display: grid;
 		grid-template-columns: minmax(0, 1fr);
