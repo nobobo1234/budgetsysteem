@@ -107,7 +107,8 @@ for (const path of [
 	'/import',
 	'/categorieen',
 	'/regels',
-	'/instellingen'
+	'/instellingen',
+	'/saldocheck'
 ]) {
 	test(`${path} past op een telefoonscherm`, async ({ page }) => {
 		await page.goto(path);

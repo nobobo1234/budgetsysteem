@@ -1,4 +1,5 @@
 import { toIsoDate } from '#lib/dates.ts';
+import { balanceCheckDue } from '#lib/server/balance.ts';
 import { monthOverview } from '#lib/server/budgets.ts';
 import { quickEntryContext } from '#lib/server/context.ts';
 import { db } from '#lib/server/db/index.ts';
@@ -15,6 +16,7 @@ export const load: PageServerLoad = ({ setHeaders }) => {
 		overview: monthOverview(db(), month, today),
 		recent: listTransactions(db(), { limit: 8 }),
 		reviewCount: reviewCount(db()),
+		balanceCheckDue: balanceCheckDue(db(), today),
 		context: quickEntryContext(db())
 	};
 };

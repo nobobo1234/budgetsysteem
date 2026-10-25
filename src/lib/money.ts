@@ -27,6 +27,15 @@ export function parseAmount(input: string): number | null {
 	return null;
 }
 
+/** Als `parseAmount`, maar ook onder nul (`-12,50` of `−12,50`), zoals een saldo dat rood staat. */
+export function parseSignedAmount(input: string): number | null {
+	const text = input.trim();
+	const negative = text.startsWith('-') || text.startsWith('−');
+	const cents = parseAmount(negative ? text.slice(1).trimStart() : text);
+	if (cents === null) return null;
+	return negative && cents !== 0 ? -cents : cents;
+}
+
 const DECIMAL = /^(-?)(\d{1,12})(?:\.(\d{1,2}))?$/;
 
 /** Leest een machinebedrag met punt als decimaalteken, zoals in CAMT en de SNS-CSV (`-43.90`). */

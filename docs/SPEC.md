@@ -160,6 +160,8 @@ Bedragen staan altijd als hele centen (integer) in euro; een vreemde valuta is e
 | people | naam, actief; IBANs in `people_ibans` (persoon, iban), elke IBAN bij hooguit één persoon en nooit een eigen rekening |
 | recurring\_shares | vaste last, persoon, soort (vast / percentage), bedrag\_cent of basispunten, verwachte ontvangstdag, vanaf maand, tot maand (optioneel) |
 | sessions, passkeys | apparaat, laatst gebruikt, ingetrokken |
+| balance\_anchors | rekening (uniek), datum, bedrag\_cent, bron (import / handmatig), import — het startsaldo voor de saldocheck: het saldo aan het eind van die dag |
+| balance\_checks | rekening, datum (samen uniek), bedrag\_cent — het echte saldo volgens de bank; het verschil rekent de app steeds opnieuw uit |
 | jobs, audit\_log | achtergrondtaken; wijzigingen met ongedaan maken |
 
 ### Startcategorieën
@@ -247,6 +249,10 @@ Het startscherm toont één getal, wat je deze maand nog vrij hebt, met daaronde
 **Budget.** Een limiet per categorie per maand; een nieuwe maand neemt de limieten van de vorige over. Vaste lasten die niet elke maand komen, zoals een halfjaarlijkse contributie, worden binnen die limiet per maand gereserveerd (zie Vaste lasten).
 
 **Saldocheck.** Omdat je na de import handmatig werkt, kunnen je cijfers ongemerkt afwijken van de bank. Eén keer per maand vul je het echte saldo van SNS en Revolut in; de app toont het verschil met wat hij verwacht. Een verschil betekent een vergeten uitgave, en dan kun je gericht zoeken of alsnog een export importeren.
+
+- **Startsaldo.** Per rekening één anker: het saldo aan het eind van een dag. De eerste import die een saldo noemt zet het (CAMT.053: eindsaldo `CLBD` min de boekingen, gecontroleerd met `OPBD`; SNS-CSV: "Saldo voor boeking"; Revolut: de kolom `Saldo`), op de dag vóór de eerste geïmporteerde boeking. Een latere import verschuift het niet, zodat een dubbele of vergeten boeking zichtbaar blijft. Je kunt het zelf aanpassen.
+- **Verwacht saldo** op een datum: het anker plus alle boekingen van die rekening erna, tot en met die datum. Verwachte posten tellen niet mee, posten die je nog moet controleren wel (dat geld is al weg), reserveringen zijn geen boekingen. Vreemde valuta telt via het eurobedrag, bij Revolut dus tegen de koers die je betaalde.
+- **Herinnering.** Op het startscherm zolang een rekening in gebruik deze maand nog geen check heeft.
 
 **Meldingen.** Pushmeldingen via de app op je beginscherm (Web Push met VAPID-sleutels). Elke soort staat apart aan of uit:
 
@@ -500,7 +506,8 @@ Elk scherm staat in deze tabel. Een nieuw scherm krijgt eerst een regel hier, in
 | Categorieën | `/categorieen` | Tabs Categorieën en Regels | Nieuwe categorie | Per groep een kaart; bewerken in de rij (naam, groep, telt mee); gearchiveerd ingeklapt |
 | Regels | `/regels` | Tabs Categorieën en Regels | Nieuwe regel | Lijst als zin ("Tegenpartij bevat … → categorie") met filter; nieuwe regel als "Als … dan …", prioriteit ingeklapt; onderaan "Regels opnieuw toepassen" |
 | Import | `/import` | Sleepvak voor het bankbestand | Importeren | Overzicht na import, tegenpartijen zonder categorie met één klik een regel, eerdere imports |
-| Meer | `/instellingen` | Passkeys | — | Herstelcode, actieve apparaten, rekeningen, links naar categorieën en regels, uitloggen |
+| Meer | `/instellingen` | Passkeys | — | Herstelcode, actieve apparaten, rekeningen, links naar saldocheck, categorieën en regels, uitloggen |
+| Saldocheck | `/saldocheck` | Per rekening het verwachte saldo van vandaag en de uitkomst van de laatste check | Saldo invullen | Bij een verschil links naar de transacties van die rekening in die periode en naar de import; eerdere checks; startsaldo aanpassen. Bereikbaar via Meer en de herinnering op het startscherm |
 | Inloggen | `/login` | Titel en uitleg | Inloggen met passkey | Herstelcode als terugval |
 
 Schermen uit latere fasen (vaste lasten, Te krijgen, review-inbox, analyses) komen in de tabel zodra die fase begint.

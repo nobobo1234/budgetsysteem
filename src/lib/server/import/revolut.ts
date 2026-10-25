@@ -2,7 +2,13 @@ import { createHash } from 'node:crypto';
 import { isValidDate } from '../../dates.ts';
 import { parseDecimal } from '../../money.ts';
 import { detectDelimiter, parseCsv } from './csv.ts';
-import { ImportError, MAX_IMPORT_BYTES, type ImportRecord } from './types.ts';
+import {
+	ImportError,
+	MAX_IMPORT_BYTES,
+	openingFromClosing,
+	type ImportRecord,
+	type ParsedBankFile
+} from './types.ts';
 
 // De CSV-export van Revolut (Nederlandse taal, alle valuta in één bestand). Kolommen:
 // Type, Product, Startdatum, Datum voltooid, Beschrijving, Bedrag, Kosten, Valuta, Status, Saldo.
@@ -235,6 +241,15 @@ interface Exchange {
 
 /** Leest de Revolut-export en rekent vreemde valuta om naar euro tegen je eigen wisselkoers. */
 export function parseRevolutCsv(text: string): ImportRecord[] {
+	return readRevolutCsv(text).records;
+}
+
+/**
+ * Als `parseRevolutCsv`, plus het startsaldo in euro: het euro-saldo aan het eind plus wat de
+ * vreemde valuta die er nog staan kostten, min alle boekingen. Zo telt het saldo vreemde valuta
+ * tegen de koers die je betaalde, net als de boekingen zelf.
+ */
+export function readRevolutCsv(text: string): ParsedBankFile {
 	if (Buffer.byteLength(text, 'utf8') > MAX_IMPORT_BYTES) {
 		throw new ImportError('Het bestand is groter dan 20 MB.');
 	}
@@ -389,5 +404,11 @@ export function parseRevolutCsv(text: string): ImportRecord[] {
 			})
 		);
 	}
-	return records;
+
+	const eurClosing = rows
+		.filter((r) => r.currency === 'EUR')
+		.reduce((total, r) => total + r.delta, opening.get('EUR') ?? 0);
+	const closing = [...pots.values()].reduce((total, p) => total + p.cost, eurClosing);
+	const balance = openingFromClosing(records, closing, { accountIban: '', accountKind: 'revolut' });
+	return { records, balances: balance ? [balance] : [] };
 }
