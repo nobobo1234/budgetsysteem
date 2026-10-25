@@ -43,3 +43,22 @@ export function formatVital(name: string, value: number): string {
 	if (name === 'LCP' || name === 'FCP') return `${oneDecimal.format(value / 1000)} s`;
 	return `${whole.format(value)} ms`;
 }
+
+/** Kosten in dollars uit nano-dollars: `$ 0,42`, en kleine bedragen tot op de tiende cent. */
+export function formatUsd(nanoUsd: number): string {
+	const dollars = nanoUsd / 1e9;
+	const digits = dollars > 0 && dollars < 0.1 ? 3 : 2;
+	return `$ ${number(digits).format(dollars)}`;
+}
+
+/** Duur van een aanroep in seconden met één decimaal: `4,2 s`. */
+export function formatCallDuration(ms: number): string {
+	return `${oneDecimal.format(ms / 1000)} s`;
+}
+
+/** Tokens leesbaar: `950`, `12,3 k`, `1,2 mln`. */
+export function formatTokens(n: number): string {
+	if (n < 1000) return whole.format(n);
+	if (n < 1_000_000) return `${oneDecimal.format(n / 1000)} k`;
+	return `${oneDecimal.format(n / 1_000_000)} mln`;
+}

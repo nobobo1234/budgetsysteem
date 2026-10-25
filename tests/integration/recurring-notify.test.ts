@@ -182,8 +182,8 @@ describe('ochtendjob', () => {
 		post('Woonstichting', TODAY);
 		// De maandjob maakte de post om 00:05; de melding wacht tot de ochtend
 		scheduleRecurringNotifications(db, new Date(2026, 9, 20, 0, 5));
-		expect(runDueJobs(db, new Date(2026, 9, 20, 8, 59))).toBe(0);
-		expect(runDueJobs(db, new Date(2026, 9, 20, 9, 0, 30))).toBe(1);
+		expect(await runDueJobs(db, new Date(2026, 9, 20, 8, 59))).toBe(0);
+		expect(await runDueJobs(db, new Date(2026, 9, 20, 9, 0, 30))).toBe(1);
 		await vi.waitFor(() => expect(sent).toHaveLength(1));
 
 		const next = db

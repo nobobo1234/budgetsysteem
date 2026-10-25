@@ -8,6 +8,7 @@ import {
 	accounts,
 	categories,
 	owedPayments,
+	receipts,
 	recurring,
 	reservations,
 	transactionSplits,
@@ -202,6 +203,13 @@ export function updateTransaction(
 				if (!settlePayment(tx, id, { personId: links[0]!.personId, owedId: first }))
 					unlinkPayment(tx, id);
 			}
+		}
+		// Een bon die op nakijken wachtte (controleren), is met de transactie mee nagekeken
+		if (before.status === 'te_controleren' && after.status === 'bevestigd') {
+			tx.update(receipts)
+				.set({ handledAt: new Date().toISOString() })
+				.where(and(eq(receipts.transactionId, id), isNull(receipts.handledAt)))
+				.run();
 		}
 		recordChange(tx, 'gewijzigd', 'transactions', id, before, after);
 		return true;

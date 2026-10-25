@@ -1,3 +1,4 @@
+import Anthropic from '@anthropic-ai/sdk';
 import type { Handle, HandleServerError, ServerInit } from '@sveltejs/kit/hooks';
 import { building, dev, version } from '$app/env';
 import { pruneSessions, sessionCookieName, validateSession } from '#lib/server/auth/session.ts';
@@ -16,6 +17,7 @@ import { startJobs } from '#lib/server/jobs.ts';
 import { log } from '#lib/server/log.ts';
 import { requestLimiter } from '#lib/server/ratelimit.ts';
 import { verifyUploadToken } from '#lib/server/receipts/tokens.ts';
+import { registerReceiptReader } from '#lib/server/receipts/worker.ts';
 import { scheduleRecurringJobs } from '#lib/server/recurring.ts';
 import { startRecurringNotifications } from '#lib/server/recurring-notify.ts';
 import {
@@ -37,6 +39,12 @@ export const init: ServerInit = () => {
 	startRecurringNotifications(db);
 	// Pushmelding als een categorie op 90% komt, kort na een wijziging
 	startBudgetNotifications(db);
+	// Bonnen lezen met Haiku; zonder API-sleutel blijven ze wachten tot die er is
+	const apiKey = config().ANTHROPIC_API_KEY;
+	if (apiKey) {
+		let client: Anthropic | undefined;
+		registerReceiptReader(() => (client ??= new Anthropic({ apiKey })));
+	} else log.warn('geen ANTHROPIC_API_KEY: bonnen blijven wachten');
 	startJobs(db);
 	log.info('gestart');
 };

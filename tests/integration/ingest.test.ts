@@ -462,17 +462,17 @@ describe('taak bon_lezen', () => {
 		db.insert(jobs)
 			.values({ kind: 'test_taak', runAt: new Date(0).toISOString() })
 			.run();
-		runDueJobs(db, new Date(Date.now() + 60_000));
+		await runDueJobs(db, new Date(Date.now() + 60_000));
 		expect(ran).toBe(1);
 		const job = db.select().from(jobs).where(eq(jobs.kind, READ_RECEIPT_JOB)).get()!;
 		expect(job).toMatchObject({ status: 'wachtend', attempts: 0 });
 	});
 
-	it('een onbekende soort zonder declaratie mislukt nog steeds', () => {
+	it('een onbekende soort zonder declaratie mislukt nog steeds', async () => {
 		db.insert(jobs)
 			.values({ kind: 'bestaat_niet', runAt: new Date(0).toISOString(), attempts: 2 })
 			.run();
-		runDueJobs(db);
+		await runDueJobs(db);
 		expect(db.select().from(jobs).where(eq(jobs.kind, 'bestaat_niet')).get()!.status).toBe(
 			'mislukt'
 		);
