@@ -292,11 +292,12 @@
 	}
 
 	/* De indicator beslaat de eerste kolom en schuift per tab een kolom op. Telefoon: een pil
-	   achter het icoon van de actieve tab */
+	   achter het icoon van de actieve tab. Beide eindlijnen expliciet: bij een absoluut item
+	   betekent een auto-lijn de rand van de nav, en dan beslaat hij de hele breedte. */
 	.indicator {
 		position: absolute;
 		inset: 0;
-		grid-area: 1 / 1;
+		grid-area: 1 / 1 / 2 / 2;
 		pointer-events: none;
 		transform: translateX(calc(var(--i) * (100% + var(--gap))));
 		transition: transform 360ms var(--ease-spring);
