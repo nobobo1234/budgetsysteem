@@ -50,6 +50,13 @@
       "when": 1792917557919,
       "tag": "0006_reservering_categorie",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1792919355511,
+      "tag": "0007_terugboekingen",
+      "breakpoints": true
     }
   ]
 }

@@ -54,3 +54,11 @@ export function countTelemetry(sql: string, ...params: unknown[]): number {
 	db.close();
 	return row.n;
 }
+
+/** Eén waarde uit de testdatabase, zoals het ID van een zojuist ingevoerde transactie. */
+export function value<T>(sql: string, ...params: unknown[]): T | undefined {
+	const db = open();
+	const row = db.prepare(sql).get(...params) as { v: T } | undefined;
+	db.close();
+	return row?.v;
+}

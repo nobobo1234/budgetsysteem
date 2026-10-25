@@ -32,8 +32,8 @@
 	let literalCounterparty = $state(false);
 	// `voor 3` zonder (alle) namen: wie je erbij tikt
 	let picked = $state<string[]>([]);
-	// Gekozen post in de koppellijst; undefined is de voorselectie
-	let chosenPost = $state<string | null | undefined>(undefined);
+	// Gekozen koppeling (`post:<id>` of `retour:<id>`); undefined is de voorselectie
+	let chosenLink = $state<string | null | undefined>(undefined);
 	let saving = $state(false);
 	let input: HTMLInputElement;
 	let mirror: HTMLDivElement;
@@ -68,16 +68,30 @@
 		return others.map((cents, i) => ({ name: withNames[i] ?? null, cents }));
 	});
 
-	const post = $derived(chosenPost === undefined ? draft.preselect : chosenPost);
+	const preselectLink = $derived(
+		draft.preselect
+			? `post:${draft.preselect}`
+			: draft.refundPreselect
+				? `retour:${draft.refundPreselect}`
+				: null
+	);
+	const link = $derived(chosenLink === undefined ? preselectLink : chosenLink);
+	const post = $derived(link?.startsWith('post:') ? link.slice(5) : null);
 	const linking = $derived(post !== null && draft.candidates.some((c) => c.id === post));
+	const refundOf = $derived(
+		link?.startsWith('retour:') ? draft.refunds.find((r) => `retour:${r.id}` === link) : undefined
+	);
+	const hasLinks = $derived(draft.candidates.length > 0 || draft.refunds.length > 0);
 	const refundId = $derived(context.categories.find((c) => c.name === 'Terugbetaling')?.id ?? null);
 
 	const categoryId = $derived(
 		categoryOverride !== undefined
 			? categoryOverride
-			: linking && parsed.direction === 'in' && !draft.categoryId
-				? refundId
-				: draft.categoryId
+			: refundOf
+				? refundOf.categoryId
+				: linking && parsed.direction === 'in' && !draft.categoryId
+					? refundId
+					: draft.categoryId
 	);
 	const accountId = $derived(accountOverride ?? draft.accountId);
 	const counterparty = $derived(literalCounterparty ? parsed.text.trim() : draft.counterparty);
@@ -117,7 +131,7 @@
 		accountOverride = undefined;
 		literalCounterparty = false;
 		picked = [];
-		chosenPost = undefined;
+		chosenLink = undefined;
 		plain.clear();
 	}
 
@@ -158,7 +172,8 @@
 				draft.people > 1 && amountCents < 0
 					? { people: draft.people, with: withNames.slice(0, 20) }
 					: null,
-			settle: linking && amountCents !== 0 && post ? { owedId: post } : null
+			settle: linking && amountCents !== 0 && post ? { owedId: post } : null,
+			correct: refundOf && amountCents > 0 ? { transactionId: refundOf.id } : null
 		};
 		try {
 			await enqueue(item);
@@ -176,7 +191,8 @@
 		categorie: 'Categorie',
 		rekening: 'Rekening',
 		delen: 'Delen',
-		persoon: 'Persoon'
+		persoon: 'Persoon',
+		retour: 'Retour'
 	};
 
 	const labelText = {
@@ -276,6 +292,18 @@
 			</span>
 		{/if}
 
+		{#if parsed.refund}
+			<span class="chip retour">
+				Retour
+				<button
+					type="button"
+					class="x"
+					aria-label="Retour weer tekst maken"
+					onclick={() => makePlain('retour')}>×</button
+				>
+			</span>
+		{/if}
+
 		{#if parsed.dateExplicit}
 			<span class="chip datum">
 				{formatShortDate(parsed.date)}
@@ -333,19 +361,25 @@
 		</div>
 	{/if}
 
-	{#if draft.candidates.length > 0}
+	{#if hasLinks}
 		<fieldset class="match">
 			<legend>
-				{parsed.direction === 'in' ? 'Ontvangen voor' : 'Terugbetaald voor'}
+				{draft.candidates.length === 0
+					? 'Retour van'
+					: draft.refunds.length > 0
+						? 'Koppelen aan'
+						: parsed.direction === 'in'
+							? 'Ontvangen voor'
+							: 'Terugbetaald voor'}
 			</legend>
 			{#each draft.candidates as c (c.id)}
 				<label class="option">
 					<input
 						type="radio"
 						name="quick-post"
-						value={c.id}
-						checked={post === c.id}
-						onchange={() => (chosenPost = c.id)}
+						value={`post:${c.id}`}
+						checked={link === `post:${c.id}`}
+						onchange={() => (chosenLink = `post:${c.id}`)}
 					/>
 					<span class="who-what">
 						<strong>{c.personName}</strong>
@@ -357,13 +391,32 @@
 					</span>
 				</label>
 			{/each}
+			{#each draft.refunds as r (r.id)}
+				<label class="option">
+					<input
+						type="radio"
+						name="quick-post"
+						value={`retour:${r.id}`}
+						checked={link === `retour:${r.id}`}
+						onchange={() => (chosenLink = `retour:${r.id}`)}
+					/>
+					<span class="who-what">
+						<strong>{r.counterparty}</strong>
+						<span class="muted">Uitgave · {formatShortDate(r.date)}</span>
+					</span>
+					<span class="side">
+						<span class="num">{formatCents(r.amountCents)}</span>
+						<span class={['tag', r.label]}>{labelText[r.label]}</span>
+					</span>
+				</label>
+			{/each}
 			<label class="option">
 				<input
 					type="radio"
 					name="quick-post"
 					value=""
-					checked={!linking}
-					onchange={() => (chosenPost = null)}
+					checked={!linking && !refundOf}
+					onchange={() => (chosenLink = null)}
 				/>
 				<span class="who-what"><strong>Niet koppelen</strong></span>
 			</label>
@@ -459,6 +512,9 @@
 	}
 	.persoon {
 		--chip-bg: var(--chip-persoon);
+	}
+	.retour {
+		--chip-bg: var(--chip-retour);
 	}
 	.naam {
 		--chip-bg: var(--surface-2);

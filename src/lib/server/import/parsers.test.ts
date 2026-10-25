@@ -54,6 +54,39 @@ describe('CAMT.053 (001.08)', () => {
 	});
 });
 
+describe('CAMT.053 terugboekingen', () => {
+	const records = parseCamt053(fixture('camt053-storno.xml'));
+
+	it('leest RvslInd en het end-to-end-kenmerk', () => {
+		expect(records.map((r) => r.reversal ?? false)).toEqual([false, true, false, true]);
+		expect(records[0]?.endToEndId).toBe('E2E-INC-0001');
+		expect(records[1]?.endToEndId).toBe('E2E-INC-0001');
+	});
+
+	it('NOTPROVIDED is geen kenmerk', () => {
+		expect(records[2]?.endToEndId).toBeUndefined();
+		expect(records[3]?.endToEndId).toBeUndefined();
+	});
+
+	it('een storno noemt de partijen als bij het origineel: de tegenpartij is de incassant', () => {
+		expect(records[1]).toMatchObject({
+			amountCents: 4995,
+			counterparty: 'Energie Test B.V.',
+			counterIban: 'NL20INGB0001234567'
+		});
+		// Zonder Dbtr bij de storno: dan de andere kant
+		expect(records[3]).toMatchObject({
+			amountCents: 2000,
+			counterparty: 'Sportclub Test',
+			counterIban: 'NL69INGB0123456789'
+		});
+	});
+
+	it('gewone boekingen hebben geen storno-vlag', () => {
+		for (const r of parseCamt053(fixture('camt053-v02.xml'))) expect(r.reversal).toBeUndefined();
+	});
+});
+
 describe('CAMT.053 pinbetalingen zonder RltdPties', () => {
 	const records = parseCamt053(fixture('camt053-pin.xml'));
 

@@ -7,6 +7,7 @@ import {
 	matchCounterparty,
 	resolveEntry,
 	type OpenPostRef,
+	type RefundTargetRef,
 	type ResolveContext
 } from './resolve.ts';
 
@@ -213,5 +214,67 @@ describe('ontvangen in de snelinvoer', () => {
 	it('een uitgave aan Tim stelt de post te betalen voor', () => {
 		const d = resolveWith('15 tikkie tim');
 		expect(d.candidates.map((c) => c.id)).toEqual(['o-tim-ik']);
+	});
+});
+
+describe('retour in de snelinvoer', () => {
+	const target = (over: Partial<RefundTargetRef> & { id: string }): RefundTargetRef => ({
+		amountCents: -7995,
+		roomCents: 7995,
+		date: '2026-10-02',
+		counterparty: 'Zalando SE',
+		categoryId: 'c-kleding',
+		...over
+	});
+	const withRefunds: ResolveContext = {
+		...withPosts,
+		knownCounterparties: [...ctx.knownCounterparties, 'Zalando SE'],
+		refundTargets: [
+			target({ id: 'z-jas' }),
+			target({ id: 'z-al-terug', roomCents: 1000 }),
+			target({ id: 'ah', counterparty: 'ALBERT HEIJN 1403 UTRECHT', amountCents: -4500 })
+		]
+	};
+	const resolveRefund = (input: string) =>
+		resolveEntry(
+			parseQuickEntry(input, TODAY, { people: withRefunds.people!.map((p) => p.name) }),
+			withRefunds
+		);
+
+	it('+25 retour zalando: €25 terug, stelt de uitgave bij Zalando voor', () => {
+		const d = resolveRefund('+25 retour zalando');
+		expect(d.amountCents).toBe(2500);
+		expect(d.counterparty).toBe('Zalando SE');
+		expect(d.refunds.map((r) => r.id)).toEqual(['z-jas']);
+		// Eén uitgave die past: die is meteen gekozen
+		expect(d.refundPreselect).toBe('z-jas');
+		// Geen open posten bij een retour
+		expect(d.candidates).toEqual([]);
+	});
+
+	it('een uitgave waar het bedrag niet meer in past, staat er niet bij', () => {
+		const d = resolveRefund('+25 retour zalando');
+		expect(d.refunds.map((r) => r.id)).not.toContain('z-al-terug');
+		expect(resolveRefund('+10 retour zalando').refunds.map((r) => r.id)).toEqual([
+			'z-jas',
+			'z-al-terug'
+		]);
+		expect(resolveRefund('+10 retour zalando').refundPreselect).toBeNull();
+	});
+
+	it('zonder naam: alle uitgaven waar het in past', () => {
+		const d = resolveRefund('+25 retour');
+		expect(d.refunds.map((r) => r.id).sort()).toEqual(['ah', 'z-jas']);
+	});
+
+	it('zonder `retour` alleen bij een duidelijke naam, naast de open posten', () => {
+		expect(resolveRefund('+25 zalando').refunds.map((r) => r.id)).toEqual(['z-jas']);
+		expect(resolveRefund('+25 zalando').refundPreselect).toBeNull();
+		expect(resolveRefund('+15 tikkie sanne').refunds).toEqual([]);
+	});
+
+	it('een uitgave geeft geen retourlijst', () => {
+		expect(resolveRefund('-25 retour zalando').refunds).toEqual([]);
+		expect(resolveRefund('25 zalando').refunds).toEqual([]);
 	});
 });

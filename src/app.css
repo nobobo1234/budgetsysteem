@@ -33,6 +33,7 @@
 	--chip-rekening: oklch(0.55 0.12 300 / 0.15);
 	--chip-delen: oklch(0.6 0.15 15 / 0.15);
 	--chip-persoon: oklch(0.6 0.13 200 / 0.16);
+	--chip-retour: oklch(0.62 0.12 125 / 0.17);
 
 	/* Bolletjes per categoriegroep; de tint komt uit categoryColor.ts */
 	--dot-l: 0.62;

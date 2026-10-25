@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Synthetisch voorbeeld met storno's (RvslInd), geen echte bankdata. Alleen IBANs uit scripts/test-ibans.txt. -->
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.053.001.02">
+  <BkToCstmrStmt>
+    <GrpHdr><MsgId>TEST-STORNO</MsgId><CreDtTm>2026-10-01T08:00:00</CreDtTm></GrpHdr>
+    <Stmt>
+      <Id>TEST-STMT-STORNO</Id>
+      <Acct><Id><IBAN>NL12SNSB0123456789</IBAN></Id><Ccy>EUR</Ccy></Acct>
+      <!-- Incasso eind augustus, gestorneerd begin september: verrekenen in augustus -->
+      <Ntry>
+        <Amt Ccy="EUR">49.95</Amt>
+        <CdtDbtInd>DBIT</CdtDbtInd>
+        <Sts>BOOK</Sts>
+        <BookgDt><Dt>2026-08-28</Dt></BookgDt>
+        <AcctSvcrRef>STO-0001</AcctSvcrRef>
+        <NtryDtls><TxDtls>
+          <Refs><EndToEndId>E2E-INC-0001</EndToEndId></Refs>
+          <RltdPties>
+            <Dbtr><Nm>A. Test</Nm></Dbtr>
+            <DbtrAcct><Id><IBAN>NL12SNSB0123456789</IBAN></Id></DbtrAcct>
+            <Cdtr><Nm>Energie Test B.V.</Nm></Cdtr>
+            <CdtrAcct><Id><IBAN>NL20INGB0001234567</IBAN></Id></CdtrAcct>
+          </RltdPties>
+          <RmtInf><Ustrd>Termijn augustus</Ustrd></RmtInf>
+        </TxDtls></NtryDtls>
+      </Ntry>
+      <Ntry>
+        <Amt Ccy="EUR">49.95</Amt>
+        <CdtDbtInd>CRDT</CdtDbtInd>
+        <RvslInd>true</RvslInd>
+        <Sts>BOOK</Sts>
+        <BookgDt><Dt>2026-09-03</Dt></BookgDt>
+        <AcctSvcrRef>STO-0002</AcctSvcrRef>
+        <NtryDtls><TxDtls>
+          <Refs><EndToEndId>E2E-INC-0001</EndToEndId></Refs>
+          <RltdPties>
+            <Dbtr><Nm>A. Test</Nm></Dbtr>
+            <DbtrAcct><Id><IBAN>NL12SNSB0123456789</IBAN></Id></DbtrAcct>
+            <Cdtr><Nm>Energie Test B.V.</Nm></Cdtr>
+            <CdtrAcct><Id><IBAN>NL20INGB0001234567</IBAN></Id></CdtrAcct>
+          </RltdPties>
+          <RmtInf><Ustrd>Storno termijn augustus</Ustrd></RmtInf>
+        </TxDtls></NtryDtls>
+      </Ntry>
+      <!-- Zonder end-to-end-kenmerk: niet automatisch, maar op te controleren -->
+      <Ntry>
+        <Amt Ccy="EUR">20.00</Amt>
+        <CdtDbtInd>DBIT</CdtDbtInd>
+        <Sts>BOOK</Sts>
+        <BookgDt><Dt>2026-09-14</Dt></BookgDt>
+        <AcctSvcrRef>STO-0003</AcctSvcrRef>
+        <NtryDtls><TxDtls>
+          <Refs><EndToEndId>NOTPROVIDED</EndToEndId></Refs>
+          <RltdPties>
+            <Cdtr><Nm>Sportclub Test</Nm></Cdtr>
+            <CdtrAcct><Id><IBAN>NL69INGB0123456789</IBAN></Id></CdtrAcct>
+          </RltdPties>
+          <RmtInf><Ustrd>Contributie</Ustrd></RmtInf>
+        </TxDtls></NtryDtls>
+      </Ntry>
+      <Ntry>
+        <Amt Ccy="EUR">20.00</Amt>
+        <CdtDbtInd>CRDT</CdtDbtInd>
+        <RvslInd>true</RvslInd>
+        <Sts>BOOK</Sts>
+        <BookgDt><Dt>2026-09-20</Dt></BookgDt>
+        <AcctSvcrRef>STO-0004</AcctSvcrRef>
+        <NtryDtls><TxDtls>
+          <Refs><EndToEndId>NOTPROVIDED</EndToEndId></Refs>
+          <RltdPties>
+            <Cdtr><Nm>Sportclub Test</Nm></Cdtr>
+            <CdtrAcct><Id><IBAN>NL69INGB0123456789</IBAN></Id></CdtrAcct>
+          </RltdPties>
+          <RmtInf><Ustrd>Storno contributie</Ustrd></RmtInf>
+        </TxDtls></NtryDtls>
+      </Ntry>
+    </Stmt>
+  </BkToCstmrStmt>
+</Document>

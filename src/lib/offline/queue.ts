@@ -16,6 +16,8 @@ export interface QueuedTransaction {
 	share: { people: number; with: string[] } | null;
 	/** Ontvangen of terugbetaald: de gekozen post. Ontbreekt bij posten van vóór Te krijgen. */
 	settle?: { owedId: string } | null;
+	/** Retour: de uitgave die deze boeking verrekent. Ontbreekt bij posten van vóór retouren. */
+	correct?: { transactionId: string; mode?: 'verhouding' | 'mijn_deel' } | null;
 }
 
 export interface OutboxItem {

@@ -2,8 +2,9 @@
 	import { enhance } from '$app/forms';
 	import Select, { type SelectOption } from '#lib/components/Select.svelte';
 	import ShareForm from '#lib/components/ShareForm.svelte';
+	import Switch from '#lib/components/Switch.svelte';
 	import { groupColor } from '#lib/categoryColor.ts';
-	import { formatShortDate } from '#lib/dates.ts';
+	import { formatMonth, formatShortDate } from '#lib/dates.ts';
 	import { centsToInput, formatCents } from '#lib/money.ts';
 
 	let { data, form } = $props();
@@ -52,13 +53,35 @@
 		mogelijk: 'Mogelijk',
 		onwaarschijnlijk: 'Onwaarschijnlijk'
 	};
-	// Koppellijst: voorgeselecteerd als de bovenste duidelijk voorloopt
-	let chosen = $derived(data.match?.preselect ?? '');
+	// Terugboekingen: wat deze boeking verrekent, of wat erop terugkwam
+	const original = $derived(data.correction?.original ?? null);
+	const corrections = $derived(data.correction?.corrections ?? []);
+	const refunds = $derived(data.links.length === 0 ? (data.refundMatch?.candidates ?? []) : []);
+	// Koppellijst (`post:<id>` of `retour:<id>`): voorgeselecteerd als de bovenste duidelijk voorloopt
+	let chosen = $derived(
+		data.match?.preselect
+			? `post:${data.match.preselect}`
+			: data.refundMatch?.preselect
+				? `retour:${data.refundMatch.preselect}`
+				: ''
+	);
+	const chosenRefund = $derived(refunds.find((r) => `retour:${r.id}` === chosen));
 	const showLinks = $derived(
 		tx.amountCents !== 0 &&
+			!original &&
 			data.posts.length === 0 &&
-			(data.links.length > 0 || (data.match?.candidates.length ?? 0) > 0)
+			(data.links.length > 0 || (data.match?.candidates.length ?? 0) > 0 || refunds.length > 0)
 	);
+	const linkTitle = $derived(
+		data.links.length === 0 && (data.match?.candidates.length ?? 0) === 0
+			? 'Retour van'
+			: refunds.length > 0
+				? 'Koppelen aan'
+				: tx.amountCents > 0
+					? 'Ontvangen voor'
+					: 'Terugbetaald voor'
+	);
+	let onlyMine = $state(false);
 	const groups = (iban: string) => iban.replace(/(.{4})/g, '$1 ').trim();
 
 	const categoryOptions = $derived<SelectOption[]>([
@@ -110,7 +133,11 @@
 		</p>
 		{#if tx.status === 'te_controleren'}
 			<p class="review">
-				Te controleren{tx.amountCents === 0 ? ': vul het eurobedrag in dat is afgeschreven.' : '.'}
+				Te controleren{tx.amountCents === 0
+					? ': vul het eurobedrag in dat is afgeschreven.'
+					: refunds.length > 0
+						? ': hoort dit bij een eerdere boeking? Kies hem hieronder.'
+						: '.'}
 			</p>
 		{/if}
 	</header>
@@ -196,7 +223,7 @@
 		</div>
 	</form>
 
-	{#if tx.amountCents < 0}
+	{#if tx.amountCents < 0 && !original}
 		<section class="card section" aria-labelledby="share-title">
 			<h2 id="share-title">Voorgeschoten</h2>
 			{#if editingShare}
@@ -229,7 +256,8 @@
 				</ul>
 				{#if anyPaid}
 					<p class="muted small">
-						Er is al betaald, dus de verdeling ligt vast. Aanpassen of kwijtschelden doe je bij
+						Er is al betaald of een retour gekoppeld, dus de verdeling ligt vast. Aanpassen of
+						kwijtschelden doe je bij
 						<a href="/te-krijgen">Te krijgen</a>.
 					</p>
 				{:else if confirmUnshare}
@@ -271,7 +299,7 @@
 
 	{#if showLinks}
 		<section class="card section" aria-labelledby="link-title">
-			<h2 id="link-title">{tx.amountCents > 0 ? 'Ontvangen voor' : 'Terugbetaald voor'}</h2>
+			<h2 id="link-title">{linkTitle}</h2>
 			{#if data.links.length > 0}
 				<ul class="lines">
 					{#each data.links as l (l.id)}
@@ -302,13 +330,13 @@
 				<form method="POST" action="?/unlink" use:enhance>
 					<button class="button secondary">Losmaken</button>
 				</form>
-			{:else if data.match}
+			{:else}
 				<form method="POST" action="?/link" use:enhance class="match">
 					<fieldset>
-						<legend class="visually-hidden">Kies de post</legend>
-						{#each data.match.candidates as c (c.id)}
+						<legend class="visually-hidden">Kies de post of uitgave</legend>
+						{#each data.match?.candidates ?? [] as c (c.id)}
 							<label class="option">
-								<input type="radio" name="owedId" value={c.id} bind:group={chosen} />
+								<input type="radio" name="target" value={`post:${c.id}`} bind:group={chosen} />
 								<span class="who-what">
 									<strong>{c.personName}</strong>
 									<span class="muted small"
@@ -321,10 +349,58 @@
 								</span>
 							</label>
 						{/each}
+						{#each refunds as r (r.id)}
+							<label class="option">
+								<input type="radio" name="target" value={`retour:${r.id}`} bind:group={chosen} />
+								<span class="who-what">
+									<strong>{r.counterparty || 'Zonder naam'}</strong>
+									<span class="muted small"
+										>{r.categoryName ?? 'Zonder categorie'} · {formatShortDate(r.date)}{r.shared
+											? ' · voorgeschoten'
+											: ''}</span
+									>
+								</span>
+								<span class="side">
+									<span class="num">{formatCents(r.amountCents, { sign: true })}</span>
+									<span class={['tag', r.label]}>{labelText[r.label]}</span>
+								</span>
+							</label>
+						{/each}
 					</fieldset>
-					<p class="muted small">
-						Een deelbetaling laat de rest open; meer dan er openstaat wordt tegoed.
-					</p>
+					{#if chosenRefund}
+						{#if chosenRefund.shared}
+							<Switch
+								name="onlyMine"
+								bind:checked={onlyMine}
+								hint="Voor als het teruggebrachte spul van jou was. Anders gaat het naar verhouding over iedereen."
+								>Alleen van mijn deel</Switch
+							>
+						{:else if chosenRefund.splitCategories.length > 1}
+							<div class="field">
+								<label for="refund-category">Gaat af van</label>
+								<Select
+									id="refund-category"
+									name="categoryId"
+									label="Gaat af van"
+									value={chosenRefund.splitCategories[0]?.categoryId ?? ''}
+									options={chosenRefund.splitCategories.map((s) => ({
+										value: s.categoryId ?? '',
+										label: `${s.name ?? 'Zonder categorie'} (${formatCents(-s.amountCents)})`,
+										dot: null
+									}))}
+								/>
+							</div>
+						{/if}
+						<p class="muted small">
+							Telt in {chosenRefund.categoryName ?? 'de categorie van de uitgave'} in {formatMonth(
+								chosenRefund.date.slice(0, 7)
+							)}; het saldo telt hem op {formatShortDate(tx.date)}.
+						</p>
+					{:else}
+						<p class="muted small">
+							Een deelbetaling laat de rest open; meer dan er openstaat wordt tegoed.
+						</p>
+					{/if}
 					<div class="buttons">
 						<button class="button" disabled={!chosen}>Koppelen</button>
 					</div>
@@ -336,9 +412,104 @@
 		</section>
 	{/if}
 
+	{#if original}
+		<section class="card section" aria-labelledby="correction-title">
+			<h2 id="correction-title">Verrekend met</h2>
+			<ul class="lines">
+				<li>
+					<a class="row-link" href={`/transacties/${original.id}`}>
+						<span>
+							{original.counterparty || 'Zonder naam'}
+							<span class="muted small"
+								>{original.categoryName ?? 'Zonder categorie'} · {formatShortDate(
+									original.date
+								)}</span
+							>
+						</span>
+						<span class="num">{formatCents(original.amountCents, { sign: true })}</span>
+					</a>
+				</li>
+			</ul>
+			{#if data.correction?.shared}
+				{@const shared = data.correction.shared}
+				<ul class="lines">
+					<li class="mine">
+						<span>Jouw deel <span class="muted small">telt in je budget</span></span>
+						<span class="num">{formatCents(shared.mineCents)} lager</span>
+					</li>
+					{#each shared.parts as p, i (i)}
+						<li>
+							<span>
+								{p.personName}
+								{#if p.payBackCents > 0}
+									<span class="muted small"
+										>{formatCents(p.payBackCents)} te betalen; had al meer betaald</span
+									>
+								{/if}
+							</span>
+							<span class="num">{formatCents(p.cents)} lager</span>
+						</li>
+					{/each}
+				</ul>
+				{#if shared.alternative}
+					<form method="POST" action="?/correctionMode" use:enhance>
+						<input type="hidden" name="mode" value={shared.alternative} />
+						<button class="button secondary"
+							>{shared.alternative === 'mijn_deel'
+								? 'Alleen van mijn deel'
+								: 'Naar verhouding verdelen'}</button
+						>
+					</form>
+				{/if}
+			{/if}
+			<p class="muted small">
+				Telt in {original.categoryName ?? 'de categorie van de uitgave'} in {formatMonth(
+					original.date.slice(0, 7)
+				)}, ook als het geld later binnenkwam; het saldo telt hem op {formatShortDate(tx.date)}.
+				{#if data.correction?.auto}Automatisch gekoppeld als storno.{/if}
+			</p>
+			<form method="POST" action="?/unlinkCorrection" use:enhance>
+				<button class="button secondary">Losmaken</button>
+			</form>
+			{#if form && 'linkMessage' in form && form.linkMessage}
+				<p class="error-text" role="alert">{form.linkMessage}</p>
+			{/if}
+		</section>
+	{/if}
+
+	{#if corrections.length > 0}
+		<section class="card section" aria-labelledby="refunds-title">
+			<h2 id="refunds-title">Teruggekregen</h2>
+			<ul class="lines">
+				{#each corrections as c (c.id)}
+					<li>
+						<a class="row-link" href={`/transacties/${c.id}`}>
+							<span>
+								{c.counterparty || 'Zonder naam'}
+								<span class="muted small">{formatShortDate(c.date)}</span>
+							</span>
+							<span class={['num', c.amountCents > 0 && 'in']}
+								>{formatCents(c.amountCents, { sign: true })}</span
+							>
+						</a>
+					</li>
+				{/each}
+			</ul>
+			<p class="muted small">
+				Telt in deze categorie en maand.
+				{#if (data.correction?.roomCents ?? 0) > 0}Er kan nog {formatCents(
+						data.correction!.roomCents
+					)} terug.{:else}Het hele bedrag is terug.{/if}
+			</p>
+		</section>
+	{/if}
+
 	<form method="POST" action="?/delete" use:enhance class="delete">
 		{#if confirmDelete}
-			<p>Deze transactie verwijderen? Je kunt dit niet ongedaan maken.</p>
+			<p>
+				Deze transactie verwijderen? Je kunt dit niet ongedaan maken.{#if corrections.length > 0}
+					De retouren erop worden gewone boekingen om te controleren.{/if}
+			</p>
 			<div class="confirm">
 				<button class="button danger">Ja, verwijderen</button>
 				<button type="button" class="button secondary" onclick={() => (confirmDelete = false)}
@@ -586,6 +757,26 @@
 
 	.mine {
 		font-weight: 600;
+	}
+
+	.row-link {
+		display: flex;
+		flex: 1;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+		min-height: 48px;
+		color: inherit;
+		text-decoration: none;
+	}
+
+	.row-link > span:first-child {
+		display: grid;
+		line-height: 1.3;
+	}
+
+	.num.in {
+		color: var(--accent-strong);
 	}
 
 	.buttons {
