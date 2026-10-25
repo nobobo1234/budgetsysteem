@@ -1,11 +1,10 @@
-import { and, desc, eq, gte, inArray, isNull, lte, or, sql, type SQL } from 'drizzle-orm';
-import { nextOccurrence } from '../recurring.ts';
+import { and, desc, eq, gte, isNull, lte, ne, or, sql, type SQL } from 'drizzle-orm';
+import { advancePast } from '../recurring.ts';
 import { recordChange } from './audit.ts';
 import type { Conn, DB } from './db/index.ts';
 import {
 	accounts,
 	categories,
-	owed,
 	owedPayments,
 	recurring,
 	reservations,
@@ -15,6 +14,7 @@ import {
 import { ValidationError } from './errors.ts';
 import {
 	applyShare,
+	dropSourcePosts,
 	MY_SHARE,
 	recomputeStatus,
 	settlePayment,
@@ -167,29 +167,57 @@ export function updateTransaction(
 	});
 }
 
+type RecurringRow = typeof recurring.$inferSelect;
+type Transaction = typeof transactions.$inferSelect;
+
+/** Wat er aan een vaste last verandert als een van zijn posten verdwijnt. */
+function afterRemoval(db: Conn, r: RecurringRow, t: Transaction): Partial<RecurringRow> {
+	const patch: Partial<RecurringRow> = advancePast(r, t.date);
+	if (t.status !== 'bevestigd') return patch;
+	const newer = db
+		.select({ id: transactions.id })
+		.from(transactions)
+		.where(
+			and(
+				eq(transactions.recurringId, r.id),
+				eq(transactions.status, 'bevestigd'),
+				ne(transactions.id, t.id),
+				gte(transactions.date, t.date)
+			)
+		)
+		.get();
+	if (newer) return patch;
+	// Dit was de laatste afschrijving: wat hij aan de vaste last veranderde, gaat terug
+	const cents = -t.amountCents;
+	if (r.signal && r.signalToCents === cents) {
+		if (r.signal === 'prijsverhoging' && r.signalFromCents !== null)
+			patch.medianCents = r.signalFromCents;
+		patch.signal = null;
+		patch.signalFromCents = null;
+		patch.signalToCents = null;
+	}
+	const previous = db
+		.select({ amountCents: transactions.amountCents })
+		.from(transactions)
+		.where(
+			and(
+				eq(transactions.recurringId, r.id),
+				eq(transactions.status, 'bevestigd'),
+				ne(transactions.id, t.id)
+			)
+		)
+		.orderBy(desc(transactions.date))
+		.get();
+	if (previous) patch.lastCents = -previous.amountCents;
+	else if (r.signalFromCents !== null && patch.signal === null) patch.lastCents = r.signalFromCents;
+	return patch;
+}
+
 export function deleteTransaction(db: DB, id: string): boolean {
 	return db.transaction((tx) => {
 		const before = tx.select().from(transactions).where(eq(transactions.id, id)).get();
 		if (!before) return false;
-		// Posten van deze uitgave waarop niets betaald is vervallen; betaalde blijven als historie
-		const posts = tx
-			.select({ id: owed.id })
-			.from(owed)
-			.where(eq(owed.sourceTransactionId, id))
-			.all()
-			.map((p) => p.id);
-		const paid = new Set(
-			posts.length === 0
-				? []
-				: tx
-						.select({ owedId: owedPayments.owedId })
-						.from(owedPayments)
-						.where(inArray(owedPayments.owedId, posts))
-						.all()
-						.map((r) => r.owedId)
-		);
-		const unpaid = posts.filter((p) => !paid.has(p));
-		if (unpaid.length > 0) tx.delete(owed).where(inArray(owed.id, unpaid)).run();
+		dropSourcePosts(tx, id);
 		// Was dit een betaling, dan gaan de posten die hij dekte weer open
 		const covered = unlinkPayment(tx, id);
 		// Een afschrijving van een uitgesmeerde vaste last: de reservering staat weer opzij
@@ -197,23 +225,15 @@ export function deleteTransaction(db: DB, id: string): boolean {
 			.set({ drawnCents: 0, transactionId: null })
 			.where(eq(reservations.transactionId, id))
 			.run();
-		// Een verwachte post weggooien is "deze keer niet": de vaste last schuift door
-		if (before.status === 'verwacht' && before.recurringId) {
+		if (before.recurringId) {
 			const r = tx.select().from(recurring).where(eq(recurring.id, before.recurringId)).get();
-			if (r?.nextDate && r.nextDate.slice(0, 7) <= before.date.slice(0, 7)) {
+			// Een post weggooien is "deze keer niet": de vaste last schuift door. Een bevestigde
+			// afschrijving telt daarna niet meer als laatste bedrag of als prijsverhoging.
+			if (r)
 				tx.update(recurring)
-					.set({
-						nextDate: nextOccurrence({
-							interval: r.interval,
-							expectedDay: r.expectedDay,
-							current: r.nextDate,
-							previous: r.lastDate
-						}),
-						lastDate: r.nextDate
-					})
+					.set(afterRemoval(tx, r, before))
 					.where(eq(recurring.id, r.id))
 					.run();
-			}
 		}
 		tx.delete(transactions).where(eq(transactions.id, id)).run();
 		recomputeStatus(tx, covered);

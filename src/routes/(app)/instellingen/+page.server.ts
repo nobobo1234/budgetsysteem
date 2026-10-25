@@ -14,6 +14,7 @@ import {
 import { db } from '#lib/server/db/index.ts';
 import { accounts, passkeys, sessions } from '#lib/server/db/schema.ts';
 import { requireReauth, requireSession } from '#lib/server/http.ts';
+import { personByIban } from '#lib/server/people.ts';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = ({ locals }) => {
@@ -103,6 +104,8 @@ export const actions: Actions = {
 			return fail(400, { message: 'Naam en een korte alias (letters en cijfers) zijn nodig.' });
 		const iban = parsed.data.iban ? normalizeIban(parsed.data.iban) : null;
 		if (iban && !isValidIban(iban)) return fail(400, { message: 'Dat IBAN klopt niet.' });
+		if (iban && personByIban(db(), iban))
+			return fail(400, { message: 'Dat IBAN staat bij een persoon, niet bij een eigen rekening.' });
 		const clash = db()
 			.select({ id: accounts.id })
 			.from(accounts)

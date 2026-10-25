@@ -43,6 +43,13 @@
       "when": 1792911679009,
       "tag": "0005_te_krijgen",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1792917557919,
+      "tag": "0006_reservering_categorie",
+      "breakpoints": true
     }
   ]
 }

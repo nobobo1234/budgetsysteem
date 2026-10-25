@@ -7,6 +7,7 @@ import {
 	auditLog,
 	categories,
 	importBatches,
+	peopleIbans,
 	rules,
 	transactions
 } from '../../src/lib/server/db/schema.ts';
@@ -19,6 +20,7 @@ import {
 	uncategorizedGroups
 } from '../../src/lib/server/import/importer.ts';
 import type { ImportRecord } from '../../src/lib/server/import/types.ts';
+import { createPerson } from '../../src/lib/server/people.ts';
 import { actions as importActions } from '../../src/routes/(app)/import/+page.server.ts';
 import { fakeEvent, tempDatabase } from './helpers.ts';
 
@@ -199,6 +201,15 @@ const snapshot = () =>
 		.from(transactions)
 		.orderBy(transactions.id)
 		.all();
+
+describe('eigen rekening of persoon', () => {
+	it('een IBAN van een persoon wordt geen eigen rekening', () => {
+		const sanne = createPerson(db, 'Sanne');
+		db.insert(peopleIbans).values({ personId: sanne, iban: 'NL12SNSB0123456789' }).run();
+		expect(() => importFixture('camt053-v02.xml')).toThrow(/staat bij een persoon/);
+		expect(db.select().from(transactions).all()).toEqual([]);
+	});
+});
 
 describe('pinbetalingen zonder tegenpartij', () => {
 	it('krijgen bij de import de winkel als tegenpartij', () => {

@@ -1,9 +1,10 @@
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lte, ne, or, sql } from 'drizzle-orm';
 import { addDays, daysInMonth, shiftMonth, toIsoDate } from '../dates.ts';
 import {
+	advancePast,
 	defaultSpread,
 	detectRecurring,
-	nextOccurrence,
+	occurrencesThrough,
 	perMonthCents,
 	perYearCents,
 	reservationFor,
@@ -15,11 +16,20 @@ import {
 import { recordChange } from './audit.ts';
 import { enqueue, ensureScheduled, registerJob } from './jobs.ts';
 import type { Conn, DB } from './db/index.ts';
-import { accounts, categories, jobs, recurring, reservations, transactions } from './db/schema.ts';
+import {
+	accounts,
+	categories,
+	jobs,
+	recurring,
+	reservations,
+	transactionSplits,
+	transactions
+} from './db/schema.ts';
 import { INTERNAL_TRANSFER } from './db/seed.ts';
+import { ValidationError } from './errors.ts';
 import { log } from './log.ts';
+import { dropSourcePosts, MY_SHARE, syncShareSplits } from './owed.ts';
 import { describeError } from './telemetry/index.ts';
-import { ValidationError } from './transactions.ts';
 
 /** Niet bevestigd zoveel dagen na de verwachte dag: "gemist of opgezegd?" (spec: Verwachte posten). */
 export const MISSED_AFTER_DAYS = 7;
@@ -81,10 +91,18 @@ function reservationRow(db: Conn, recurringId: string, month: string) {
 		.from(reservations)
 		.where(and(eq(reservations.recurringId, recurringId), eq(reservations.month, month)))
 		.get();
-	return (
-		existing ??
-		db.insert(reservations).values({ recurringId, month, amountCents: 0 }).returning().get()
-	);
+	if (existing) return existing;
+	const categoryId =
+		db
+			.select({ categoryId: recurring.categoryId })
+			.from(recurring)
+			.where(eq(recurring.id, recurringId))
+			.get()?.categoryId ?? null;
+	return db
+		.insert(reservations)
+		.values({ recurringId, month, amountCents: 0, categoryId })
+		.returning()
+		.get();
 }
 
 /** Haalt alles wat opzij staat uit de reservering, in `month`: bij een afschrijving of bij stoppen. */
@@ -281,6 +299,10 @@ export function rejectProposal(db: DB, id: string): void {
  * afschrijfmaand) en in de afschrijfmaand een verwachte post op de verwachte dag met het
  * mediane bedrag. Idempotent: twee keer draaien maakt niets dubbel, en wat al bestaat
  * (ook een afgesloten maand) verandert niet.
+ *
+ * Loopt een vaste last achter (een post van vorige maand is nog niet bevestigd, of de job
+ * draaide een maand niet), dan krijgt elke afschrijving tot en met deze maand alsnog een
+ * post. Een gemiste komt zo als "gemist of opgezegd?" in beeld in plaats van stil weg te vallen.
  */
 export function generateMonth(
 	db: DB,
@@ -297,10 +319,17 @@ export function generateMonth(
 				and(eq(recurring.status, 'actief'), opts.only ? eq(recurring.id, opts.only) : undefined)
 			)
 			.all();
-		const [from, to] = monthRange(month);
 		for (const r of active) {
 			if (!r.nextDate) continue;
-			const debitMonth = r.nextDate.slice(0, 7);
+			const { dates: due, next } = occurrencesThrough({
+				interval: r.interval,
+				expectedDay: r.expectedDay,
+				current: r.nextDate,
+				previous: r.lastDate,
+				until: month
+			});
+			// De afschrijving waarvoor deze maand opzij gaat: deze maand, of anders de volgende
+			const debitMonth = due.at(-1)?.slice(0, 7) === month ? month : next.slice(0, 7);
 
 			let reservationId: string | undefined;
 			if (isSpread(r) && debitMonth >= month) {
@@ -320,48 +349,50 @@ export function generateMonth(
 					});
 					reservationId = tx
 						.insert(reservations)
-						.values({ recurringId: r.id, month, amountCents })
+						.values({ recurringId: r.id, month, amountCents, categoryId: r.categoryId })
 						.returning({ id: reservations.id })
 						.get().id;
 					reserved++;
 				}
 			}
 
-			if (debitMonth !== month) continue;
-			const has = tx
-				.select({ id: transactions.id })
-				.from(transactions)
-				.where(
-					and(
-						eq(transactions.recurringId, r.id),
-						gte(transactions.date, from),
-						lte(transactions.date, to)
+			for (const date of due) {
+				const [from, to] = monthRange(date.slice(0, 7));
+				const has = tx
+					.select({ id: transactions.id })
+					.from(transactions)
+					.where(
+						and(
+							eq(transactions.recurringId, r.id),
+							gte(transactions.date, from),
+							lte(transactions.date, to)
+						)
 					)
-				)
-				.get();
-			if (has) continue;
-			const row = tx
-				.insert(transactions)
-				.values({
-					amountCents: -r.medianCents,
-					date: r.nextDate,
-					counterparty: r.counterparty,
-					counterIban: r.counterIban,
-					categoryId: r.categoryId,
-					categorySource: r.categoryId ? 'handmatig' : null,
-					accountId: r.accountId ?? defaultAccountId(tx),
-					source: 'verwacht',
-					status: 'verwacht',
-					recurringId: r.id
-				})
-				.returning({ id: transactions.id })
-				.get();
-			if (reservationId)
-				tx.update(reservations)
-					.set({ transactionId: row.id })
-					.where(eq(reservations.id, reservationId))
-					.run();
-			created.push(row.id);
+					.get();
+				if (has) continue;
+				const row = tx
+					.insert(transactions)
+					.values({
+						amountCents: -r.medianCents,
+						date,
+						counterparty: r.counterparty,
+						counterIban: r.counterIban,
+						categoryId: r.categoryId,
+						categorySource: r.categoryId ? 'handmatig' : null,
+						accountId: r.accountId ?? defaultAccountId(tx),
+						source: 'verwacht',
+						status: 'verwacht',
+						recurringId: r.id
+					})
+					.returning({ id: transactions.id })
+					.get();
+				if (reservationId && date.slice(0, 7) === month)
+					tx.update(reservations)
+						.set({ transactionId: row.id })
+						.where(eq(reservations.id, reservationId))
+						.run();
+				created.push(row.id);
+			}
 		}
 	});
 	if (created.length > 0) emit({ type: 'verwacht', transactionIds: created });
@@ -375,20 +406,6 @@ function expectedPost(db: Conn, transactionId: string) {
 	const r = db.select().from(recurring).where(eq(recurring.id, t.recurringId)).get();
 	if (!r) throw new ValidationError('Deze post wacht niet op bevestiging');
 	return { t, r };
-}
-
-/** Schuift de volgende datum één keer door, als deze post bij de huidige ronde hoort. */
-function advance(r: Recurring, postDate: string): Partial<Recurring> {
-	if (!r.nextDate || r.nextDate.slice(0, 7) > postDate.slice(0, 7)) return {};
-	return {
-		nextDate: nextOccurrence({
-			interval: r.interval,
-			expectedDay: r.expectedDay,
-			current: r.nextDate,
-			previous: r.lastDate
-		}),
-		lastDate: r.nextDate
-	};
 }
 
 /**
@@ -418,6 +435,8 @@ export function confirmExpected(
 			.where(eq(transactions.id, t.id))
 			.returning()
 			.get();
+		// Gedeeld met anderen: hun deel blijft staan, jouw deel neemt het verschil
+		syncShareSplits(tx, t.id);
 
 		const previous = r.lastCents;
 		signal = signalFor({
@@ -427,7 +446,7 @@ export function confirmExpected(
 			maxCents: r.maxCents
 		});
 		const patch: Partial<Recurring> = {
-			...advance(r, t.date),
+			...advancePast(r, t.date),
 			lastCents: amount,
 			minCents: Math.min(r.minCents, amount),
 			maxCents: Math.max(r.maxCents, amount),
@@ -463,11 +482,12 @@ export function skipExpected(
 ): void {
 	const recurringId = db.transaction((tx) => {
 		const { t, r } = expectedPost(tx, transactionId);
+		dropSourcePosts(tx, t.id);
 		tx.delete(transactions).where(eq(transactions.id, t.id)).run();
 		recordChange(tx, reason, 'transactions', t.id, t, null);
 		if (reason === 'gemist') {
 			tx.update(recurring)
-				.set({ ...advance(r, t.date), updatedAt: new Date().toISOString() })
+				.set({ ...advancePast(r, t.date), updatedAt: new Date().toISOString() })
 				.where(eq(recurring.id, r.id))
 				.run();
 		}
@@ -486,9 +506,14 @@ export function stopRecurring(db: DB, id: string, today = toIsoDate(new Date()))
 		const before = tx.select().from(recurring).where(eq(recurring.id, id)).get();
 		if (!before || before.status !== 'actief')
 			throw new ValidationError('Deze vaste last loopt niet');
-		tx.delete(transactions)
+		const open = tx
+			.select({ id: transactions.id })
+			.from(transactions)
 			.where(and(eq(transactions.recurringId, id), eq(transactions.status, 'verwacht')))
-			.run();
+			.all()
+			.map((t) => t.id);
+		for (const t of open) dropSourcePosts(tx, t);
+		if (open.length > 0) tx.delete(transactions).where(inArray(transactions.id, open)).run();
 		if (isSpread(before) && reserveBalance(tx, id, today.slice(0, 7)) > 0)
 			drawReserve(tx, id, today.slice(0, 7));
 		const after = tx
@@ -587,7 +612,20 @@ export function updateRecurring(
 				})
 				.where(eq(transactions.id, t.id))
 				.run();
+			if (after.categoryId !== before.categoryId)
+				tx.update(transactionSplits)
+					.set({ categoryId: after.categoryId })
+					.where(
+						and(eq(transactionSplits.transactionId, t.id), eq(transactionSplits.note, MY_SHARE))
+					)
+					.run();
 		}
+		// Een andere categorie geldt vanaf deze maand; afgesloten maanden blijven zoals ze waren
+		if (after.categoryId !== before.categoryId)
+			tx.update(reservations)
+				.set({ categoryId: after.categoryId })
+				.where(and(eq(reservations.recurringId, id), gte(reservations.month, month)))
+				.run();
 		recordChange(tx, 'gewijzigd', 'recurring', id, before, after);
 	});
 	generateMonth(db, month, { only: id });
@@ -706,10 +744,9 @@ export function plannedByCategory(db: DB, month: string): Map<string | null, Pla
 			recurringId: reservations.recurringId,
 			amountCents: reservations.amountCents,
 			drawnCents: reservations.drawnCents,
-			categoryId: recurring.categoryId
+			categoryId: reservations.categoryId
 		})
 		.from(reservations)
-		.innerJoin(recurring, eq(recurring.id, reservations.recurringId))
 		.where(eq(reservations.month, month))
 		.all();
 	for (const r of res) {
@@ -723,6 +760,7 @@ export function plannedByCategory(db: DB, month: string): Map<string | null, Pla
 	const [from, to] = monthRange(month);
 	const posts = db
 		.select({
+			id: transactions.id,
 			amountCents: transactions.amountCents,
 			status: transactions.status,
 			categoryId: transactions.categoryId,
@@ -740,14 +778,44 @@ export function plannedByCategory(db: DB, month: string): Map<string | null, Pla
 			)
 		)
 		.all();
+	// Een gedeelde vaste last telt net als bij de uitgaven via zijn verdeling: alleen jouw deel
+	// staat gepland in de categorie, het voorgeschoten deel in Terugbetaling
+	const splits = Map.groupBy(
+		posts.length === 0
+			? []
+			: db
+					.select({
+						transactionId: transactionSplits.transactionId,
+						categoryId: transactionSplits.categoryId,
+						amountCents: transactionSplits.amountCents
+					})
+					.from(transactionSplits)
+					.where(
+						inArray(
+							transactionSplits.transactionId,
+							posts.map((t) => t.id)
+						)
+					)
+					.all(),
+		(s) => s.transactionId
+	);
 	for (const t of posts) {
-		const p = at(t.categoryId);
-		const cents = -t.amountCents;
-		if (t.status === 'bevestigd') {
-			p.plannedSpentCents += cents;
-			p.plannedCents += cents;
-		} else {
-			p.plannedCents += isSpread(t) ? cents - reserveBalance(db, t.recurringId, month) : cents;
+		const parts = splits.get(t.id) ?? [{ categoryId: t.categoryId, amountCents: t.amountCents }];
+		// Bij uitsmeren komt de afschrijving uit de reservering: één keer, in de eigen categorie
+		let reserve =
+			t.status === 'verwacht' && isSpread(t) ? reserveBalance(db, t.recurringId, month) : 0;
+		for (const part of parts) {
+			const p = at(part.categoryId);
+			const cents = -part.amountCents;
+			if (t.status === 'bevestigd') {
+				p.plannedSpentCents += cents;
+				p.plannedCents += cents;
+			} else if (reserve !== 0 && part.categoryId === t.categoryId) {
+				p.plannedCents += cents - reserve;
+				reserve = 0;
+			} else {
+				p.plannedCents += cents;
+			}
 		}
 	}
 	return out;

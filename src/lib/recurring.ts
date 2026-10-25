@@ -115,6 +115,52 @@ export function nextOccurrence(opts: {
 	return dateInMonth(shiftMonth(month, INTERVAL_MONTHS[interval]), expectedDay);
 }
 
+/** Hooguit zoveel afschrijvingen per keer inhalen: een server die een jaar uit stond. */
+const MAX_CATCH_UP = 24;
+
+/**
+ * De afschrijvingen vanaf `current` tot en met maand `until` (`YYYY-MM`), voor een vaste last
+ * die achterloopt: een post die pas later bevestigd wordt, of een maand waarin de job niet
+ * draaide. `next` is de eerste afschrijving na `until`, `previous` de laatste ervoor.
+ */
+export function occurrencesThrough(opts: {
+	interval: Interval;
+	expectedDay: number;
+	current: string;
+	previous?: string | null;
+	until: string;
+}): { dates: string[]; next: string; previous: string | null } {
+	const dates: string[] = [];
+	let current = opts.current;
+	let previous = opts.previous ?? null;
+	while (current.slice(0, 7) <= opts.until && dates.length < MAX_CATCH_UP) {
+		dates.push(current);
+		const next = nextOccurrence({ ...opts, current, previous });
+		previous = current;
+		current = next;
+	}
+	return { dates, next: current, previous };
+}
+
+/**
+ * Na bevestigen, overslaan of weggooien van een post: de volgende datum schuift door tot na de
+ * maand van die post. Lag hij al later (een oudere post die pas nu aan de beurt is), dan niets.
+ */
+export function advancePast(
+	r: { interval: Interval; expectedDay: number; nextDate: string | null; lastDate: string | null },
+	postDate: string
+): { nextDate?: string; lastDate?: string | null } {
+	if (!r.nextDate) return {};
+	const { dates, next, previous } = occurrencesThrough({
+		interval: r.interval,
+		expectedDay: r.expectedDay,
+		current: r.nextDate,
+		previous: r.lastDate,
+		until: postDate.slice(0, 7)
+	});
+	return dates.length === 0 ? {} : { nextDate: next, lastDate: previous };
+}
+
 // --- Herkennen ------------------------------------------------------------------------------
 
 export interface HistoryItem {
