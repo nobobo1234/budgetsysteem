@@ -3,6 +3,7 @@
 	import { refreshAll } from '$app/navigation';
 	import { flush } from '#lib/offline/queue.ts';
 	import { sync } from '#lib/offline/sync.svelte.ts';
+	import { refreshSubscription } from '#lib/push.ts';
 
 	let { children } = $props();
 
@@ -44,6 +45,8 @@
 
 	$effect(() => {
 		void trySync();
+		// Pushabonnement aan de huidige sessie koppelen (na opnieuw inloggen)
+		void refreshSubscription();
 	});
 </script>
 

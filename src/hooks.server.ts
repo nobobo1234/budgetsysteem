@@ -15,6 +15,7 @@ import { log } from '#lib/server/log.ts';
 import { requestLimiter } from '#lib/server/ratelimit.ts';
 import { scheduleRecurringJobs } from '#lib/server/recurring.ts';
 import {
+	alertSoon,
 	describeError,
 	recordError,
 	startTelemetry,
@@ -97,5 +98,7 @@ export const handleError: HandleServerError = ({ kind, error, event }) => {
 		route: event.route.id,
 		method: event.request.method
 	});
+	// Nieuw soort fout: pushmelding binnen enkele seconden
+	alertSoon();
 	return { status: 500, message: 'Er ging iets mis.', errorId };
 };

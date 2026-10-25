@@ -508,8 +508,9 @@ Elk scherm staat in deze tabel. Een nieuw scherm krijgt eerst een regel hier, in
 | Categorieën | `/categorieen` | Tabs Categorieën en Regels | Nieuwe categorie | Per groep een kaart; bewerken in de rij (naam, groep, telt mee); gearchiveerd ingeklapt |
 | Regels | `/regels` | Tabs Categorieën en Regels | Nieuwe regel | Lijst als zin ("Tegenpartij bevat … → categorie") met filter; nieuwe regel als "Als … dan …", prioriteit ingeklapt; onderaan "Regels opnieuw toepassen" |
 | Import | `/import` | Sleepvak voor het bankbestand | Importeren | Overzicht na import, tegenpartijen zonder categorie met één klik een regel, eerdere imports |
-| Meer | `/instellingen` | Passkeys | — | Herstelcode, actieve apparaten, rekeningen, links naar saldocheck, categorieën en regels, uitloggen |
+| Meer | `/instellingen` | Passkeys | — | Herstelcode, actieve apparaten, rekeningen, links naar saldocheck, meldingen, categorieën en regels, uitloggen |
 | Saldocheck | `/saldocheck` | Per rekening het verwachte saldo van vandaag en de uitkomst van de laatste check | Saldo invullen | Bij een verschil links naar de transacties van die rekening in die periode en naar de import; eerdere checks; startsaldo aanpassen. Bereikbaar via Meer en de herinnering op het startscherm |
+| Meldingen | `/instellingen/meldingen` | Dit apparaat: meldingen aan of uit | Meldingen aanzetten | Schakelaar per soort (geld, server, beveiliging), bedragen en namen op het vergrendelscherm, apparaten met meldingen, testmelding |
 | Inloggen | `/login` | Titel en uitleg | Inloggen met passkey | Herstelcode als terugval |
 
 Schermen uit latere fasen (Te krijgen, review-inbox, analyses) komen in de tabel zodra die fase begint.

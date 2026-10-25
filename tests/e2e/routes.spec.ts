@@ -13,6 +13,7 @@ const closed = [
 	['GET', '/regels'],
 	['GET', '/instellingen'],
 	['GET', '/saldocheck'],
+	['GET', '/instellingen/meldingen'],
 	['GET', '/__data.json'],
 	['GET', '/bestaat-niet'],
 	['POST', '/api/transactions'],
@@ -20,7 +21,10 @@ const closed = [
 	['POST', '/vaste-lasten?/confirm'],
 	['POST', '/api/auth/passkeys/options'],
 	['POST', '/instellingen?/logout'],
-	['POST', '/saldocheck?/check']
+	['POST', '/saldocheck?/check'],
+	['POST', '/instellingen/meldingen?/toggle'],
+	['POST', '/api/push/subscription'],
+	['DELETE', '/api/push/subscription']
 ] as const;
 
 for (const [method, path] of closed) {
@@ -28,7 +32,7 @@ for (const [method, path] of closed) {
 		const response = await request.fetch(path, {
 			method,
 			headers: { origin: baseURL!, 'content-type': 'application/json' },
-			data: method === 'POST' ? {} : undefined,
+			data: method === 'GET' ? undefined : {},
 			maxRedirects: 0
 		});
 		expect(response.status()).toBe(401);

@@ -72,3 +72,106 @@ self.addEventListener('fetch', (event) => {
 		})()
 	);
 });
+
+// Pushmeldingen. De server bepaalt titel en tekst (met of zonder bedragen, volgens de
+// instelling); hier alleen tonen. Alles wat binnenkomt wordt als gewone tekst behandeld.
+
+interface PushPayload {
+	title: string;
+	body: string;
+	url: string;
+	tag: string;
+}
+
+/** Alleen een pad binnen de app; anders het startscherm. */
+function appPath(url: unknown): string {
+	return typeof url === 'string' && /^\/(?!\/)[^\s\\]*$/.test(url) ? url : '/';
+}
+
+function readPayload(data: PushMessageData | null): PushPayload {
+	let raw: Record<string, unknown> = {};
+	try {
+		const parsed: unknown = data?.json();
+		if (parsed && typeof parsed === 'object') raw = parsed as Record<string, unknown>;
+	} catch {
+		// Geen geldige JSON: toon een algemene melding
+	}
+	const text = (value: unknown, fallback: string, max: number) =>
+		typeof value === 'string' && value.trim() ? value.slice(0, max) : fallback;
+	return {
+		title: text(raw.title, 'Budget', 80),
+		body: text(raw.body, 'Er is iets nieuws in je budget.', 300),
+		url: appPath(raw.url),
+		tag: text(raw.tag, 'budget', 64)
+	};
+}
+
+self.addEventListener('push', (event) => {
+	const payload = readPayload(event.data);
+	event.waitUntil(
+		self.registration.showNotification(payload.title, {
+			body: payload.body,
+			tag: payload.tag,
+			icon: '/icon-192.png',
+			badge: '/icon-192.png',
+			lang: 'nl',
+			data: { url: payload.url }
+		})
+	);
+});
+
+self.addEventListener('notificationclick', (event) => {
+	event.notification.close();
+	const data: unknown = event.notification.data;
+	const path = appPath(
+		data && typeof data === 'object' ? (data as { url?: unknown }).url : undefined
+	);
+	const target = new URL(path, self.location.origin).href;
+	event.waitUntil(
+		(async () => {
+			const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+			for (const client of windows) {
+				if (new URL(client.url).origin !== self.location.origin) continue;
+				await client.focus();
+				if (client.url !== target) await client.navigate(target);
+				return;
+			}
+			await self.clients.openWindow(target);
+		})()
+	);
+});
+
+// De push-dienst heeft het abonnement vervangen (niet elke browser stuurt dit event): het
+// nieuwe abonnement doorgeven en het oude afmelden.
+self.addEventListener('pushsubscriptionchange', (event) => {
+	const change = event as Event & {
+		oldSubscription?: PushSubscription | null;
+		newSubscription?: PushSubscription | null;
+		waitUntil(promise: Promise<unknown>): void;
+	};
+	change.waitUntil(
+		(async () => {
+			const next =
+				change.newSubscription ??
+				(change.oldSubscription
+					? await self.registration.pushManager.subscribe(change.oldSubscription.options)
+					: null);
+			if (next) {
+				await fetch('/api/push/subscription', {
+					method: 'POST',
+					headers: { 'content-type': 'application/json' },
+					body: JSON.stringify(next.toJSON()),
+					credentials: 'same-origin'
+				});
+			}
+			if (change.oldSubscription && change.oldSubscription.endpoint !== next?.endpoint) {
+				await fetch('/api/push/subscription', {
+					method: 'DELETE',
+					headers: { 'content-type': 'application/json' },
+					body: JSON.stringify({ endpoint: change.oldSubscription.endpoint }),
+					credentials: 'same-origin'
+				});
+			}
+		})()
+	);
+});

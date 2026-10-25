@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "95d97df7-2021-4526-99ab-7d92a339adb6",
+  "id": "3a550623-6d41-4660-b531-11752c5efa09",
   "prevId": "92f47531-10e9-418b-8192-f04dc9981947",
   "tables": {
     "accounts": {
@@ -614,6 +614,78 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
+    "notification_settings": {
+      "name": "notification_settings",
+      "columns": {
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "enabled": {
+          "name": "enabled",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "notifications_sent": {
+      "name": "notifications_sent",
+      "columns": {
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"
+        }
+      },
+      "indexes": {
+        "notifications_sent_kind_key_idx": {
+          "name": "notifications_sent_kind_key_idx",
+          "columns": [
+            "kind",
+            "key"
+          ],
+          "isUnique": true
+        },
+        "notifications_sent_at_idx": {
+          "name": "notifications_sent_at_idx",
+          "columns": [
+            "created_at"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
     "owed": {
       "name": "owed",
       "columns": {
@@ -799,6 +871,95 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
+    "push_subscriptions": {
+      "name": "push_subscriptions",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "endpoint": {
+          "name": "endpoint",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "p256dh": {
+          "name": "p256dh",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "auth": {
+          "name": "auth",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "device_name": {
+          "name": "device_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "session_id_hash": {
+          "name": "session_id_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"
+        },
+        "last_sent_at": {
+          "name": "last_sent_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "push_subscriptions_endpoint_unique": {
+          "name": "push_subscriptions_endpoint_unique",
+          "columns": [
+            "endpoint"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "push_subscriptions_session_id_hash_sessions_id_hash_fk": {
+          "name": "push_subscriptions_session_id_hash_sessions_id_hash_fk",
+          "tableFrom": "push_subscriptions",
+          "tableTo": "sessions",
+          "columnsFrom": [
+            "session_id_hash"
+          ],
+          "columnsTo": [
+            "id_hash"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
     "receipts": {
       "name": "receipts",
       "columns": {
@@ -937,13 +1098,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "match_key": {
-          "name": "match_key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
         "counterparty": {
           "name": "counterparty",
           "type": "text",
@@ -1007,28 +1161,6 @@
           "notNull": false,
           "autoincrement": false
         },
-        "last_date": {
-          "name": "last_date",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "last_cents": {
-          "name": "last_cents",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "spread": {
-          "name": "spread",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": false
-        },
         "category_id": {
           "name": "category_id",
           "type": "text",
@@ -1051,34 +1183,6 @@
           "autoincrement": false,
           "default": "'voorstel'"
         },
-        "signal": {
-          "name": "signal",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "signal_from_cents": {
-          "name": "signal_from_cents",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "signal_to_cents": {
-          "name": "signal_to_cents",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "stopped_at": {
-          "name": "stopped_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "text",
@@ -1086,31 +1190,9 @@
           "notNull": true,
           "autoincrement": false,
           "default": "(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
         }
       },
-      "indexes": {
-        "recurring_match_key_idx": {
-          "name": "recurring_match_key_idx",
-          "columns": [
-            "match_key"
-          ],
-          "isUnique": true
-        },
-        "recurring_status_idx": {
-          "name": "recurring_status_idx",
-          "columns": [
-            "status"
-          ],
-          "isUnique": false
-        }
-      },
+      "indexes": {},
       "foreignKeys": {
         "recurring_category_id_categories_id_fk": {
           "name": "recurring_category_id_categories_id_fk",
@@ -1141,129 +1223,7 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "checkConstraints": {
-        "recurring_expected_day": {
-          "name": "recurring_expected_day",
-          "value": "\"recurring\".\"expected_day\" BETWEEN 1 AND 31"
-        },
-        "recurring_amounts": {
-          "name": "recurring_amounts",
-          "value": "\"recurring\".\"min_cents\" >= 0 AND \"recurring\".\"median_cents\" >= 0"
-        }
-      }
-    },
-    "reservations": {
-      "name": "reservations",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "recurring_id": {
-          "name": "recurring_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "month": {
-          "name": "month",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "amount_cents": {
-          "name": "amount_cents",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "drawn_cents": {
-          "name": "drawn_cents",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
-        },
-        "transaction_id": {
-          "name": "transaction_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"
-        }
-      },
-      "indexes": {
-        "reservations_recurring_month_idx": {
-          "name": "reservations_recurring_month_idx",
-          "columns": [
-            "recurring_id",
-            "month"
-          ],
-          "isUnique": true
-        },
-        "reservations_month_idx": {
-          "name": "reservations_month_idx",
-          "columns": [
-            "month"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {
-        "reservations_recurring_id_recurring_id_fk": {
-          "name": "reservations_recurring_id_recurring_id_fk",
-          "tableFrom": "reservations",
-          "tableTo": "recurring",
-          "columnsFrom": [
-            "recurring_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "reservations_transaction_id_transactions_id_fk": {
-          "name": "reservations_transaction_id_transactions_id_fk",
-          "tableFrom": "reservations",
-          "tableTo": "transactions",
-          "columnsFrom": [
-            "transaction_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "reservations_month_format": {
-          "name": "reservations_month_format",
-          "value": "\"reservations\".\"month\" GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]'"
-        },
-        "reservations_amounts": {
-          "name": "reservations_amounts",
-          "value": "\"reservations\".\"amount_cents\" >= 0 AND \"reservations\".\"drawn_cents\" >= 0"
-        }
-      }
+      "checkConstraints": {}
     },
     "rules": {
       "name": "rules",
@@ -1684,13 +1644,6 @@
           "autoincrement": false,
           "default": "''"
         },
-        "recurring_id": {
-          "name": "recurring_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "text",
@@ -1725,14 +1678,6 @@
         "transactions_date_idx": {
           "name": "transactions_date_idx",
           "columns": [
-            "date"
-          ],
-          "isUnique": false
-        },
-        "transactions_recurring_idx": {
-          "name": "transactions_recurring_idx",
-          "columns": [
-            "recurring_id",
             "date"
           ],
           "isUnique": false
@@ -1812,19 +1757,6 @@
             "id"
           ],
           "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "transactions_recurring_id_recurring_id_fk": {
-          "name": "transactions_recurring_id_recurring_id_fk",
-          "tableFrom": "transactions",
-          "tableTo": "recurring",
-          "columnsFrom": [
-            "recurring_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
           "onUpdate": "no action"
         }
       },
