@@ -1,7 +1,7 @@
 import { asc, eq } from 'drizzle-orm';
 import { db } from '#lib/server/db/index.ts';
-import { categories } from '#lib/server/db/schema.ts';
-import { toIsoDate } from '#lib/dates.ts';
+import { accounts, categories } from '#lib/server/db/schema.ts';
+import { isIsoDate, toIsoDate } from '#lib/dates.ts';
 import {
 	listTransactions,
 	summarizeTransactions,
@@ -21,6 +21,15 @@ export const load: PageServerLoad = ({ url }) => {
 	const categoryParam = url.searchParams.get('categorie') ?? '';
 	const categoryId = categoryParam === 'geen' || UUID.test(categoryParam) ? categoryParam : '';
 	const status = url.searchParams.get('status') === 'te_controleren' ? 'te_controleren' : undefined;
+	// Vanuit de saldocheck: één rekening in een periode
+	const accountParam = url.searchParams.get('rekening') ?? '';
+	const accountId = UUID.test(accountParam) ? accountParam : '';
+	const date = (key: string) => {
+		const value = url.searchParams.get(key) ?? '';
+		return isIsoDate(value) ? value : '';
+	};
+	const from = date('van');
+	const to = date('tot');
 	const page = Math.max(
 		0,
 		Math.min(10_000, Number.parseInt(url.searchParams.get('pagina') ?? '0', 10) || 0)
@@ -30,12 +39,19 @@ export const load: PageServerLoad = ({ url }) => {
 		q,
 		month: month || undefined,
 		categoryId: categoryId || undefined,
-		status
+		status,
+		accountId: accountId || undefined,
+		from: from || undefined,
+		to: to || undefined
 	};
 	const rows = listTransactions(db(), { ...filter, limit: PAGE + 1, offset: page * PAGE });
 
 	return {
-		filter: { q, month, categoryId, status },
+		filter: { q, month, categoryId, status, accountId, from, to },
+		accountName: accountId
+			? (db().select({ name: accounts.name }).from(accounts).where(eq(accounts.id, accountId)).get()
+					?.name ?? null)
+			: null,
 		page,
 		hasMore: rows.length > PAGE,
 		transactions: rows.slice(0, PAGE),

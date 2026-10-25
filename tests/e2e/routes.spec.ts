@@ -11,12 +11,14 @@ const closed = [
 	['GET', '/regels'],
 	['GET', '/instellingen'],
 	['GET', '/instellingen/status'],
+	['GET', '/saldocheck'],
 	['GET', '/__data.json'],
 	['GET', '/bestaat-niet'],
 	['POST', '/api/transactions'],
 	['POST', '/api/vitals'],
 	['POST', '/api/auth/passkeys/options'],
-	['POST', '/instellingen?/logout']
+	['POST', '/instellingen?/logout'],
+	['POST', '/saldocheck?/check']
 ] as const;
 
 for (const [method, path] of closed) {
