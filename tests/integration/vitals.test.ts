@@ -105,7 +105,7 @@ describe('POST /api/vitals', () => {
 		});
 		const response = await handle({
 			event,
-			resolve: () => postVitals(event as never)
+			resolve: async () => postVitals(event as never)
 		});
 		expect(response.status).toBe(401);
 		expect(stored()).toEqual([]);
@@ -120,7 +120,7 @@ describe('POST /api/vitals', () => {
 			body: { metrics: [{ name: 'INP', value: 10 }] },
 			cookies: { [sessionCookieName()]: token }
 		});
-		const response = await handle({ event, resolve: () => postVitals(event as never) });
+		const response = await handle({ event, resolve: async () => postVitals(event as never) });
 		expect(response.status).toBe(204);
 		expect(stored()).toEqual([{ name: 'INP', value: 10 }]);
 	});
