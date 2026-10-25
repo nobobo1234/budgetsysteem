@@ -4,6 +4,7 @@ import type { HistoryItem } from './recurring.ts';
 import {
 	checkShares,
 	detectShareProposals,
+	ibanLinkText,
 	isActive,
 	lastMonths,
 	monthState,
@@ -259,5 +260,19 @@ describe('voorstellen uit de historie', () => {
 		expect(proposedShareCents(2000, 6000, 6500)).toBe(2166);
 		expect(proposedShareCents(2000, 6000, 6000)).toBe(2000);
 		expect(proposedShareCents(2000, 0, 6000)).toBe(2000);
+	});
+});
+
+describe('melding na een nieuw IBAN', () => {
+	it('telt gekoppeld en niet gepast, met enkelvoud en meervoud', () => {
+		expect(ibanLinkText('Sanne', 3, 1)).toBe(
+			'3 betalingen van Sanne gekoppeld · 1 paste niet, koppel die zelf'
+		);
+		expect(ibanLinkText('Sanne', 1, 2)).toBe(
+			'1 betaling van Sanne gekoppeld · 2 pasten niet, koppel ze zelf'
+		);
+		expect(ibanLinkText('Sanne', 2, 0)).toBe('2 betalingen van Sanne gekoppeld');
+		expect(ibanLinkText('Sanne', 0, 1)).toBe('1 betaling van Sanne paste niet, koppel die zelf');
+		expect(ibanLinkText('Sanne', 0, 0)).toBeNull();
 	});
 });

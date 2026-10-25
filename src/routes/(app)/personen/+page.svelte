@@ -39,7 +39,7 @@
 					: form && 'deleted' in form
 						? { text: 'Persoon verwijderd', error: false }
 						: form && 'ibanAdded' in form
-							? { text: 'IBAN toegevoegd', error: false }
+							? { text: form.ibanMessage ?? 'IBAN toegevoegd', error: false }
 							: form && 'ibanRemoved' in form
 								? { text: 'IBAN verwijderd', error: false }
 								: null
