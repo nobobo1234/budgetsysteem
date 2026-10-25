@@ -1,9 +1,11 @@
 <script lang="ts">
+	import { initials } from '#lib/text.ts';
+	import { groupHue } from '#lib/categoryColor.ts';
+	import * as icons from '#lib/icons-extra.ts';
 	import { tick } from 'svelte';
 	import { enhance, type SubmitFunction } from '$app/forms';
 	import BackLink from '#lib/components/BackLink.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
-	import Monogram from '#lib/components/Monogram.svelte';
 	import OwedTabs from '#lib/components/OwedTabs.svelte';
 	import Sheet from '#lib/components/Sheet.svelte';
 	import Toast from '#lib/components/Toast.svelte';
@@ -70,7 +72,9 @@
 			<li class={[!p.active && 'inactive']}>
 				<details>
 					<summary>
-						<Monogram name={p.name} />
+						<span class="monogram hue" style:--h={groupHue(p.name)} aria-hidden="true"
+							>{initials(p.name)}</span
+						>
 						<span class="name">
 							<strong>{p.name}</strong>
 							<span class="muted small">
@@ -169,7 +173,7 @@
 		{:else}
 			<li class="empty">
 				<EmptyState
-					icon="personen"
+					icon={icons.personen}
 					text="Nog niemand om mee te delen. Typ in de snelinvoer met sanne, dan komt Sanne hier vanzelf bij."
 				/>
 			</li>

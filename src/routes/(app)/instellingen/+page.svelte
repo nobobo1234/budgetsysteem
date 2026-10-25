@@ -1,6 +1,6 @@
 <script lang="ts">
 	import Tile from '#lib/components/Tile.svelte';
-	import type { IconName } from '#lib/icons.ts';
+	import * as icons from '#lib/icons-extra.ts';
 	import { formatCents } from '#lib/money.ts';
 
 	let { data } = $props();
@@ -14,7 +14,7 @@
 		href: string;
 		title: string;
 		value: string;
-		icon: IconName;
+		icon: icons.IconDef;
 		/** Vraagt aandacht: stip en waarschuwende waarde */
 		warn?: boolean;
 	}
@@ -30,7 +30,7 @@
 						t.owed.toReceiveCents > 0
 							? `${formatCents(t.owed.toReceiveCents)} van ${plural(t.owed.people, 'persoon', 'personen')}`
 							: 'Niets open',
-					icon: 'teKrijgen'
+					icon: icons.teKrijgen
 				},
 				{
 					href: '/terugbetalingen',
@@ -41,7 +41,7 @@
 							: t.shares.lasts > 0
 								? plural(t.shares.lasts, 'gedeelde last', 'gedeelde lasten')
 								: 'Nog niets gedeeld',
-					icon: 'terugbetalingen',
+					icon: icons.terugbetalingen,
 					warn: t.shares.arrearsCents > 0
 				},
 				{
@@ -53,7 +53,7 @@
 							: t.fixed.active > 0
 								? `${formatCents(t.fixed.perMonthCents, { whole: true })} per maand`
 								: 'Nog geen',
-					icon: 'vasteLasten'
+					icon: icons.vasteLasten
 				},
 				{
 					href: '/saldocheck',
@@ -62,7 +62,7 @@
 						t.balanceDue.length > 0
 							? `Nog te doen voor ${names(t.balanceDue)}`
 							: 'Gedaan deze maand',
-					icon: 'saldocheck',
+					icon: icons.saldocheck,
 					warn: t.balanceDue.length > 0
 				}
 			]
@@ -74,19 +74,19 @@
 					href: '/categorieen',
 					title: 'Categorieën',
 					value: plural(t.categories, 'categorie', 'categorieën'),
-					icon: 'categorieen'
+					icon: icons.categorieen
 				},
 				{
 					href: '/regels',
 					title: 'Regels',
 					value: t.rules > 0 ? plural(t.rules, 'regel', 'regels') : 'Nog geen regels',
-					icon: 'regels'
+					icon: icons.regels
 				},
 				{
 					href: '/personen',
 					title: 'Personen',
 					value: t.people > 0 ? plural(t.people, 'persoon', 'personen') : 'Nog niemand',
-					icon: 'personen'
+					icon: icons.personen
 				}
 			]
 		},
@@ -97,13 +97,13 @@
 					href: '/instellingen/meldingen',
 					title: 'Meldingen',
 					value: t.devices > 0 ? `Aan op ${plural(t.devices, 'apparaat', 'apparaten')}` : 'Nog uit',
-					icon: 'meldingen'
+					icon: icons.meldingen
 				},
 				{
 					href: '/instellingen/rekeningen',
 					title: 'Rekeningen',
 					value: t.accounts.length > 0 ? names(t.accounts) : 'Nog geen',
-					icon: 'rekeningen'
+					icon: icons.rekeningen
 				},
 				{
 					href: '/instellingen/beveiliging',
@@ -113,7 +113,7 @@
 						: t.passkeys < 2
 							? '1 passkey, voeg er een toe'
 							: `${plural(t.passkeys, 'passkey', 'passkeys')} en een herstelcode`,
-					icon: 'beveiliging',
+					icon: icons.beveiliging,
 					warn: !t.recoveryCode
 				},
 				{
@@ -123,7 +123,7 @@
 						t.statusAttention > 0
 							? `${plural(t.statusAttention, 'punt vraagt', 'punten vragen')} aandacht`
 							: 'Alles werkt',
-					icon: 'status',
+					icon: icons.status,
 					warn: t.statusAttention > 0
 				}
 			]

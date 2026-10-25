@@ -1,10 +1,12 @@
 <script lang="ts">
+	import { initials } from '#lib/text.ts';
+	import { groupHue } from '#lib/categoryColor.ts';
+	import * as icons from '#lib/icons-extra.ts';
 	import { enhance, type SubmitFunction } from '$app/forms';
 	import { fly } from 'svelte/transition';
 	import BackLink from '#lib/components/BackLink.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import HeroAmount from '#lib/components/HeroAmount.svelte';
-	import Monogram from '#lib/components/Monogram.svelte';
 	import Select, { type SelectOption } from '#lib/components/Select.svelte';
 	import Toast from '#lib/components/Toast.svelte';
 	import { formatMonth, formatShortDate, formatShortMonth, shiftMonth } from '#lib/dates.ts';
@@ -195,7 +197,9 @@
 		{#each o.persons as person (person.personId)}
 			<article class="card person" in:fly={{ y: 8, duration: 220 }}>
 				<header>
-					<Monogram name={person.name} />
+					<span class="monogram hue" style:--h={groupHue(person.name)} aria-hidden="true"
+						>{initials(person.name)}</span
+					>
 					<h2>{person.name}</h2>
 					{#if person.arrearsCents > 0}
 						<span class="num late-sum">{formatCents(person.arrearsCents)} achter</span>
@@ -342,7 +346,7 @@
 		{:else}
 			<div class="card">
 				<EmptyState
-					icon="terugbetalingen"
+					icon={icons.terugbetalingen}
 					text="Nog geen gedeelde vaste lasten. Betaal je iets voor het hele huis, zoals de wifi? Geef huisgenoten een aandeel bij de vaste last."
 				>
 					<a class="button secondary" href="/vaste-lasten">Naar vaste lasten</a>

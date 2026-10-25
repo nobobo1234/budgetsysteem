@@ -1,10 +1,9 @@
 <script lang="ts">
-	import { groupColor } from '#lib/categoryColor.ts';
+	import { groupColor, groupHue } from '#lib/categoryColor.ts';
 	import { formatShortDate } from '#lib/dates.ts';
 	import { centsToInput, formatCents } from '#lib/money.ts';
 	import { describeRefund, type RefundInfo } from '#lib/refund.ts';
-	import { displayName } from '#lib/text.ts';
-	import Monogram from './Monogram.svelte';
+	import { displayName, initials } from '#lib/text.ts';
 
 	interface Item {
 		/** Alleen nodig voor de overgang naar de detailpagina */
@@ -31,6 +30,8 @@
 	}: { tx: Item; pending?: boolean; error?: string; href?: string; showDate?: boolean } = $props();
 
 	const color = $derived(tx.categoryName ? groupColor(tx.categoryGroup ?? tx.categoryName) : null);
+	// Monogram in de tint van de groep; zonder categorie grijs
+	const monoHue = $derived(tx.categoryName ? groupHue(tx.categoryGroup ?? tx.categoryName) : null);
 	const refund = $derived(tx.refund ? describeRefund(tx.refund, tx.counterparty) : null);
 	const orig = $derived(
 		tx.origCurrency && tx.origAmountCents !== null
@@ -40,10 +41,9 @@
 </script>
 
 <svelte:element this={href ? 'a' : 'div'} {href} class={['item', href && 'link']}>
-	<Monogram
-		name={tx.counterparty || '?'}
-		group={tx.categoryName ? (tx.categoryGroup ?? tx.categoryName) : null}
-	/>
+	<span class={['monogram', monoHue !== null && 'hue']} style:--h={monoHue} aria-hidden="true"
+		>{initials(tx.counterparty || '?')}</span
+	>
 	<div class="main">
 		<span class="who" data-tx-name={href ? tx.id : undefined}
 			>{displayName(tx.counterparty) || 'Zonder naam'}</span

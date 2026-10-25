@@ -1,4 +1,5 @@
 <script lang="ts">
+	import * as icons from '#lib/icons-extra.ts';
 	import { tick } from 'svelte';
 	import { enhance, type SubmitFunction } from '$app/forms';
 	import BackLink from '#lib/components/BackLink.svelte';
@@ -211,7 +212,7 @@
 				<li class="empty">
 					{#if data.rules.length === 0}
 						<EmptyState
-							icon="regels"
+							icon={icons.regels}
 							text="Nog geen regels. Maak er hierboven een, of snel vanuit de import."
 							compact
 						>
@@ -219,7 +220,7 @@
 						</EmptyState>
 					{:else}
 						<EmptyState
-							icon="zoeken"
+							icon={icons.zoeken}
 							text="Geen regel past bij &quot;{ruleFilter}&quot;."
 							compact
 						/>

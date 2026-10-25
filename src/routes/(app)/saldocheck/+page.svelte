@@ -1,4 +1,5 @@
 <script lang="ts">
+	import * as icons from '#lib/icons.ts';
 	import { enhance, type SubmitFunction } from '$app/forms';
 	import BackLink from '#lib/components/BackLink.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
@@ -190,7 +191,7 @@
 	{:else}
 		<div class="card">
 			<EmptyState
-				icon="saldocheck"
+				icon={icons.saldocheck}
 				text="Nog geen rekeningen. Importeer een export van de bank; de rekening komt er dan vanzelf bij."
 			>
 				<a class="button" href="/import">Export importeren</a>

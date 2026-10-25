@@ -1,4 +1,5 @@
 <script lang="ts">
+	import * as icons from '#lib/icons-extra.ts';
 	import { tick } from 'svelte';
 	import { deserialize } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
@@ -381,7 +382,7 @@
 		<div class="card">
 			{#if rangeFilter && !data.filter.q}
 				<EmptyState
-					icon="transacties"
+					icon={icons.transacties}
 					text="Geen boekingen in deze periode. Mis je een uitgave, voer hem dan in of importeer een export van de bank."
 				>
 					<a class="button" href="/">Uitgave invoeren</a>
@@ -389,7 +390,7 @@
 				</EmptyState>
 			{:else if hasFilter}
 				<EmptyState
-					icon="zoeken"
+					icon={icons.zoeken}
 					text="Niets gevonden{data.filter.q
 						? ` voor "${data.filter.q}"`
 						: ''}. Probeer een ander woord, of zoek in alle maanden en categorieën."
@@ -398,7 +399,7 @@
 				</EmptyState>
 			{:else}
 				<EmptyState
-					icon="transacties"
+					icon={icons.transacties}
 					text="Nog geen transacties. Importeer je SNS-historie, of typ op het overzicht een uitgave zoals 12,50 ah."
 				>
 					<a class="button" href="/import">Historie importeren</a>

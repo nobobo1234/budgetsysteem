@@ -2,7 +2,7 @@
 	import { onMount, tick } from 'svelte';
 	import { page } from '$app/state';
 	import { afterNavigate, onNavigate, refreshAll } from '$app/navigation';
-	import { ICONS } from '#lib/icons.ts';
+	import { budget, importeren, meer, overzicht, transacties } from '#lib/icons.ts';
 	import { activeTab } from '#lib/nav.ts';
 	import { nav } from '#lib/nav.svelte.ts';
 	import { flush } from '#lib/offline/queue.ts';
@@ -14,42 +14,18 @@
 	// Lijn-iconen uit icons.ts, zodat je de tabs ook herkent zonder te lezen; de actieve tab
 	// krijgt de gevulde vorm (spec: Navigatie)
 	const links = [
-		{ href: '/', label: 'Overzicht', icon: ICONS.overzicht },
-		{ href: '/transacties', label: 'Transacties', icon: ICONS.transacties },
-		{ href: '/budget', label: 'Budget', icon: ICONS.budget },
-		{ href: '/import', label: 'Import', icon: ICONS.import },
-		{ href: '/instellingen', label: 'Meer', icon: ICONS.meer }
+		{ href: '/', label: 'Overzicht', icon: overzicht },
+		{ href: '/transacties', label: 'Transacties', icon: transacties },
+		{ href: '/budget', label: 'Budget', icon: budget },
+		{ href: '/import', label: 'Import', icon: importeren },
+		{ href: '/instellingen', label: 'Meer', icon: meer }
 	] as const;
 
 	// Een subpagina laat de tab van haar ouder actief, zoals Budget bij vaste lasten
 	const current = $derived(activeTab(page.url.pathname));
 
-	// Een indicator die tussen de tabs schuift: gemeten op het icoon van de actieve tab, zodat
-	// hij op een telefoon (onderin) en op desktop (bovenin) op de goede plek staat
-	let navEl = $state<HTMLElement>();
-	let indicator = $state<{ x: number; y: number; w: number } | null>(null);
-	let ready = $state(false);
-	function measure() {
-		const link = navEl?.querySelector<HTMLElement>('a[aria-current="page"]');
-		const icon = link?.querySelector<HTMLElement>('.icon');
-		if (!navEl || !link || !icon) return (indicator = null);
-		const n = navEl.getBoundingClientRect();
-		const l = link.getBoundingClientRect();
-		const i = icon.getBoundingClientRect();
-		indicator = { x: i.left + i.width / 2 - n.left, y: i.top + i.height / 2 - n.top, w: l.width };
-	}
-	$effect(() => {
-		void current;
-		void tick().then(measure);
-	});
-	onMount(() => {
-		measure();
-		// Pas na de eerste meting bewegen, anders schuift hij bij het laden vanaf links in
-		requestAnimationFrame(() => (ready = true));
-		const observer = new ResizeObserver(measure);
-		if (navEl) observer.observe(navEl);
-		return () => observer.disconnect();
-	});
+	// Een indicator die tussen de tabs schuift (alleen CSS: de tabs zijn even breed)
+	const index = $derived(links.findIndex((l) => l.href === current));
 
 	// De compacte kop toont de titel van de pagina zodra de grote titel uit beeld schuift
 	let title = $state('');
@@ -114,23 +90,15 @@
 		{@render children()}
 	</main>
 
-	<nav aria-label="Hoofdmenu" bind:this={navEl} class:ready>
-		{#if indicator}
-			<span
-				class="indicator"
-				aria-hidden="true"
-				style:--x="{indicator.x}px"
-				style:--y="{indicator.y}px"
-				style:--w={indicator.w}
-			></span>
-		{/if}
+	<nav aria-label="Hoofdmenu">
+		{#if index >= 0}<span class="indicator" aria-hidden="true" style:--i={index}></span>{/if}
 		{#each links as link (link.href)}
 			{@const on = current === link.href}
 			<a href={link.href} aria-current={on ? 'page' : undefined}>
 				<span class="icon">
 					<svg viewBox="0 0 24 24" aria-hidden="true">
 						{#if on}
-							<path d={link.icon.fill} fill="currentColor" class="filled" />
+							<path d={link.icon.fill ?? link.icon.path} fill="currentColor" class="filled" />
 						{:else}
 							<path
 								d={link.icon.path}
@@ -247,7 +215,8 @@
 		z-index: 10;
 		display: grid;
 		grid-template-columns: repeat(5, minmax(0, 1fr));
-		gap: 2px;
+		--gap: 2px;
+		gap: var(--gap);
 		padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
 		background: color-mix(in oklch, var(--bg) 88%, transparent);
 		backdrop-filter: blur(14px);
@@ -322,22 +291,27 @@
 		}
 	}
 
-	/* Telefoon: een pil achter het icoon van de actieve tab, die naar de volgende tab schuift */
+	/* De indicator beslaat de eerste kolom en schuift per tab een kolom op. Telefoon: een pil
+	   achter het icoon van de actieve tab */
 	.indicator {
 		position: absolute;
-		left: 0;
-		top: 0;
-		width: 56px;
-		height: 30px;
-		margin: -15px 0 0 -28px;
-		border-radius: 999px;
-		background: var(--accent-soft);
-		transform: translate(var(--x), var(--y));
+		inset: 0;
+		grid-area: 1 / 1;
 		pointer-events: none;
+		transform: translateX(calc(var(--i) * (100% + var(--gap))));
+		transition: transform 360ms var(--ease-spring);
 	}
 
-	nav.ready .indicator {
-		transition: transform 360ms var(--ease-spring);
+	.indicator::before {
+		content: '';
+		position: absolute;
+		top: calc(50% - 25px);
+		left: 50%;
+		width: 56px;
+		height: 30px;
+		margin-left: -28px;
+		border-radius: 999px;
+		background: var(--accent-soft);
 	}
 
 	nav a {
@@ -350,18 +324,20 @@
 			top: 0;
 			inset: 0 0 auto 0;
 			grid-row: 1;
-			display: flex;
+			grid-template-columns: repeat(5, 9.5rem);
 			justify-content: center;
-			gap: 8px;
+			--gap: 8px;
+			padding: 0 6px;
 			border-top: 0;
 			border-bottom: 1px solid var(--line);
 		}
 
 		nav a {
 			display: flex;
+			justify-content: center;
 			gap: 8px;
 			min-height: var(--tap);
-			padding: 0 16px;
+			padding: 0 12px;
 			font-size: 0.95rem;
 		}
 
@@ -374,17 +350,14 @@
 			color: var(--text);
 		}
 
-		/* Desktop: een streep onder de actieve tab, zo breed als de tab */
-		.indicator {
-			top: auto;
-			bottom: -1px;
-			width: 1px;
+		/* Desktop: een streep onder de actieve tab */
+		.indicator::before {
+			inset: auto 16px 0;
+			width: auto;
 			height: 2px;
 			margin: 0;
 			border-radius: 0;
 			background: var(--accent);
-			transform: translateX(calc(var(--x) - var(--w) * 0.5px)) scaleX(var(--w));
-			transform-origin: left;
 		}
 
 		main {

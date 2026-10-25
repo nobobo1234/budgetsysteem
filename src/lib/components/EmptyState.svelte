@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import { ICONS, type IconName } from '#lib/icons.ts';
+	import type { IconDef } from '#lib/icons.ts';
 
 	// Lege staat (spec: Staten, Componenten): een kleine lijnillustratie in de stijl van de
 	// tab-iconen, één vertellende zin en altijd een volgende stap. De illustratie is het icoon
@@ -11,7 +11,7 @@
 		children,
 		compact = false
 	}: {
-		icon: IconName;
+		icon: IconDef;
 		/** Wat er zou staan, als zin */
 		text: string;
 		/** De volgende stap: een knop of Meer-link */
@@ -21,7 +21,7 @@
 	} = $props();
 </script>
 
-<div class={['empty', 'hue', compact && 'compact']} style:--h={ICONS[icon].hue}>
+<div class={['empty', 'hue', compact && 'compact']} style:--h={icon.hue}>
 	<svg class="art" viewBox="0 0 96 72" aria-hidden="true">
 		<circle cx="48" cy="38" r="26" class="wash" />
 		<path class="ground" d="M14 66h68" />
@@ -31,7 +31,7 @@
 			<circle cx="86" cy="44" r="1.6" />
 		</g>
 		<g class="icon" transform="translate(30 20) scale(1.5)">
-			<path d={ICONS[icon].path} />
+			<path d={icon.path} />
 		</g>
 	</svg>
 	<p class="tell">{text}</p>

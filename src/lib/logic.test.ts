@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-	budgetSplit,
 	freeThisMonth,
 	homeBars,
 	monthStory,
@@ -8,6 +7,7 @@ import {
 	storySentence,
 	type BudgetLine
 } from './budget.ts';
+import { budgetSplit } from './budgetSplit.ts';
 import { groupColor, groupHue } from './categoryColor.ts';
 import { keyboardInset } from './viewport.ts';
 import { addDays, daysInMonth, formatDayHeading, isIsoDate, shiftMonth } from './dates.ts';

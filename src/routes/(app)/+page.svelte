@@ -3,26 +3,25 @@
 	import { refreshAll } from '$app/navigation';
 	import { fly } from 'svelte/transition';
 	import { FIXED_GROUP, homeBars, monthStory, storySentence } from '#lib/budget.ts';
-	import { groupColor } from '#lib/categoryColor.ts';
+	import { groupColor, groupHue } from '#lib/categoryColor.ts';
 	import BudgetBar from '#lib/components/BudgetBar.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import ExpectedItem from '#lib/components/ExpectedItem.svelte';
 	import HeroAmount from '#lib/components/HeroAmount.svelte';
 	import LinkThreads, { threadGutter } from '#lib/components/LinkThreads.svelte';
-	import Monogram from '#lib/components/Monogram.svelte';
 	import MonthLine from '#lib/components/MonthLine.svelte';
 	import QuickEntry from '#lib/components/QuickEntry.svelte';
 	import SignalCard from '#lib/components/SignalCard.svelte';
 	import Toast from '#lib/components/Toast.svelte';
 	import TransactionItem from '#lib/components/TransactionItem.svelte';
 	import { daysInMonth, formatMonth, formatShortDate, fromIsoDate } from '#lib/dates.ts';
-	import type { IconName } from '#lib/icons.ts';
+	import * as icons from '#lib/icons.ts';
 	import { formatCents } from '#lib/money.ts';
 	import { flush, type QueuedTransaction } from '#lib/offline/queue.ts';
 	import { sync } from '#lib/offline/sync.svelte.ts';
 	import { motion } from '#lib/motion.ts';
 	import { threadLayout } from '#lib/refund.ts';
-	import { displayName } from '#lib/text.ts';
+	import { displayName, initials } from '#lib/text.ts';
 
 	let { data } = $props();
 
@@ -46,7 +45,7 @@
 	// Signaalkaartjes: wat op je wacht, alleen als er iets is (spec: Startscherm)
 	interface Signal {
 		href: string;
-		icon: IconName;
+		icon: icons.IconDef;
 		big: string;
 		small: string;
 		morph?: 'bedrag' | 'titel';
@@ -57,20 +56,20 @@
 		const all: (Signal | false)[] = [
 			data.owed.toReceiveCents > 0 && {
 				href: '/te-krijgen',
-				icon: 'teKrijgen',
+				icon: icons.teKrijgen,
 				big: formatCents(data.owed.toReceiveCents),
 				small: `te krijgen van ${data.owed.people} ${plural(data.owed.people, 'persoon', 'personen')}`,
 				morph: 'bedrag'
 			},
 			data.reviewCount > 0 && {
 				href: '/transacties?status=te_controleren',
-				icon: 'controleren',
+				icon: icons.controleren,
 				big: String(data.reviewCount),
 				small: 'te controleren'
 			},
 			data.balanceCheckDue.length > 0 && {
 				href: '/saldocheck',
-				icon: 'saldocheck',
+				icon: icons.saldocheck,
 				big: 'Saldocheck',
 				small: `nog te doen voor ${data.balanceCheckDue.map((a) => a.name).join(' en ')}`,
 				morph: 'titel',
@@ -78,7 +77,7 @@
 			},
 			data.proposals > 0 && {
 				href: '/vaste-lasten',
-				icon: 'vasteLasten',
+				icon: icons.vasteLasten,
 				big: String(data.proposals),
 				small: plural(
 					data.proposals,
@@ -171,7 +170,7 @@
 			<section class="empty" aria-labelledby="empty-title">
 				<h1 id="empty-title">Nog geen budget</h1>
 				<EmptyState
-					icon="budget"
+					icon={icons.budget}
 					text="Stel limieten per categorie in, dan zie je hier wat je nog vrij hebt."
 					compact
 				>
@@ -216,7 +215,11 @@
 								<ExpectedItem item={entry.item} ondone={notify} />
 							{:else}
 								{@const item = entry.item}
-								<Monogram name={item.personName} size={32} />
+								<span
+									class="monogram sm hue"
+									style:--h={groupHue(item.personName)}
+									aria-hidden="true">{initials(item.personName)}</span
+								>
 								<a class="who" href="/terugbetalingen">
 									<span class="name">{item.personName}</span>
 									<span class="muted small">
@@ -358,7 +361,7 @@
 					{#if queued.length === 0}
 						<li class="none">
 							<EmptyState
-								icon="transacties"
+								icon={icons.transacties}
 								text="Nog niets ingevoerd. Typ hierboven bijvoorbeeld 12,50 ah, of importeer je historie."
 								compact
 							>

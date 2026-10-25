@@ -1,4 +1,5 @@
 <script lang="ts">
+	import * as icons from '#lib/icons-extra.ts';
 	import { enhance } from '$app/forms';
 	import BackLink from '#lib/components/BackLink.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
@@ -37,7 +38,7 @@
 	{:else}
 		<div class="card">
 			<EmptyState
-				icon="rekeningen"
+				icon={icons.rekeningen}
 				text="Nog geen rekeningen. Ze komen erbij met je eerste import."
 			>
 				<a class="button secondary" href="/import">Naar de import</a>

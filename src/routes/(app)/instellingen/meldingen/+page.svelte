@@ -1,4 +1,5 @@
 <script lang="ts">
+	import * as icons from '#lib/icons-extra.ts';
 	import { onMount } from 'svelte';
 	import { enhance, type SubmitFunction } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
@@ -285,7 +286,7 @@
 		{#if data.devices.length === 0}
 			<div class="card">
 				<EmptyState
-					icon="meldingen"
+					icon={icons.meldingen}
 					text="Nog geen apparaten. Zet meldingen aan op je telefoon."
 					compact
 				/>

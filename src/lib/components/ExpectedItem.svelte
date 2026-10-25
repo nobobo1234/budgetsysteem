@@ -2,11 +2,10 @@
 	// Een verwachte vaste last op het startscherm. Eén tik bevestigt; bij een wisselende last
 	// vul je eerst het echte bedrag in. Een week na de verwachte dag: gemist of opgezegd?
 	import { enhance, type SubmitFunction } from '$app/forms';
-	import { groupColor } from '#lib/categoryColor.ts';
+	import { groupColor, groupHue } from '#lib/categoryColor.ts';
 	import { formatShortDate } from '#lib/dates.ts';
 	import { centsToInput, formatCents } from '#lib/money.ts';
-	import { displayName } from '#lib/text.ts';
-	import Monogram from './Monogram.svelte';
+	import { displayName, initials } from '#lib/text.ts';
 
 	interface Item {
 		id: string;
@@ -74,7 +73,11 @@
 
 <div class={['item', done && 'done']}>
 	<div class="row">
-		<Monogram name={item.counterparty} group={item.categoryGroup} size={32} />
+		<span
+			class={['monogram', 'sm', item.categoryGroup && 'hue']}
+			style:--h={item.categoryGroup ? groupHue(item.categoryGroup) : null}
+			aria-hidden="true">{initials(item.counterparty)}</span
+		>
 		<a class="main" href="/vaste-lasten/{item.recurringId}">
 			<span class="who" data-morph-to="/vaste-lasten/{item.recurringId}" data-morph-part="titel"
 				>{name}</span

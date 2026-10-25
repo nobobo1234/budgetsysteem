@@ -4,7 +4,8 @@
 	import Sheet from '#lib/components/Sheet.svelte';
 	import StackedBar from '#lib/components/StackedBar.svelte';
 	import Toast from '#lib/components/Toast.svelte';
-	import { budgetSplit, FIXED_GROUP, suggestedLimit } from '#lib/budget.ts';
+	import { FIXED_GROUP, suggestedLimit } from '#lib/budget.ts';
+	import { budgetSplit } from '#lib/budgetSplit.ts';
 	import { groupColor } from '#lib/categoryColor.ts';
 	import { formatDayMonth, formatMonth } from '#lib/dates.ts';
 	import { centsToInput, formatCents } from '#lib/money.ts';

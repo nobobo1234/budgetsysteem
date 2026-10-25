@@ -1,8 +1,9 @@
 <script lang="ts">
+	import * as icons from '#lib/icons-extra.ts';
 	import { enhance } from '$app/forms';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import Select, { type SelectOption } from '#lib/components/Select.svelte';
-	import SignalCard from '#lib/components/SignalCard.svelte';
+	import Tile from '#lib/components/Tile.svelte';
 	import Toast from '#lib/components/Toast.svelte';
 	import { groupColor } from '#lib/categoryColor.ts';
 	import { formatShortDate } from '#lib/dates.ts';
@@ -222,37 +223,37 @@
 			<ul class="found">
 				{#if form && 'proposals' in form && form.proposals}
 					<li>
-						<SignalCard
+						<Tile
 							href="/vaste-lasten"
-							icon="vasteLasten"
-							big={String(form.proposals)}
-							small={form.proposals === 1
-								? 'vaste last gevonden; bevestig of hij het is'
-								: 'vaste lasten gevonden; bevestig welke het zijn'}
+							icon={icons.vasteLasten}
+							title={form.proposals === 1
+								? '1 vaste last gevonden'
+								: `${form.proposals} vaste lasten gevonden`}
+							value={form.proposals === 1 ? 'Bevestig of hij het is' : 'Bevestig welke het zijn'}
 						/>
 					</li>
 				{/if}
 				{#if summary.linkedCount > 0}
 					<li>
-						<SignalCard
+						<Tile
 							href="/terugbetalingen"
-							icon="terugbetalingen"
-							big={String(summary.linkedCount)}
-							small={summary.linkedCount === 1
-								? 'terugbetaling automatisch gekoppeld'
-								: 'terugbetalingen automatisch gekoppeld'}
+							icon={icons.terugbetalingen}
+							title={summary.linkedCount === 1
+								? '1 terugbetaling gekoppeld'
+								: `${summary.linkedCount} terugbetalingen gekoppeld`}
+							value="Automatisch; los te koppelen bij de transactie"
 						/>
 					</li>
 				{/if}
 				{#if summary.reversals.reviewCount > 0}
 					<li>
-						<SignalCard
+						<Tile
 							href="/transacties?status=te_controleren"
-							icon="controleren"
-							big={String(summary.reversals.reviewCount)}
-							small={summary.reversals.reviewCount === 1
-								? 'storno te controleren'
-								: "storno's te controleren"}
+							icon={icons.controleren}
+							title={summary.reversals.reviewCount === 1
+								? '1 storno te controleren'
+								: `${summary.reversals.reviewCount} storno's te controleren`}
+							value="Kies bij welke boeking hij hoort"
 							warn
 						/>
 					</li>
@@ -395,7 +396,7 @@
 	{:else if data.batches.length > 0}
 		<div class="card">
 			<EmptyState
-				icon="categorieen"
+				icon={icons.categorieen}
 				text="Alle geïmporteerde transacties hebben een categorie."
 				compact
 			/>

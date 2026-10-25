@@ -5,11 +5,10 @@ import {
 	daysBetween,
 	formatOpenFor,
 	owedStatus,
-	remindProgress,
-	reminderText,
 	splitByAmounts,
 	splitEqually
 } from './owed.ts';
+import { remindProgress, reminderText } from './remind.ts';
 
 describe('gelijk verdelen', () => {
 	it('voorbeeld uit de spec: €10 voor 3 met Sanne en Tim', () => {

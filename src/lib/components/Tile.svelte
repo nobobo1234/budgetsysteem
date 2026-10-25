@@ -1,6 +1,5 @@
 <script lang="ts">
-	import type { IconName } from '#lib/icons.ts';
-	import Icon from './Icon.svelte';
+	import type { IconDef } from '#lib/icons.ts';
 
 	// Tegel naar een pagina (spec: Componenten, Tegel): icoon met tint, titel en een actuele
 	// waarde. Vraagt hij aandacht, dan krijgt hij een stip en een waarschuwende waarde. De titel
@@ -11,11 +10,22 @@
 		value,
 		icon,
 		warn = false
-	}: { href: string; title: string; value: string; icon: IconName; warn?: boolean } = $props();
+	}: { href: string; title: string; value: string; icon: IconDef; warn?: boolean } = $props();
 </script>
 
 <a class={['tile', warn && 'warn']} {href}>
-	<Icon name={icon} badge />
+	<span class="icon-badge hue" style:--h={icon.hue} aria-hidden="true">
+		<svg viewBox="0 0 24 24"
+			><path
+				d={icon.path}
+				fill="none"
+				stroke="currentColor"
+				stroke-width="1.7"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+			/></svg
+		>
+	</span>
 	<span class="title" data-morph-to={href} data-morph-part="titel">{title}</span>
 	<span class="value num">
 		{#if warn}<span class="visually-hidden">Vraagt aandacht: </span>{/if}{value}

@@ -1,18 +1,21 @@
 <script lang="ts">
+	import { initials } from '#lib/text.ts';
+	import { groupHue } from '#lib/categoryColor.ts';
+	import * as icons from '#lib/icons.ts';
 	import { tick } from 'svelte';
 	import { enhance, type SubmitFunction } from '$app/forms';
 	import { fly } from 'svelte/transition';
 	import BackLink from '#lib/components/BackLink.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import HeroAmount from '#lib/components/HeroAmount.svelte';
-	import Monogram from '#lib/components/Monogram.svelte';
 	import OwedTabs from '#lib/components/OwedTabs.svelte';
 	import Select, { type SelectOption } from '#lib/components/Select.svelte';
 	import Sheet from '#lib/components/Sheet.svelte';
 	import Toast from '#lib/components/Toast.svelte';
 	import { formatShortDate } from '#lib/dates.ts';
 	import { formatCents } from '#lib/money.ts';
-	import { formatOpenFor, remindProgress, reminderText } from '#lib/owed.ts';
+	import { formatOpenFor } from '#lib/owed.ts';
+	import { remindProgress, reminderText } from '#lib/remind.ts';
 
 	let { data, form } = $props();
 	const o = $derived(data.overview);
@@ -150,7 +153,9 @@
 				in:fly={{ y: 8, duration: 220 }}
 			>
 				<header>
-					<Monogram name={p.name ?? '?'} size={48} />
+					<span class="monogram lg hue" style:--h={groupHue(p.name ?? '?')} aria-hidden="true"
+						>{initials(p.name ?? '?')}</span
+					>
 					<h2 id="person-{p.personId ?? 'onbekend'}">{p.name ?? 'Nog niet gekozen'}</h2>
 					<div class="sum">
 						{#if p.toReceiveCents > 0}
@@ -255,7 +260,7 @@
 		{:else}
 			<div class="card">
 				<EmptyState
-					icon="teKrijgen"
+					icon={icons.teKrijgen}
 					text="Niemand hoeft je iets te betalen. Schiet je iets voor, typ dan bij de uitgave met sanne of voor 3."
 				>
 					<a class="button secondary" href="/">Uitgave invoeren</a>

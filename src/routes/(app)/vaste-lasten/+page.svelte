@@ -1,17 +1,17 @@
 <script lang="ts">
+	import * as icons from '#lib/icons.ts';
 	import { enhance } from '$app/forms';
 	import BackLink from '#lib/components/BackLink.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
-	import Monogram from '#lib/components/Monogram.svelte';
 	import MonthStrip from '#lib/components/MonthStrip.svelte';
 	import Select, { type SelectOption } from '#lib/components/Select.svelte';
 	import Switch from '#lib/components/Switch.svelte';
 	import Toast from '#lib/components/Toast.svelte';
-	import { groupColor } from '#lib/categoryColor.ts';
+	import { groupColor, groupHue } from '#lib/categoryColor.ts';
 	import { daysInMonth, formatDayMonth, formatMonth, formatShortDate } from '#lib/dates.ts';
 	import { formatCents } from '#lib/money.ts';
 	import { PER_INTERVAL, rhythmText } from '#lib/recurring.ts';
-	import { displayName } from '#lib/text.ts';
+	import { displayName, initials } from '#lib/text.ts';
 
 	let { data, form } = $props();
 	const o = $derived(data.overview);
@@ -167,12 +167,12 @@
 			<div class="card">
 				{#if o.proposals.length > 0}
 					<EmptyState
-						icon="vasteLasten"
+						icon={icons.vasteLasten}
 						text="Nog geen vaste lasten. Bevestig hierboven welke voorstellen het zijn."
 					/>
 				{:else}
 					<EmptyState
-						icon="vasteLasten"
+						icon={icons.vasteLasten}
 						text="Nog geen vaste lasten. Na een import van je bankhistorie stelt de app ze hier voor, zoals huur, energie en abonnementen."
 					>
 						<a class="button secondary" href="/import">Historie importeren</a>
@@ -184,7 +184,11 @@
 				{#each active as i (i.id)}
 					<li>
 						<a class="item" href="/vaste-lasten/{i.id}">
-							<Monogram name={i.counterparty} group={i.categoryGroup} />
+							<span
+								class={['monogram', i.categoryGroup && 'hue']}
+								style:--h={i.categoryGroup ? groupHue(i.categoryGroup) : null}
+								aria-hidden="true">{initials(i.counterparty)}</span
+							>
 							<span class="main">
 								<span class="who" data-morph-to="/vaste-lasten/{i.id}" data-morph-part="titel"
 									>{displayName(i.counterparty)}</span
@@ -255,7 +259,7 @@
 				{#each o.stopped as s (s.id)}
 					<li>
 						<a class="stopped-row" href="/vaste-lasten/{s.id}">
-							<Monogram name={s.counterparty} group={null} size={32} />
+							<span class="monogram sm" aria-hidden="true">{initials(s.counterparty)}</span>
 							<span class="who">{displayName(s.counterparty)}</span>
 							<span class="muted">
 								{#if s.stoppedAt}gestopt {formatShortDate(s.stoppedAt)}

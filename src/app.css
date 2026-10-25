@@ -3,8 +3,36 @@
    dus bedragen en het hoofdgetal staan in Inter met `tabular-nums`. Geen monospaced fonts. */
 
 @import '@fontsource-variable/fraunces/opsz.css';
-@import '@fontsource-variable/fraunces/opsz-italic.css';
 @import '@fontsource-variable/inter/wght.css';
+
+/* Fraunces italic voor vertellende zinnen. Eigen @font-face in plaats van opsz-italic.css, met
+   `font-display: optional`: is het bestand er niet meteen (eerste bezoek), dan blijft de tekst
+   in de terugvalletter staan en wacht de eerste weergave er niet op (LCP); daarna komt het uit
+   de cache. Alleen de Latijnse subsets, zoals de rechtopstaande Fraunces. */
+@font-face {
+	font-family: 'Fraunces Variable';
+	font-style: italic;
+	font-display: optional;
+	font-weight: 100 900;
+	src: url('@fontsource-variable/fraunces/files/fraunces-latin-ext-opsz-italic.woff2')
+		format('woff2-variations');
+	unicode-range:
+		U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
+		U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
+		U+A720-A7FF;
+}
+
+@font-face {
+	font-family: 'Fraunces Variable';
+	font-style: italic;
+	font-display: optional;
+	font-weight: 100 900;
+	src: url('@fontsource-variable/fraunces/files/fraunces-latin-opsz-italic.woff2')
+		format('woff2-variations');
+	unicode-range:
+		U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+		U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
 
 :root {
 	color-scheme: light dark;
@@ -317,6 +345,35 @@ textarea {
 .icon-badge svg {
 	width: 22px;
 	height: 22px;
+}
+
+/* Monogram (spec: Componenten): ronde initialen (`initials()` uit text.ts) in de tint van de
+   categoriegroep of, voor een persoon, een vaste tint uit de naam (`groupHue`); zonder klasse
+   `hue` grijs. Een CSS-klasse en geen component, zodat het geen eigen chunk wordt. Altijd met
+   aria-hidden: de naam staat ernaast. */
+.monogram {
+	--size: 40px;
+	display: inline-grid;
+	place-items: center;
+	flex: none;
+	width: var(--size);
+	height: var(--size);
+	border-radius: 50%;
+	background: var(--wash, var(--surface-2));
+	color: var(--ink, var(--muted));
+	font-size: calc(var(--size) * 0.38);
+	font-weight: 650;
+	letter-spacing: 0.02em;
+	line-height: 1;
+	user-select: none;
+}
+
+.monogram.sm {
+	--size: 32px;
+}
+
+.monogram.lg {
+	--size: 48px;
 }
 
 /* Link naar een volledige lijst of pagina, naast een kop: een pil met een pijl */

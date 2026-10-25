@@ -1,16 +1,15 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import BackLink from '#lib/components/BackLink.svelte';
-	import Monogram from '#lib/components/Monogram.svelte';
 	import Select, { type SelectOption } from '#lib/components/Select.svelte';
 	import ShareForm from '#lib/components/ShareForm.svelte';
 	import StackedBar from '#lib/components/StackedBar.svelte';
 	import Switch from '#lib/components/Switch.svelte';
 	import Toast from '#lib/components/Toast.svelte';
-	import { groupColor } from '#lib/categoryColor.ts';
+	import { groupColor, groupHue } from '#lib/categoryColor.ts';
 	import { formatMonth, formatShortDate } from '#lib/dates.ts';
 	import { centsToInput, formatCents } from '#lib/money.ts';
-	import { displayName } from '#lib/text.ts';
+	import { displayName, initials } from '#lib/text.ts';
 
 	let { data, form } = $props();
 	const tx = $derived(data.tx);
@@ -315,7 +314,11 @@
 							{#if payment}
 								<!-- Naar de (laatste) betaling op deze post -->
 								<a class="row-link" href={`/transacties/${payment.transactionId}`}>
-									<Monogram name={p.personName ?? '?'} size={32} />
+									<span
+										class="monogram sm hue"
+										style:--h={groupHue(p.personName ?? '?')}
+										aria-hidden="true">{initials(p.personName ?? '?')}</span
+									>
 									<span class="person">
 										{p.personName ?? 'Nog onbekend'}
 										<span class="muted small"
@@ -325,7 +328,11 @@
 									<span class="num">{formatCents(p.amountCents)}</span>
 								</a>
 							{:else}
-								<Monogram name={p.personName ?? '?'} size={32} />
+								<span
+									class="monogram sm hue"
+									style:--h={groupHue(p.personName ?? '?')}
+									aria-hidden="true">{initials(p.personName ?? '?')}</span
+								>
 								<span class="person">
 									{p.personName ?? 'Nog onbekend'}
 									<span class="muted small">{postStatus(p)}</span>
