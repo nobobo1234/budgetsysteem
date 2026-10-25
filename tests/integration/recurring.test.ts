@@ -453,14 +453,14 @@ describe('reserveringen in het budget', () => {
 });
 
 describe('migratie', () => {
-	it('een bestaande rij in recurring overleeft de migratie naar vaste lasten', () => {
+	it('een bestaande rij in recurring overleeft de migratie naar vaste lasten (0003)', () => {
 		const dir = mkdtempSync(join(tmpdir(), 'budget-migratie-'));
 		try {
 			cpSync('drizzle', join(dir, 'drizzle'), { recursive: true });
 			const journalPath = join(dir, 'drizzle', 'meta', '_journal.json');
 			const journal = JSON.parse(readFileSync(journalPath, 'utf8'));
 			const full = structuredClone(journal);
-			journal.entries = journal.entries.filter((e: { tag: string }) => e.tag < '0002');
+			journal.entries = journal.entries.filter((e: { tag: string }) => e.tag < '0003');
 			writeFileSync(journalPath, JSON.stringify(journal));
 
 			const sqlite = new Database(join(dir, 'budget.db'));

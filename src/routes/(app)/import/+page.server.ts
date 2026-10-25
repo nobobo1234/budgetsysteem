@@ -51,8 +51,11 @@ export const actions: Actions = {
 		const from = fromSchema.safeParse(form.get('from') ?? '');
 		if (!from.success) return fail(400, { message: 'Ongeldige begindatum.' });
 		try {
-			const { format, records } = parseBankFile(new Uint8Array(await file.arrayBuffer()));
-			const summary = importRecords(db(), records, format, { from: from.data || undefined });
+			const { format, records, balances } = parseBankFile(new Uint8Array(await file.arrayBuffer()));
+			const summary = importRecords(db(), records, format, {
+				from: from.data || undefined,
+				balances
+			});
 			log.info({ format, new: summary.newCount, duplicates: summary.duplicateCount }, 'import');
 			// Vaste lasten meteen uit de nieuwe historie voorstellen
 			refreshProposals(db());

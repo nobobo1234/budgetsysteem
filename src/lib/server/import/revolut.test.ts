@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { parseBankFile } from './index.ts';
-import { isRevolutCsv, parseRevolutCsv } from './revolut.ts';
+import { isRevolutCsv, parseRevolutCsv, readRevolutCsv } from './revolut.ts';
 import { ImportError } from './types.ts';
 
 const fixture = readFileSync(
@@ -125,6 +125,27 @@ describe('Revolut-CSV', () => {
 		expect(later[0]).toMatchObject({ amountCents: -10000, needsReview: true });
 		expect(later[1]).toMatchObject({ amountCents: -500 });
 		expect(later[1]).not.toHaveProperty('needsReview');
+	});
+
+	it('geeft het startsaldo in euro, vóór de eerste boeking', () => {
+		expect(readRevolutCsv(fixture).balances).toEqual([
+			{ accountIban: '', accountKind: 'revolut', firstDate: '2026-01-30', amountCents: 0 }
+		]);
+	});
+
+	it('telt vreemde valuta in het startsaldo tegen de koers die je betaalde', () => {
+		const { balances } = readRevolutCsv(
+			csv(
+				'Kaartbetaling,Betaalrekening,2026-02-01 10:00:00,2026-02-01 10:00:00,ICA,-1000.00,0.00,SEK,VOLTOOID,0.00',
+				'Wisselen,Betaalrekening,2026-02-02 10:00:00,2026-02-02 10:00:00,Naar SEK,-100.00,0.00,EUR,VOLTOOID,50.00',
+				'Wisselen,Betaalrekening,2026-02-02 10:00:00,2026-02-02 10:00:00,Van EUR,1000.00,0.00,SEK,VOLTOOID,1000.00',
+				'Kaartbetaling,Betaalrekening,2026-02-03 10:00:00,2026-02-03 10:00:00,Coop,-50.00,0.00,SEK,VOLTOOID,950.00'
+			)
+		);
+		// 150 euro plus 1000 kronen tegen de eerste koers (10 kronen per euro)
+		expect(balances).toEqual([
+			{ accountIban: '', accountKind: 'revolut', firstDate: '2026-02-01', amountCents: 25000 }
+		]);
 	});
 
 	it('weigert vreemde valuta zonder enige wisselkoers', () => {

@@ -2,6 +2,7 @@ import { fail } from '@sveltejs/kit';
 import { z } from 'zod';
 import { toIsoDate } from '#lib/dates.ts';
 import { parseAmount } from '#lib/money.ts';
+import { balanceCheckDue } from '#lib/server/balance.ts';
 import { monthOverview } from '#lib/server/budgets.ts';
 import { quickEntryContext } from '#lib/server/context.ts';
 import { db } from '#lib/server/db/index.ts';
@@ -28,6 +29,7 @@ export const load: PageServerLoad = ({ setHeaders }) => {
 		expected: awaitingConfirmation(db(), today),
 		upcoming: upcomingThisMonth(db(), today),
 		proposals: proposalCount(db()),
+		balanceCheckDue: balanceCheckDue(db(), today),
 		context: quickEntryContext(db())
 	};
 };

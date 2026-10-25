@@ -160,6 +160,8 @@ Bedragen staan altijd als hele centen (integer) in euro; een vreemde valuta is e
 | people | naam, actief; IBANs in `people_ibans` (persoon, iban), elke IBAN bij hooguit één persoon en nooit een eigen rekening |
 | recurring\_shares | vaste last, persoon, soort (vast / percentage), bedrag\_cent of basispunten, verwachte ontvangstdag, vanaf maand, tot maand (optioneel) |
 | sessions, passkeys | apparaat, laatst gebruikt, ingetrokken |
+| balance\_anchors | rekening (uniek), datum, bedrag\_cent, bron (import / handmatig), import — het startsaldo voor de saldocheck: het saldo aan het eind van die dag |
+| balance\_checks | rekening, datum (samen uniek), bedrag\_cent — het echte saldo volgens de bank; het verschil rekent de app steeds opnieuw uit |
 | jobs, audit\_log | achtergrondtaken; wijzigingen met ongedaan maken |
 
 ### Startcategorieën
@@ -247,6 +249,10 @@ Het startscherm toont één getal, wat je deze maand nog vrij hebt, met daaronde
 **Budget.** Een limiet per categorie per maand; een nieuwe maand neemt de limieten van de vorige over. Vaste lasten die niet elke maand komen, zoals een halfjaarlijkse contributie, worden binnen die limiet per maand gereserveerd (zie Vaste lasten).
 
 **Saldocheck.** Omdat je na de import handmatig werkt, kunnen je cijfers ongemerkt afwijken van de bank. Eén keer per maand vul je het echte saldo van SNS en Revolut in; de app toont het verschil met wat hij verwacht. Een verschil betekent een vergeten uitgave, en dan kun je gericht zoeken of alsnog een export importeren.
+
+- **Startsaldo.** Per rekening één anker: het saldo aan het eind van een dag. De eerste import die een saldo noemt zet het (CAMT.053: eindsaldo `CLBD` min de boekingen, gecontroleerd met `OPBD`; SNS-CSV: "Saldo voor boeking"; Revolut: de kolom `Saldo`), op de dag vóór de eerste geïmporteerde boeking. Een latere import verschuift het niet, zodat een dubbele of vergeten boeking zichtbaar blijft. Je kunt het zelf aanpassen.
+- **Verwacht saldo** op een datum: het anker plus alle boekingen van die rekening erna, tot en met die datum. Verwachte posten tellen niet mee, posten die je nog moet controleren wel (dat geld is al weg), reserveringen zijn geen boekingen. Vreemde valuta telt via het eurobedrag, bij Revolut dus tegen de koers die je betaalde.
+- **Herinnering.** Op het startscherm zolang een rekening in gebruik deze maand nog geen check heeft.
 
 **Meldingen.** Pushmeldingen via de app op je beginscherm (Web Push met VAPID-sleutels). Elke soort staat apart aan of uit:
 
@@ -404,6 +410,7 @@ Een retour of storno verrekent de oorspronkelijke uitgave, in diens categorie en
 - **Koppeling.** De terugboeking verwijst via `correctie_van` naar de oorspronkelijke boeking. Hij heeft het tegengestelde teken, mag gedeeltelijk zijn en er mogen er meer zijn op één boeking, maar samen nooit meer dan het oorspronkelijke bedrag; meer wordt geweigerd.
 - **Verrekenen in de oorspronkelijke maand.** Budget, tempo, "nog vrij" en de analyses tellen de terugboeking in de categorie en de maand van de oorspronkelijke boeking, ook als het geld een maand later binnenkomt. Verandert daardoor een afgesloten maand, dan staat dat in het audit-log en zie je het bij die maand. Het saldo van de rekening, en dus de saldocheck, telt de terugboeking op de datum dat het geld binnenkwam.
 - **Verdeling.** Heeft de oorspronkelijke boeking een verdeling over categorieën, dan kies je waar de terugboeking afgaat; standaard het grootste deel.
+- **Retour van een voorgeschoten uitgave.** Standaard gaat de terugboeking naar verhouding over jouw deel en de aandelen van de anderen: €30 terug op €90 die je voor drie voorschoot, maakt elk deel €10 lager. De aandelen van de anderen worden naar beneden afgerond op hele centen en de restcent gaat naar jouw deel. Een lagere openstaande post blijft open voor de rest; heeft iemand al meer betaald dan het nieuwe aandeel, dan wordt het verschil een post "te betalen" aan die persoon. Bij het koppelen kies je met één tik dat de terugboeking alleen van jouw deel afgaat, voor als het teruggebrachte spul van jou was; jouw deel kan daarbij niet onder nul, wat overblijft gaat naar verhouding over de anderen.
 - **Storno van de bank.** Bij een import met `RvslInd` koppelt de app automatisch als precies één eerdere boeking past op tegen-IBAN en end-to-end-kenmerk, en het bedrag binnen de grens valt. Dat staat in het audit-log en is met één tik ongedaan te maken. Anders komt hij in de review-inbox met de koppellijst.
 - **Retour van een winkel.** Bij binnenkomend geld van een tegenpartij waar je in de laatste 60 dagen iets uitgaf, stelt de koppellijst die uitgaven voor naast de openstaande posten. Een lager bedrag dan de uitgave telt hier niet als afwijking. Snelinvoer herkent `retour` en vraagt direct welke uitgave het was.
 - **Losmaken.** Maak je de koppeling los, of verwijder je de oorspronkelijke boeking, dan wordt de terugboeking een gewone inkomende boeking met status "te controleren".
@@ -501,7 +508,8 @@ Elk scherm staat in deze tabel. Een nieuw scherm krijgt eerst een regel hier, in
 | Categorieën | `/categorieen` | Tabs Categorieën en Regels | Nieuwe categorie | Per groep een kaart; bewerken in de rij (naam, groep, telt mee); gearchiveerd ingeklapt |
 | Regels | `/regels` | Tabs Categorieën en Regels | Nieuwe regel | Lijst als zin ("Tegenpartij bevat … → categorie") met filter; nieuwe regel als "Als … dan …", prioriteit ingeklapt; onderaan "Regels opnieuw toepassen" |
 | Import | `/import` | Sleepvak voor het bankbestand | Importeren | Overzicht na import, tegenpartijen zonder categorie met één klik een regel, eerdere imports |
-| Meer | `/instellingen` | Passkeys | — | Herstelcode, actieve apparaten, rekeningen, links naar categorieën en regels, uitloggen |
+| Meer | `/instellingen` | Passkeys | — | Herstelcode, actieve apparaten, rekeningen, links naar saldocheck, categorieën en regels, uitloggen |
+| Saldocheck | `/saldocheck` | Per rekening het verwachte saldo van vandaag en de uitkomst van de laatste check | Saldo invullen | Bij een verschil links naar de transacties van die rekening in die periode en naar de import; eerdere checks; startsaldo aanpassen. Bereikbaar via Meer en de herinnering op het startscherm |
 | Inloggen | `/login` | Titel en uitleg | Inloggen met passkey | Herstelcode als terugval |
 
 Schermen uit latere fasen (Te krijgen, review-inbox, analyses) komen in de tabel zodra die fase begint.
@@ -744,7 +752,6 @@ Voor fase 1 zijn alleen de repo en de SNS-export nodig; die lever je aan in Clau
 **Nog te beslissen**
 
 - Font en accent (voorstel A), sessies van 30 dagen per apparaat met opnieuw bevestigen bij gevoelige acties, en een privé-repo zijn besloten.
-- **Retour van een voorgeschoten uitgave.** Gaat de terugboeking naar verhouding over jouw deel en de openstaande posten van de anderen, of eerst alleen van jouw deel af? Te beslissen voordat terugboekingen in fase 2 gebouwd worden.
 - **Storno herkennen bij SNS.** Of SNS `RvslInd` en het end-to-end-kenmerk in de CAMT.053-export zet, controleer ik op de export; zo niet, dan valt een storno terug op de koppellijst.
 
 **Risico's**

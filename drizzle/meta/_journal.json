@@ -19,8 +19,15 @@
     {
       "idx": 2,
       "version": "6",
-      "when": 1792862927812,
-      "tag": "0002_vaste_lasten",
+      "when": 1792862764755,
+      "tag": "0002_saldocheck",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1792909208400,
+      "tag": "0003_vaste_lasten",
       "breakpoints": true
     }
   ]

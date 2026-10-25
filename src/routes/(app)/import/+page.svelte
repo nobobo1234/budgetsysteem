@@ -169,6 +169,14 @@
 					>; bevestig welke het zijn.
 				</p>
 			{/if}
+			{#each summary.anchors as anchor (anchor.accountName)}
+				<p class="muted">
+					Startsaldo {anchor.accountName}:
+					<span class="num">{formatCents(anchor.amountCents)}</span>
+					aan het eind van {fullDate(anchor.date)}. Daarmee vergelijkt de
+					<a href="/saldocheck">saldocheck</a> je saldo.
+				</p>
+			{/each}
 		</section>
 	{/if}
 
@@ -363,6 +371,10 @@
 
 	.period {
 		grid-column: 1 / -1;
+	}
+
+	.result p {
+		margin-top: 12px;
 	}
 
 	dt {

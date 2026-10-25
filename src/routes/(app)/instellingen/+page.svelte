@@ -184,6 +184,7 @@
 	<section>
 		<h2>Overig</h2>
 		<a href="/vaste-lasten">Vaste lasten</a>
+		<a href="/saldocheck">Saldocheck</a>
 		<a href="/categorieen">Categorieën</a>
 		<a href="/regels">Regels</a>
 		<form method="POST" action="?/logout">
