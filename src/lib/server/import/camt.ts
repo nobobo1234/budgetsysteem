@@ -98,6 +98,20 @@ function amount(amt: unknown): { cents: number; currency: string } | null {
 	return { cents, currency };
 }
 
+function isTrue(v: string): boolean {
+	return v === 'true' || v === '1';
+}
+
+/**
+ * End-to-end-kenmerk, als het er echt is. Zonder kenmerk vult de bank `NOTPROVIDED` in; dat is
+ * niet uniek en koppelt dus niets.
+ */
+function endToEnd(v: string): string | null {
+	const id = v.trim().slice(0, 35);
+	if (!id || id.toUpperCase() === 'NOTPROVIDED') return null;
+	return id;
+}
+
 interface Balance {
 	code: string;
 	date: string;
@@ -205,6 +219,7 @@ export function readCamt053(xml: string): ParsedBankFile {
 			const details = list(path(entry, 'NtryDtls', 'TxDtls'));
 			const entryRef = str(path(entry, 'AcctSvcrRef')) || str(path(entry, 'NtryRef'));
 			const entryInfo = str(path(entry, 'AddtlNtryInf'));
+			const reversal = isTrue(str(path(entry, 'RvslInd')));
 
 			// Een verzamelboeking met eigen bedragen per detail wordt opgesplitst
 			const splitDetails =
@@ -217,18 +232,32 @@ export function readCamt053(xml: string): ParsedBankFile {
 					? (amount(path(tx, 'Amt')) ?? amount(path(tx, 'AmtDtls', 'TxAmt', 'Amt')))!
 					: entryAmount;
 				const debit = (str(path(tx, 'CdtDbtInd')) || sign) === 'DBIT';
-				const party = debit ? path(tx, 'RltdPties', 'Cdtr') : path(tx, 'RltdPties', 'Dbtr');
-				const partyAccount = debit
-					? path(tx, 'RltdPties', 'CdtrAcct', 'Id', 'IBAN')
-					: path(tx, 'RltdPties', 'DbtrAcct', 'Id', 'IBAN');
+				// De tegenpartij staat bij een afschrijving onder Cdtr en bij een bijschrijving onder Dbtr.
+				// Een storno (gestorneerde incasso) noemt de partijen vaak zoals bij de oorspronkelijke
+				// boeking; dan staat de tegenpartij aan de andere kant.
+				const side = (creditor: boolean) => ({
+					party: path(tx, 'RltdPties', creditor ? 'Cdtr' : 'Dbtr'),
+					iban: str(path(tx, 'RltdPties', creditor ? 'CdtrAcct' : 'DbtrAcct', 'Id', 'IBAN'))
+				});
+				const usual = side(debit);
+				const flipped = side(!debit);
+				const otherIban = normalizeIban(flipped.iban);
+				const usualEmpty = !partyName(usual.party) && !usual.iban;
+				const { party, iban: partyAccount } =
+					reversal &&
+					((otherIban && otherIban !== accountIban) ||
+						(usualEmpty && !otherIban && partyName(flipped.party)))
+						? flipped
+						: usual;
 				const ustrd = list(path(tx, 'RmtInf', 'Ustrd'))
 					.map(str)
 					.filter(Boolean)
 					.join(' ');
 				const description = ustrd || str(path(tx, 'AddtlTxInf')) || entryInfo;
 				const ref = str(path(tx, 'Refs', 'AcctSvcrRef')) || entryRef;
-				const counterIban = normalizeIban(str(partyAccount));
+				const counterIban = normalizeIban(partyAccount);
 				const text = description.slice(0, 500);
+				const endToEndId = endToEnd(str(path(tx, 'Refs', 'EndToEndId')));
 
 				records.push({
 					accountIban,
@@ -238,7 +267,9 @@ export function readCamt053(xml: string): ParsedBankFile {
 					counterparty: counterpartyOrMerchant(partyName(party), text).slice(0, 140),
 					counterIban: counterIban || null,
 					description: text,
-					bankReference: ref ? `${accountIban}:${ref}${splitDetails ? `#${index + 1}` : ''}` : null
+					bankReference: ref ? `${accountIban}:${ref}${splitDetails ? `#${index + 1}` : ''}` : null,
+					...(reversal && { reversal: true }),
+					...(endToEndId && { endToEndId })
 				});
 			});
 		}

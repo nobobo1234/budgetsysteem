@@ -15,6 +15,7 @@ import {
 	uncategorizedGroups
 } from '#lib/server/import/importer.ts';
 import { MAX_IMPORT_BYTES } from '#lib/server/import/types.ts';
+import { unlinkCorrection } from '#lib/server/corrections.ts';
 import { log } from '#lib/server/log.ts';
 import { proposalCount, refreshProposals } from '#lib/server/recurring.ts';
 import type { Actions, PageServerLoad } from './$types';
@@ -64,6 +65,14 @@ export const actions: Actions = {
 			if (e instanceof ImportError) return fail(400, { message: e.message });
 			throw e;
 		}
+	},
+	/** Een automatisch verrekende storno weer losmaken: hij komt op te controleren */
+	undoReversal: async ({ request }) => {
+		const id = z.uuid().safeParse((await request.formData()).get('id'));
+		if (!id.success) return fail(400, { message: 'Deze boeking ken ik niet.' });
+		const done = db().transaction((tx) => unlinkCorrection(tx, id.data));
+		if (!done) return fail(400, { message: 'Deze boeking is niet (meer) gekoppeld.' });
+		return { undone: id.data };
 	},
 	repair: () => {
 		const repaired = fillCardCounterparties(db());

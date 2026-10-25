@@ -6,6 +6,8 @@ import { keywordCategory } from '../../quickentry/resolve.ts';
 import { addDays } from '../../dates.ts';
 import { recordChange } from '../audit.ts';
 import { anchorFromImport } from '../balance.ts';
+import { findReversedOriginal, linkCorrection } from '../corrections.ts';
+import { ValidationError } from '../errors.ts';
 import type { Conn, DB } from '../db/index.ts';
 import {
 	accounts,
@@ -44,6 +46,17 @@ export interface ImportSummary {
 	anchors: { accountName: string; date: string; amountCents: number }[];
 	/** Inkomende overboekingen die automatisch aan een openstaande post zijn gekoppeld */
 	linkedCount: number;
+	/** Storno's (`RvslInd`): automatisch verrekend, of op te controleren met de koppellijst */
+	reversals: {
+		linked: {
+			id: string;
+			counterparty: string;
+			amountCents: number;
+			date: string;
+			originalDate: string;
+		}[];
+		reviewCount: number;
+	};
 }
 
 const MAX_RECORDS = 100_000;
@@ -187,6 +200,7 @@ export function importRecords(
 		const occurrences = new Map<string, number>();
 		let newCount = 0;
 		let duplicateCount = 0;
+		const reversalIds: string[] = [];
 		let periodStart: string | null = null;
 		let periodEnd: string | null = null;
 		// Nieuwe inkomende boekingen met een tegen-IBAN: na de import automatisch koppelen
@@ -209,7 +223,8 @@ export function importRecords(
 
 			// Een al met één tik bevestigde ontvangst krijgt de gegevens van de bank, in plaats
 			// van een tweede boeking (spec: Gedeelde vaste lasten)
-			const incomingFromOther = r.amountCents > 0 && r.counterIban !== null && !internal;
+			const incomingFromOther =
+				r.amountCents > 0 && r.counterIban !== null && !internal && !r.reversal;
 			if (incomingFromOther) {
 				const known = tx
 					.select({ id: transactions.id })
@@ -271,18 +286,67 @@ export function importRecords(
 					importBatchId: batch.id,
 					origAmountCents: r.origAmountCents ?? null,
 					origCurrency: r.origCurrency ?? null,
-					...(r.needsReview && { status: 'te_controleren' as const })
+					endToEndId: r.endToEndId ?? null,
+					// Een storno staat op te controleren tot hij aan het origineel gekoppeld is
+					...((r.needsReview || (r.reversal && !internal)) && {
+						status: 'te_controleren' as const
+					})
 				})
 				.onConflictDoNothing()
 				.returning({ id: transactions.id })
-				.get();
+				.all();
 
-			if (inserted) {
+			if (inserted.length === 1) {
 				newCount++;
-				if (incomingFromOther) incoming.push({ id: inserted.id, date: r.date });
+				if (incomingFromOther) incoming.push({ id: inserted[0]!.id, date: r.date });
 				if (!periodStart || r.date < periodStart) periodStart = r.date;
 				if (!periodEnd || r.date > periodEnd) periodEnd = r.date;
-			} else duplicateCount++;
+				if (r.reversal && !internal) reversalIds.push(inserted[0]!.id);
+			} else {
+				duplicateCount++;
+				// Een eerdere import las het end-to-end-kenmerk nog niet; vul het alsnog in, zodat een
+				// latere storno het origineel kan vinden
+				if (r.endToEndId)
+					tx.update(transactions)
+						.set({ endToEndId: r.endToEndId })
+						.where(
+							and(
+								reference
+									? eq(transactions.bankReference, reference)
+									: eq(transactions.dedupeHash, hash!),
+								isNull(transactions.endToEndId)
+							)
+						)
+						.run();
+			}
+		}
+
+		// Storno's: automatisch verrekenen als precies één eerdere boeking past op tegen-IBAN en
+		// end-to-end-kenmerk, en het bedrag binnen de grens valt. Anders blijft hij op te
+		// controleren, met de koppellijst op de detailpagina.
+		const reversals: ImportSummary['reversals'] = { linked: [], reviewCount: 0 };
+		for (const id of reversalIds) {
+			const original = findReversedOriginal(tx, id);
+			let linked = false;
+			if (original) {
+				try {
+					linkCorrection(tx, id, original.id, { auto: true });
+					linked = true;
+				} catch (e) {
+					if (!(e instanceof ValidationError)) throw e;
+				}
+			}
+			const row = tx
+				.select({
+					counterparty: transactions.counterparty,
+					amountCents: transactions.amountCents,
+					date: transactions.date
+				})
+				.from(transactions)
+				.where(eq(transactions.id, id))
+				.get()!;
+			if (linked) reversals.linked.push({ id, ...row, originalDate: original!.date });
+			else reversals.reviewCount++;
 		}
 
 		// Oudste eerst, zodat een betaling de oudste open post dekt
@@ -325,7 +389,8 @@ export function importRecords(
 			periodEnd,
 			uncategorized: uncategorizedGroups(tx),
 			anchors,
-			linkedCount
+			linkedCount,
+			reversals
 		};
 	});
 }

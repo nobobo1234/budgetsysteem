@@ -622,7 +622,7 @@ describe('overzicht Terugbetalingen', () => {
 	});
 });
 
-describe('migratie 0007: aandelen', () => {
+describe('migratie 0008: aandelen', () => {
 	function statements(file: string): string[] {
 		return readFileSync(`drizzle/${file}`, 'utf8')
 			.split('--> statement-breakpoint')
@@ -640,7 +640,8 @@ describe('migratie 0007: aandelen', () => {
 			'0003_pushmeldingen.sql',
 			'0004_vaste_lasten.sql',
 			'0005_te_krijgen.sql',
-			'0006_reservering_categorie.sql'
+			'0006_reservering_categorie.sql',
+			'0007_terugboekingen.sql'
 		])
 			sqlite.transaction(() => statements(f).forEach((s) => sqlite.exec(s)))();
 		sqlite.exec(`
@@ -655,7 +656,7 @@ describe('migratie 0007: aandelen', () => {
 		`);
 		// Zoals de migrator: alles in één transactie, met foreign keys aan
 		sqlite.transaction(() => {
-			for (const s of statements('0007_gedeelde_vaste_lasten.sql')) sqlite.exec(s);
+			for (const s of statements('0008_gedeelde_vaste_lasten.sql')) sqlite.exec(s);
 		})();
 		expect(sqlite.prepare('SELECT owed_id FROM owed_payments').all()).toEqual([{ owed_id: 'o' }]);
 		expect(sqlite.prepare('SELECT share_id, month FROM owed').all()).toEqual([

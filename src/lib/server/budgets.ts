@@ -2,6 +2,7 @@ import { and, asc, desc, eq, lt, sql } from 'drizzle-orm';
 import { freeThisMonth, pace, type Pace } from '../budget.ts';
 import { daysInMonth } from '../dates.ts';
 import { recordChange } from './audit.ts';
+import { lateCorrections } from './corrections.ts';
 import { plannedByCategory, reserveStatuses, type ReserveStatus } from './recurring.ts';
 import type { DB } from './db/index.ts';
 import { budgets, categories } from './db/schema.ts';
@@ -44,23 +45,33 @@ export function setBudget(db: DB, month: string, categoryId: string, limitCents:
 
 /**
  * Uitgaven per categorie in een maand, als positief getal. Gedeelde uitgaven tellen via hun
- * verdeling; verwachte posten tellen pas na bevestiging.
+ * verdeling; verwachte posten tellen pas na bevestiging. Een terugboeking telt in de maand van
+ * de boeking die hij verrekent, ook als het geld later binnenkwam.
  */
 export function spendingByCategory(db: DB, month: string): Map<string | null, number> {
 	const from = `${month}-01`;
 	const to = `${month}-31`;
 	const rows = db.all<{ category_id: string | null; spent: number }>(sql`
-		SELECT category_id, -SUM(amount) AS spent FROM (
-			SELECT t.category_id, t.amount_cents AS amount
+		WITH booked AS (
+			SELECT t.id, t.category_id, t.amount_cents
 			FROM transactions t
 			WHERE t.date BETWEEN ${from} AND ${to}
+				AND t.correction_of IS NULL
 				AND t.status != 'verwacht'
-				AND NOT EXISTS (SELECT 1 FROM transaction_splits s WHERE s.transaction_id = t.id)
+			UNION ALL
+			SELECT t.id, t.category_id, t.amount_cents
+			FROM transactions o
+			JOIN transactions t ON t.correction_of = o.id
+			WHERE o.date BETWEEN ${from} AND ${to} AND t.status != 'verwacht'
+		)
+		SELECT category_id, -SUM(amount) AS spent FROM (
+			SELECT b.category_id, b.amount_cents AS amount
+			FROM booked b
+			WHERE NOT EXISTS (SELECT 1 FROM transaction_splits s WHERE s.transaction_id = b.id)
 			UNION ALL
 			SELECT s.category_id, s.amount_cents AS amount
 			FROM transaction_splits s
-			JOIN transactions t ON t.id = s.transaction_id
-			WHERE t.date BETWEEN ${from} AND ${to} AND t.status != 'verwacht'
+			JOIN booked b ON b.id = s.transaction_id
 		)
 		GROUP BY category_id
 	`);
@@ -94,6 +105,8 @@ export interface MonthOverview {
 	/** Uitgaven zonder categorie: tellen mee, zodat "nog vrij" nooit te rooskleurig is */
 	uncategorizedCents: number;
 	lines: CategoryLine[];
+	/** Terugboekingen die na afloop binnenkwamen en in deze maand verrekend zijn */
+	lateCorrections: ReturnType<typeof lateCorrections>;
 }
 
 export function monthOverview(db: DB, month: string, today: string): MonthOverview {
@@ -159,6 +172,7 @@ export function monthOverview(db: DB, month: string, today: string): MonthOvervi
 		totalLimitCents: withLimit.reduce((s, l) => s + l.limitCents, 0),
 		totalSpentCents: lines.reduce((s, l) => s + Math.max(0, l.spentCents), 0) + uncategorizedCents,
 		uncategorizedCents,
-		lines
+		lines,
+		lateCorrections: lateCorrections(db, month)
 	};
 }

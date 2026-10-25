@@ -78,6 +78,28 @@
 		</p>
 	{/if}
 
+	{#if o.lateCorrections.length > 0}
+		<div class="late card" role="note">
+			<p>
+				<strong>Na afloop verrekend.</strong>
+				{o.lateCorrections.length === 1 ? 'Deze terugboeking kwam' : 'Deze terugboekingen kwamen'}
+				later binnen en {o.lateCorrections.length === 1 ? 'telt' : 'tellen'} in deze maand, bij de uitgave
+				die {o.lateCorrections.length === 1 ? 'hij verrekent' : 'ze verrekenen'}.
+			</p>
+			<ul>
+				{#each o.lateCorrections as c (c.id)}
+					<li>
+						<a href="/transacties/{c.id}">{c.counterparty || 'Zonder naam'}</a>
+						<span class="muted">op {formatDayMonth(c.date)}</span>
+						<span class={['num', c.amountCents > 0 && 'in']}
+							>{formatCents(c.amountCents, { sign: true })}</span
+						>
+					</li>
+				{/each}
+			</ul>
+		</div>
+	{/if}
+
 	<p class="muted">
 		Een nieuwe maand neemt de limieten van de vorige over. Leeg laten is geen limiet.
 	</p>
@@ -169,6 +191,46 @@
 </div>
 
 <style>
+	.late {
+		display: grid;
+		gap: 8px;
+		padding: 16px 20px;
+	}
+
+	.late ul {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: grid;
+		gap: 4px;
+	}
+
+	.late li {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		column-gap: 8px;
+		min-height: var(--tap);
+	}
+
+	.late li > span {
+		white-space: nowrap;
+	}
+
+	.late li a {
+		display: inline-flex;
+		align-items: center;
+		min-height: var(--tap);
+	}
+
+	.late li .num {
+		margin-left: auto;
+	}
+
+	.late .in {
+		color: var(--accent-strong);
+	}
+
 	.page {
 		display: grid;
 		grid-template-columns: minmax(0, 1fr);

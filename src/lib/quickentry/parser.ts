@@ -6,7 +6,8 @@ import { parseAmount } from '../money.ts';
 
 export const MAX_INPUT = 200;
 
-export type SpanKind = 'bedrag' | 'datum' | 'categorie' | 'rekening' | 'delen' | 'persoon';
+export type SpanKind =
+	'bedrag' | 'datum' | 'categorie' | 'rekening' | 'delen' | 'persoon' | 'retour';
 
 export interface Span {
 	start: number;
@@ -32,6 +33,8 @@ export interface ParsedEntry {
 	splitWith: string[];
 	/** Een bekende persoon los in de tekst (`+15 tikkie sanne`), zoals hij in de app heet */
 	person: string | null;
+	/** `+25 retour zalando`: geld terug voor een eerdere uitgave */
+	refund: boolean;
 	/** Overige tekst: tegenpartij of omschrijving */
 	text: string;
 	spans: Span[];
@@ -216,9 +219,12 @@ export function parseQuickEntry(
 		splitCount: null,
 		splitWith: [],
 		person: null,
+		refund: false,
 		text: '',
 		spans: []
 	};
+	// Typte je het bedrag met een minteken, dan blijft het uitgaand, ook bij `retour`
+	let explicitOut = false;
 	const text: string[] = [];
 	const span = (from: Token, to: Token, kind: SpanKind) =>
 		result.spans.push({
@@ -240,8 +246,10 @@ export function parseQuickEntry(
 			const amount = amountToken(tok.text);
 			if (amount) {
 				result.amountCents = amount.cents;
-				result.direction = amount.incoming ? 'in' : 'uit';
+				result.direction = amount.incoming || result.refund ? 'in' : 'uit';
 				result.currency = amount.currency;
+				explicitOut = tok.text.startsWith('-');
+				if (explicitOut) result.direction = 'uit';
 				span(tok, tok, 'bedrag');
 				continue;
 			}
@@ -267,6 +275,13 @@ export function parseQuickEntry(
 				span(tok, tok, 'datum');
 				continue;
 			}
+		}
+
+		if (lower === 'retour' && !result.refund) {
+			result.refund = true;
+			if (!explicitOut) result.direction = 'in';
+			span(tok, tok, 'retour');
+			continue;
 		}
 
 		if (lower === 'voor' && result.splitCount === null) {

@@ -26,6 +26,24 @@ export interface ResolveContext {
 	people?: readonly { id: string; name: string }[];
 	/** Open posten voor de koppellijst bij ontvangen of terugbetalen */
 	openPosts?: readonly OpenPostRef[];
+	/** Uitgaven van de laatste 60 dagen waar een retour bij kan horen */
+	refundTargets?: readonly RefundTargetRef[];
+}
+
+export interface RefundTargetRef {
+	id: string;
+	/** Negatief: de uitgave */
+	amountCents: number;
+	/** Wat er nog terug kan, positief */
+	roomCents: number;
+	date: string;
+	counterparty: string;
+	categoryId: string | null;
+}
+
+export interface RefundCandidate extends RefundTargetRef {
+	score: number;
+	label: MatchLabel;
 }
 
 export interface OpenPostRef {
@@ -62,6 +80,9 @@ export interface Draft {
 	/** Koppellijst bij binnenkomend geld (te krijgen) of een terugbetaling (te betalen) */
 	candidates: PostCandidate[];
 	preselect: string | null;
+	/** Koppellijst bij een retour: de uitgave waar het geld voor terugkomt */
+	refunds: RefundCandidate[];
+	refundPreselect: string | null;
 	/** Wat nog ingevuld moet worden voordat de post compleet is */
 	missing: ('bedrag' | 'eurobedrag' | 'rekening')[];
 }
@@ -254,7 +275,13 @@ export function resolveEntry(entry: ParsedEntry, ctx: ResolveContext): Draft {
 	// posten te betalen. Alleen kandidaten met enige overeenkomst, zodat salaris geen lijst geeft.
 	let candidates: PostCandidate[] = [];
 	let preselect: string | null = null;
-	if (amountCents !== null && sharing === 1 && ctx.openPosts && ctx.openPosts.length > 0) {
+	if (
+		amountCents !== null &&
+		sharing === 1 &&
+		!entry.refund &&
+		ctx.openPosts &&
+		ctx.openPosts.length > 0
+	) {
 		const direction = entry.direction === 'in' ? 'te_krijgen' : 'te_betalen';
 		const all = ctx.openPosts.filter((p) => p.direction === direction);
 		// Noem je een bekende persoon, dan alleen diens posten (als die er zijn)
@@ -281,6 +308,32 @@ export function resolveEntry(entry: ParsedEntry, ctx: ResolveContext): Draft {
 		preselect = candidates.some((c) => c.id === ranked.preselect) ? ranked.preselect : null;
 	}
 
+	// Retour: uitgaven bij dezelfde tegenpartij waar het bedrag nog in past. Met `retour` vraagt de
+	// snelinvoer er direct om; zonder alleen bij een duidelijke naam, naast de open posten.
+	let refunds: RefundCandidate[] = [];
+	let refundPreselect: string | null = null;
+	if (amountCents !== null && amountCents > 0 && sharing === 1 && ctx.refundTargets?.length) {
+		const name = counterparty || typed;
+		const ranked = rankMatches(
+			{ amountCents, date: entry.date, name },
+			ctx.refundTargets
+				.filter((t) => t.roomCents >= amountCents!)
+				.map((t) => ({ ...t, amountCents: t.roomCents, name: t.counterparty, target: t })),
+			{ lower: 'vol' }
+		);
+		const minName = entry.refund ? (name ? 0.75 : 0) : 0.9;
+		refunds = ranked.candidates
+			.filter((c) => c.parts.name >= minName)
+			.map((c) => ({ ...c.target.target, score: c.score, label: c.label }));
+		if (entry.refund)
+			refundPreselect =
+				refunds.length === 1
+					? refunds[0]!.id
+					: refunds.some((c) => c.id === ranked.preselect)
+						? ranked.preselect
+						: null;
+	}
+
 	return {
 		amountCents,
 		origAmountCents,
@@ -296,6 +349,8 @@ export function resolveEntry(entry: ParsedEntry, ctx: ResolveContext): Draft {
 		people: sharing,
 		candidates,
 		preselect,
+		refunds,
+		refundPreselect,
 		missing
 	};
 }

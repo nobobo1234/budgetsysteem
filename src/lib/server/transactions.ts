@@ -1,6 +1,7 @@
 import { and, desc, eq, gte, isNull, lte, ne, or, sql, type SQL } from 'drizzle-orm';
 import { advancePast } from '../recurring.ts';
 import { recordChange } from './audit.ts';
+import { correctedCents, linkCorrection, releaseCorrectionsOf } from './corrections.ts';
 import type { Conn, DB } from './db/index.ts';
 import {
 	accounts,
@@ -98,6 +99,20 @@ export function createTransaction(
 		}
 
 		recordChange(tx, 'aangemaakt', 'transactions', row.id, null, row);
+
+		// Retour: verrekenen met de gekozen uitgave. Past hij niet (meer), bijvoorbeeld omdat er
+		// offline al een andere retour op kwam, dan blijft hij staan en komt hij bij te controleren.
+		if (input.correct) {
+			try {
+				linkCorrection(tx, row.id, input.correct.transactionId, { mode: input.correct.mode });
+			} catch (e) {
+				if (!(e instanceof ValidationError)) throw e;
+				tx.update(transactions)
+					.set({ status: 'te_controleren' })
+					.where(eq(transactions.id, row.id))
+					.run();
+			}
+		}
 		return { id: row.id, created: true };
 	});
 }
@@ -116,6 +131,18 @@ export function updateTransaction(
 	return db.transaction((tx) => {
 		const before = tx.select().from(transactions).where(eq(transactions.id, id)).get();
 		if (!before) return false;
+		const amountChanged =
+			patch.amountCents !== undefined && patch.amountCents !== before.amountCents;
+		if (amountChanged && before.correctionOf) {
+			throw new ValidationError('Maak de retour eerst los om het bedrag aan te passen');
+		}
+		if (amountChanged) {
+			// Samen nooit meer terug dan het origineel
+			const used = correctedCents(tx, id);
+			const next = patch.amountCents!;
+			if (used > 0 && (Math.sign(next) !== Math.sign(before.amountCents) || Math.abs(next) < used))
+				throw new ValidationError('Er is al meer teruggekomen dan dit bedrag');
+		}
 		const hasSplits =
 			tx
 				.select({ id: transactionSplits.id })
@@ -157,6 +184,9 @@ export function updateTransaction(
 				.where(and(eq(transactionSplits.transactionId, id), eq(transactionSplits.note, MY_SHARE)))
 				.run();
 		}
+		// Een retour telt in de categorie van het origineel en verhuist mee
+		if (patch.categoryId !== undefined && patch.categoryId !== before.categoryId)
+			moveCorrections(tx, id, before.categoryId, patch.categoryId);
 		if (shared) applySharedSplit(tx, id);
 		// Een gekoppelde betaling met een ander bedrag wordt opnieuw over de posten verdeeld
 		if (patch.amountCents !== undefined && patch.amountCents !== before.amountCents) {
@@ -226,6 +256,9 @@ export function deleteTransaction(db: DB, id: string): boolean {
 	return db.transaction((tx) => {
 		const before = tx.select().from(transactions).where(eq(transactions.id, id)).get();
 		if (!before) return false;
+		// Retouren op deze boeking worden gewone boekingen op te controleren, vóór het opruimen
+		// van de posten: hun deel staat als betaling op die posten
+		releaseCorrectionsOf(tx, id);
 		// Maandaandelen van een gedeelde vaste last vervallen; wat betaald was wordt tegoed
 		removeSharedFor(tx, id);
 		dropSourcePosts(tx, id);
@@ -251,6 +284,25 @@ export function deleteTransaction(db: DB, id: string): boolean {
 		recordChange(tx, 'verwijderd', 'transactions', id, before, null);
 		return true;
 	});
+}
+
+/** Retouren die de categorie van het origineel volgen gaan mee naar de nieuwe categorie. */
+function moveCorrections(db: Conn, originalId: string, from: string | null, to: string | null) {
+	const linked = db
+		.select({ id: transactions.id, categoryId: transactions.categoryId })
+		.from(transactions)
+		.where(
+			and(eq(transactions.correctionOf, originalId), eq(transactions.categorySource, 'correctie'))
+		)
+		.all();
+	for (const r of linked) {
+		if (r.categoryId !== from) continue;
+		db.update(transactions).set({ categoryId: to }).where(eq(transactions.id, r.id)).run();
+		db.update(transactionSplits)
+			.set({ categoryId: to })
+			.where(and(eq(transactionSplits.transactionId, r.id), eq(transactionSplits.note, MY_SHARE)))
+			.run();
+	}
 }
 
 export interface ListFilter {

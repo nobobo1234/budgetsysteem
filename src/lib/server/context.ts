@@ -1,7 +1,9 @@
 import { asc, eq } from 'drizzle-orm';
+import { toIsoDate } from '../dates.ts';
 import { sortRules } from '../rules.ts';
 import type { DB } from './db/index.ts';
 import { accounts, categories, people, rules } from './db/schema.ts';
+import { refundTargets } from './corrections.ts';
 import { matchablePosts } from './owed.ts';
 import { knownCounterparties } from './transactions.ts';
 
@@ -39,6 +41,8 @@ export function quickEntryContext(db: DB) {
 			.where(eq(people.active, true))
 			.orderBy(asc(people.name))
 			.all(),
-		openPosts: matchablePosts(db)
+		openPosts: matchablePosts(db),
+		// Uitgaven van de laatste 60 dagen voor `retour`; zonder IBANs
+		refundTargets: refundTargets(db, toIsoDate(new Date()))
 	};
 }
