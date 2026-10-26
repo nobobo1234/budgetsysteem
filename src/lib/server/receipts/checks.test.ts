@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { checkReceipt, parseModelAmount, signedLineCents, worst } from './checks.ts';
-import { field, NOW, receiptOutput } from './fixtures.ts';
+import { checkList, checkReceipt, parseModelAmount, signedLineCents, worst } from './checks.ts';
+import { field, listItem, listOutput, NOW, receiptOutput } from './fixtures.ts';
 
 describe('parseModelAmount', () => {
 	it('leest de strikte machinevorm als hele centen', () => {
@@ -195,5 +195,111 @@ describe('worst', () => {
 		expect(worst([])).toBe('zeker');
 		expect(worst(['zeker', 'controleren'])).toBe('controleren');
 		expect(worst(['onzeker', 'controleren', 'zeker'])).toBe('onzeker');
+	});
+});
+
+describe('checkList', () => {
+	// Een screenshot van een bankapp, gemaakt op 21 oktober 2026 (NOW)
+	it('houdt het teken en de valuta per transactie, in hele centen', () => {
+		const c = checkList(
+			listOutput([
+				listItem('2026-10-20', 'Supermarkt Voorbeeld', '-23.45'),
+				listItem('2026-10-19', 'Werkgever Voorbeeld', '2150.00'),
+				listItem('2026-10-18', 'Koffiebar Voorbeeld', '-6.5', 'usd')
+			]),
+			NOW
+		);
+		expect(c.outcome).toBe('zeker');
+		expect(
+			c.items.map((i) => [
+				i.date.value,
+				i.counterparty.value,
+				i.amountCents.value,
+				i.currency.value
+			])
+		).toEqual([
+			['2026-10-20', 'Supermarkt Voorbeeld', -2345, 'EUR'],
+			['2026-10-19', 'Werkgever Voorbeeld', 215000, 'EUR'],
+			['2026-10-18', 'Koffiebar Voorbeeld', -650, 'USD']
+		]);
+	});
+
+	it('datum niet in de toekomst en niet ouder dan 60 dagen', () => {
+		const c = checkList(
+			listOutput([
+				listItem('2026-10-22', 'Morgen', '-1.00'),
+				listItem('2026-08-21', 'Precies 61 dagen', '-1.00'),
+				listItem('2026-08-22', 'Precies 60 dagen', '-1.00'),
+				listItem('21-10-2026', 'Verkeerde vorm', '-1.00')
+			]),
+			NOW
+		);
+		expect(c.items.map((i) => [i.date.status, i.date.failures])).toEqual([
+			['onzeker', ['in_de_toekomst']],
+			['onzeker', ['te_oud']],
+			['zeker', []],
+			['onzeker', ['ongeldig']]
+		]);
+		expect(c.items[3]!.date.value).toBeNull();
+		expect(c.outcome).toBe('onzeker');
+	});
+
+	it('bedrag aanwezig, leesbaar en niet nul', () => {
+		const item = (bedrag: string) => listItem('2026-10-20', 'Voorbeeld', bedrag);
+		const c = checkList(
+			listOutput([item(''), item('12,50'), item('0.00'), item('-1e3'), item('-0.01')]),
+			NOW
+		);
+		expect(c.items.map((i) => [i.amountCents.value, i.amountCents.failures])).toEqual([
+			[null, ['leeg']],
+			[null, ['ongeldig']],
+			[0, ['nul']],
+			[null, ['ongeldig']],
+			[-1, []]
+		]);
+		expect(c.items.map((i) => i.outcome)).toEqual([
+			'onzeker',
+			'onzeker',
+			'onzeker',
+			'onzeker',
+			'zeker'
+		]);
+	});
+
+	it('valuta is een ISO-code; een lege naam is onzeker', () => {
+		const output = listOutput([
+			listItem('2026-10-20', 'Voorbeeld', '-1.00', '€'),
+			listItem('2026-10-20', '  ', '-1.00', 'EURO'),
+			listItem('2026-10-20', 'Voorbeeld', '-1.00', 'gbp')
+		]);
+		const c = checkList(output, NOW);
+		expect(c.items.map((i) => [i.currency.value, i.currency.failures])).toEqual([
+			[null, ['ongeldig']],
+			[null, ['ongeldig']],
+			['GBP', []]
+		]);
+		expect(c.items[1]!.counterparty).toMatchObject({
+			value: null,
+			status: 'onzeker',
+			failures: ['leeg']
+		});
+	});
+
+	it('twijfel van het model wordt controleren; onleesbaar met een waarde is onzeker', () => {
+		const output = listOutput([listItem('2026-10-20', 'Voorbeeld', '-1.00')]);
+		output.transacties[0]!.tegenpartij = field('Voorbeeld', 'twijfel', 'Half verborgen');
+		const doubt = checkList(output, NOW);
+		expect(doubt.items[0]!.counterparty).toMatchObject({
+			status: 'controleren',
+			note: 'Half verborgen'
+		});
+		expect(doubt.outcome).toBe('controleren');
+
+		output.transacties[0]!.bedrag = field('-1.00', 'onleesbaar');
+		expect(checkList(output, NOW).items[0]!.amountCents.failures).toEqual(['onleesbaar']);
+	});
+
+	it('een lijst zonder transacties is onzeker', () => {
+		expect(checkList(listOutput([]), NOW)).toEqual({ items: [], outcome: 'onzeker' });
 	});
 });

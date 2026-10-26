@@ -1,5 +1,12 @@
 import type Anthropic from '@anthropic-ai/sdk';
-import { checkReceipt, type CheckedReceipt, type FieldStatus } from './checks.ts';
+import { toIsoDate } from '../../dates.ts';
+import {
+	checkList,
+	checkReceipt,
+	type CheckedList,
+	type CheckedReceipt,
+	type FieldStatus
+} from './checks.ts';
 import {
 	outputJsonSchema,
 	ReceiptOutputSchema,
@@ -49,6 +56,8 @@ export interface ReceiptClient {
 export interface ReadOptions {
 	model?: string;
 	effort?: Effort;
+	/** Ontvangstdatum (JJJJ-MM-DD), voor "Vandaag" of een datum zonder jaar in een lijst. */
+	received?: string;
 	signal?: AbortSignal;
 	/** Klok voor de duur; alleen voor tests. */
 	clock?: () => number;
@@ -77,7 +86,7 @@ export function costNanoUsd(inputTokens: number, outputTokens: number): number {
 /** Het verzoek zelf, los gebouwd zodat tests kunnen nagaan wat er naar de API gaat. */
 export function buildRequest(
 	parts: ReceiptPart[],
-	opts: Pick<ReadOptions, 'model' | 'effort'> = {}
+	opts: Pick<ReadOptions, 'model' | 'effort' | 'received'> = {}
 ): Anthropic.MessageCreateParamsNonStreaming {
 	if (parts.length === 0 || parts.length > MAX_PARTS) throw new RangeError('aantal delen');
 	const content: Anthropic.ContentBlockParam[] = [];
@@ -93,7 +102,7 @@ export function buildRequest(
 		});
 	});
 	// Beelden eerst, dan de vraag (docs: Vision)
-	content.push({ type: 'text', text: userInstruction(parts.length) });
+	content.push({ type: 'text', text: userInstruction(parts.length, opts.received) });
 
 	return {
 		model: opts.model ?? RECEIPT_MODEL,
@@ -155,7 +164,7 @@ export function parseOutput(content: Anthropic.ContentBlock[]): ReceiptOutput | 
 
 // Enumwaarden kunnen alleen in hoofdletters afwijken (docs: Structured outputs); die vangen we op
 // door ze klein te maken, de rest laat `safeParse` gewoon weigeren.
-const ENUM_KEYS = new Set(['zekerheid', 'soort']);
+const ENUM_KEYS = new Set(['beeld', 'zekerheid', 'soort']);
 
 function lowerEnums(node: unknown, key = ''): unknown {
 	if (typeof node === 'string') return ENUM_KEYS.has(key) ? node.toLowerCase() : node;
@@ -186,7 +195,14 @@ export interface ReceiptTelemetry {
 export type ReceiptTelemetryHook = (event: ReceiptTelemetry) => void;
 
 export type ProcessResult =
-	| { ok: true; output: ReceiptOutput; checked: CheckedReceipt; usage: ReadUsage }
+	| {
+			ok: true;
+			output: ReceiptOutput;
+			checked: CheckedReceipt;
+			/** Alleen bij een screenshot met transacties; dan telt de uitkomst van de lijst. */
+			list: CheckedList | null;
+			usage: ReadUsage;
+	  }
 	| { ok: false; reason: ReadFailure; usage: ReadUsage };
 
 /**
@@ -203,7 +219,7 @@ export async function processReceipt(
 	const started = clock();
 	let result: ReadResult;
 	try {
-		result = await readReceipt(client, parts, { ...opts, clock });
+		result = await readReceipt(client, parts, { received: toIsoDate(now), ...opts, clock });
 	} catch (e) {
 		emit(opts.onTelemetry, {
 			model: opts.model ?? RECEIPT_MODEL,
@@ -221,8 +237,9 @@ export async function processReceipt(
 		return result;
 	}
 	const checked = checkReceipt(result.output, now);
-	emit(opts.onTelemetry, { ...result.usage, outcome: checked.outcome });
-	return { ok: true, output: result.output, checked, usage: result.usage };
+	const list = result.output.beeld === 'lijst' ? checkList(result.output, now) : null;
+	emit(opts.onTelemetry, { ...result.usage, outcome: (list ?? checked).outcome });
+	return { ok: true, output: result.output, checked, list, usage: result.usage };
 }
 
 function emit(hook: ReceiptTelemetryHook | undefined, event: ReceiptTelemetry): void {

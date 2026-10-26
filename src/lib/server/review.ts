@@ -20,6 +20,7 @@ import {
 import { ValidationError } from './errors.ts';
 import { ownMatchesFor, type OwnCandidate } from './import/koppellijst.ts';
 import { owedReminders, type OpenPost } from './owed.ts';
+import { listItemCounts } from './receipts/list.ts';
 import { receiptStage } from './receipts/outcome.ts';
 import { readStored, type ReceiptField } from './receipts/stored.ts';
 import { awaitingConfirmation, type Awaiting } from './recurring.ts';
@@ -84,7 +85,7 @@ export type ReviewReminder = OpenPost & { daysOpen: number };
  */
 export interface ReviewReceipt {
 	id: string;
-	stage: 'nakijken' | 'kiezen' | 'onzeker' | 'fout';
+	stage: 'nakijken' | 'kiezen' | 'onzeker' | 'fout' | 'lijst';
 	source: 'app' | 'deelmenu';
 	store: string | null;
 	date: string | null;
@@ -92,6 +93,8 @@ export interface ReviewReceipt {
 	currency: string | null;
 	/** Velden waarover Haiku twijfelde of die de controles niet haalden. */
 	doubt: ReceiptField[];
+	/** Bij een screenshot (lijst): hoeveel transacties erop staan */
+	items: number;
 	/** De transactie die er al bij hoort (bij nakijken), zonder IBAN */
 	transaction: { counterparty: string; date: string; amountCents: number } | null;
 	createdAt: string;
@@ -290,6 +293,10 @@ function reviewReceipts(db: Conn): ReviewReceipt[] {
 		.where(and(isNull(receipts.handledAt), ne(receipts.status, 'wordt_gelezen')))
 		.orderBy(asc(receipts.createdAt))
 		.all();
+	const counts = listItemCounts(
+		db,
+		rows.filter(({ r }) => r.kind === 'lijst').map(({ r }) => r.id)
+	);
 	return rows.flatMap(({ r, txCounterparty, txDate, txAmount }) => {
 		const stage = receiptStage(r);
 		if (stage === 'klaar' || stage === 'wordt_gelezen') return [];
@@ -303,7 +310,11 @@ function reviewReceipts(db: Conn): ReviewReceipt[] {
 				date: fields.date,
 				totalCents: fields.totalCents,
 				currency: fields.currency,
-				doubt: stage === 'fout' ? [] : DOUBT_FIELDS.filter((f) => confidence[f].status !== 'zeker'),
+				doubt:
+					stage === 'fout' || stage === 'lijst'
+						? []
+						: DOUBT_FIELDS.filter((f) => confidence[f].status !== 'zeker'),
+				items: counts.get(r.id) ?? 0,
 				transaction:
 					txCounterparty !== null && txDate !== null && txAmount !== null
 						? { counterparty: txCounterparty, date: txDate, amountCents: txAmount }

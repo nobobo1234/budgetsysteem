@@ -7,6 +7,13 @@ import { parseAmount } from '#lib/money.ts';
 import { db } from '#lib/server/db/index.ts';
 import { accounts, transactions } from '#lib/server/db/schema.ts';
 import { ValidationError } from '#lib/server/errors.ts';
+import {
+	confirmList,
+	defaultListAccount,
+	linkedTransactions,
+	listWithMatches,
+	type ListChoice
+} from '#lib/server/receipts/list.ts';
 import { isComplete } from '#lib/server/receipts/outcome.ts';
 import {
 	confirmReceipt,
@@ -18,11 +25,13 @@ import {
 	rereadReceipt,
 	settleReceipt
 } from '#lib/server/receipts/process.ts';
+import { MAX_LIST_ITEMS } from '#lib/server/receipts/schema.ts';
 import { receiptView } from '#lib/server/receipts/view.ts';
 import type { Actions, PageServerLoad } from './$types';
 
 // Bon (spec: Schermen, Bonnetjes en koppelen): wat Haiku las met de zekerheid per veld, de
-// koppellijst om te verwerken, en nakijken, aanpassen, opnieuw lezen of weggooien.
+// koppellijst om te verwerken, en nakijken, aanpassen, opnieuw lezen of weggooien. Een screenshot
+// met transacties toont een lijst met per regel de koppellijst, om in één keer te bevestigen.
 
 const idSchema = z.uuid();
 
@@ -32,7 +41,8 @@ export const load: PageServerLoad = ({ params, depends, setHeaders }) => {
 	if (!idSchema.safeParse(params.id).success) error(404, 'Niet gevonden');
 	const receipt = loadReceipt(db(), params.id);
 	if (!receipt) error(404, 'Niet gevonden');
-	const complete = isComplete(receipt.fields);
+	const list = receipt.kind === 'lijst' ? listData(receipt) : null;
+	const complete = !list && isComplete(receipt.fields);
 	const match = complete ? receiptCandidates(db(), receipt.fields) : null;
 	const linked = receipt.transactionId
 		? (db()
@@ -51,7 +61,7 @@ export const load: PageServerLoad = ({ params, depends, setHeaders }) => {
 				.get() ?? null)
 		: null;
 	return {
-		receipt: receiptView(receipt),
+		receipt: receiptView(receipt, list?.items.length ?? 0),
 		complete,
 		candidates: (match?.candidates ?? []).map((c) => ({
 			id: c.id,
@@ -73,9 +83,55 @@ export const load: PageServerLoad = ({ params, depends, setHeaders }) => {
 			.from(accounts)
 			.orderBy(asc(accounts.createdAt))
 			.all(),
-		defaultAccount: defaultAccountId(db(), receipt.fields.currency)
+		defaultAccount: list?.defaultAccount ?? defaultAccountId(db(), receipt.fields.currency),
+		items: list?.items ?? []
 	};
 };
+
+type Loaded = NonNullable<ReturnType<typeof loadReceipt>>;
+
+/** Een screenshot: per transactie de gelezen velden, de koppellijst en het voorstel. */
+function listData(receipt: Loaded) {
+	const items = listWithMatches(db(), receipt.id);
+	const linked = linkedTransactions(db(), items);
+	return {
+		items: items.map((i) => ({
+			id: i.id,
+			date: i.date,
+			counterparty: i.counterparty,
+			amountCents: i.amountCents,
+			currency: i.currency,
+			outcome: i.outcome,
+			complete: i.complete,
+			confidence: Object.fromEntries(
+				Object.entries(i.confidence).map(([k, c]) => [
+					k,
+					{ status: c.status, model: c.model, note: c.note }
+				])
+			) as Record<
+				'datum' | 'tegenpartij' | 'bedrag' | 'valuta',
+				{
+					status: 'zeker' | 'controleren' | 'onzeker';
+					model: 'zeker' | 'twijfel' | 'onleesbaar' | null;
+					note: string;
+				}
+			>,
+			plan: i.plan,
+			candidates: i.candidates.map((c) => ({
+				id: c.id,
+				counterparty: c.counterparty,
+				date: c.date,
+				amountCents: c.amountCents,
+				origAmountCents: c.origAmountCents,
+				origCurrency: c.origCurrency,
+				source: c.source,
+				label: c.label
+			})),
+			linked: i.transactionId ? (linked.get(i.transactionId) ?? null) : null
+		})),
+		defaultAccount: defaultListAccount(db(), items)
+	};
+}
 
 const correctSchema = z.object({
 	store: z.string().trim().min(1).max(100),
@@ -87,16 +143,17 @@ const correctSchema = z.object({
 		.toUpperCase()
 		.regex(/^[A-Z]{3}$/)
 });
+// `transactie:<id>` voor een bestaande transactie, `nieuw` voor een nieuwe
+const targetSchema = z.union([
+	z.literal('nieuw'),
+	z
+		.string()
+		.max(60)
+		.transform((t) => t.split(':'))
+		.pipe(z.tuple([z.literal('transactie'), z.uuid()]))
+]);
 const settleSchema = z.object({
-	// `transactie:<id>` voor een bestaande transactie, `nieuw` voor een nieuwe
-	target: z.union([
-		z.literal('nieuw'),
-		z
-			.string()
-			.max(60)
-			.transform((t) => t.split(':'))
-			.pipe(z.tuple([z.literal('transactie'), z.uuid()]))
-	]),
+	target: targetSchema,
 	accountId: z.uuid().optional()
 });
 
@@ -145,6 +202,29 @@ export const actions: Actions = {
 					: { kind: 'koppelen', transactionId: target[1] }
 			);
 			return { settled: transactionId, created: target === 'nieuw' };
+		});
+	},
+	confirmList: async ({ params, request }) => {
+		const form = await request.formData();
+		const ids = z.array(z.uuid()).max(MAX_LIST_ITEMS).safeParse(form.getAll('item'));
+		if (!ids.success) return fail(400, { message: 'Deze lijst kan ik niet lezen.' });
+		const choices: ListChoice[] = [];
+		for (const itemId of ids.data) {
+			const target = targetSchema.safeParse(form.get(`target-${itemId}`));
+			if (!target.success)
+				return fail(400, { message: 'Kies bij elke aangevinkte regel wat hij is.' });
+			choices.push({
+				itemId,
+				target:
+					target.data === 'nieuw'
+						? { kind: 'nieuw' }
+						: { kind: 'koppelen', transactionId: target.data[1] }
+			});
+		}
+		const account = z.uuid().safeParse(form.get('accountId'));
+		return guarded(() => {
+			const done = confirmList(db(), params.id, choices, account.success ? account.data : null);
+			return { listed: done };
 		});
 	},
 	confirm: ({ params }) =>

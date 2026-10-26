@@ -13,7 +13,13 @@ import { prepareImage, type Variant } from './images.ts';
 import { loadReceipt, markReadFailed, saveReading, type SavedReading } from './process.ts';
 import { processReceipt, type ReceiptClient, type ReceiptTelemetry } from './reader.ts';
 import { READ_RECEIPT_JOB, receiptPath } from './store.ts';
-import { MAX_RAW_CHARS, toStoredConfidence, toStoredFields, type RawOutput } from './stored.ts';
+import {
+	MAX_RAW_CHARS,
+	toStoredConfidence,
+	toStoredFields,
+	toStoredItem,
+	type RawOutput
+} from './stored.ts';
 
 // De taak `bon_lezen` (spec: Bonnetjes en koppelen, Verwerking stap 3 tot 5): de opgeslagen bon
 // voorbereiden, door Haiku laten lezen, controleren en opslaan, en verwerken als dat zonder
@@ -78,9 +84,10 @@ export async function readStoredReceipt(
 		result.ok
 			? {
 					ok: true,
-					outcome: result.checked.outcome,
+					outcome: (result.list ?? result.checked).outcome,
 					fields: toStoredFields(result.checked),
 					confidence: toStoredConfidence(result.checked),
+					list: result.list ? result.list.items.map(toStoredItem) : null,
 					raw: raw ?? { stopReason: null, text: null }
 				}
 			: { ok: false, reason: result.reason, raw },
@@ -125,6 +132,10 @@ export function notifyRead(db: DB, receiptId: string, saved: SavedReading, at: D
 		},
 		onzeker: { text: 'Een bon heeft je controle nodig', detail: null },
 		fout: { text: 'Een bon kon niet gelezen worden', detail: null },
+		lijst: {
+			text: 'Een screenshot met transacties is gelezen; bevestig de lijst',
+			detail: null
+		},
 		wordt_gelezen: { text: 'Een bon wordt gelezen', detail: null }
 	};
 	const t = texts[stage];

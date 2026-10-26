@@ -18,7 +18,7 @@ import type { StoredFields } from './stored.ts';
 export type ReceiptPlan =
 	| { action: 'koppelen'; transactionId: string; handled: boolean }
 	| { action: 'nieuw'; handled: boolean; status: 'bevestigd' | 'te_controleren' }
-	| { action: 'inbox'; reason: 'onzeker' | 'kiezen' };
+	| { action: 'inbox'; reason: 'onzeker' | 'kiezen' | 'lijst' };
 
 export interface RankedCandidates {
 	candidates: readonly { label: MatchLabel }[];
@@ -75,16 +75,76 @@ export type ReceiptStage =
 	/** Haiku twijfelt: velden nakijken, dan verwerken */
 	| 'onzeker'
 	/** Niet te lezen: zelf invullen of opnieuw proberen */
-	| 'fout';
+	| 'fout'
+	/** Een screenshot met transacties: aanvinken en in één keer bevestigen */
+	| 'lijst';
 
 export function receiptStage(r: {
 	status: 'wordt_gelezen' | FieldStatus | 'fout';
+	kind?: 'bon' | 'lijst';
 	transactionId: string | null;
 	handledAt: string | null;
 }): ReceiptStage {
 	if (r.status === 'wordt_gelezen') return 'wordt_gelezen';
 	if (r.handledAt !== null) return 'klaar';
 	if (r.status === 'fout') return 'fout';
+	if (r.kind === 'lijst') return 'lijst';
 	if (r.status === 'onzeker') return r.transactionId === null ? 'onzeker' : 'nakijken';
 	return r.transactionId === null ? 'kiezen' : 'nakijken';
+}
+
+// Een screenshot met transacties (spec: Verwerking stap 6) boekt nooit vanzelf: hij komt als
+// lijst om in één keer te bevestigen. Per transactie de koppellijst; wat al in je cijfers staat
+// (een geïmporteerde boeking, of eigen invoer) wordt gekoppeld in plaats van dubbel geboekt.
+//
+// | Transactie                          | Voorstel                      | Aangevinkt         |
+// | datum, naam, bedrag of valuta mist  | onvolledig, niet te boeken    | nee                |
+// | duidelijke voorloper                | koppelen aan die transactie   | ja                 |
+// | kandidaten zonder voorloper         | zelf kiezen                   | nee                |
+// | niets dat erop lijkt                | nieuwe transactie (bron bon)  | ja, behalve onzeker |
+//
+// Twee transacties op hetzelfde screenshot worden nooit aan dezelfde transactie gekoppeld: de
+// tweede moet je dan zelf kiezen.
+
+export interface ListItemInput {
+	date: string | null;
+	counterparty: string | null;
+	amountCents: number | null;
+	currency: string | null;
+	outcome: FieldStatus;
+	ranked: RankedCandidates;
+}
+
+export type ItemPlan =
+	| { action: 'koppelen'; transactionId: string; checked: true }
+	| { action: 'nieuw'; checked: boolean }
+	| { action: 'kiezen'; checked: false }
+	| { action: 'onvolledig'; checked: false };
+
+/** Of een transactie van een screenshot genoeg velden heeft om te boeken. */
+export function isItemComplete(item: Omit<ListItemInput, 'outcome' | 'ranked'>): boolean {
+	return (
+		item.date !== null &&
+		item.counterparty !== null &&
+		item.counterparty.trim() !== '' &&
+		item.amountCents !== null &&
+		item.amountCents !== 0 &&
+		item.currency !== null
+	);
+}
+
+export function planListItems(items: readonly ListItemInput[]): ItemPlan[] {
+	const taken = new Set<string>();
+	return items.map((item): ItemPlan => {
+		if (!isItemComplete(item)) return { action: 'onvolledig', checked: false };
+		const { preselect, candidates } = item.ranked;
+		if (preselect !== null && !taken.has(preselect)) {
+			taken.add(preselect);
+			return { action: 'koppelen', transactionId: preselect, checked: true };
+		}
+		if (preselect !== null || candidates.some((c) => c.label !== 'onwaarschijnlijk')) {
+			return { action: 'kiezen', checked: false };
+		}
+		return { action: 'nieuw', checked: item.outcome !== 'onzeker' };
+	});
 }
