@@ -85,6 +85,13 @@
       "when": 1793014285121,
       "tag": "0011_bon_lijst",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1793030390316,
+      "tag": "0012_tags",
+      "breakpoints": true
     }
   ]
 }

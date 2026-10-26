@@ -58,6 +58,7 @@ import {
 	settlePayment
 } from './owed.ts';
 import { findOrCreatePerson, ibansOf, insertIban, personByIban } from './people.ts';
+import { syncAutoTags } from './tags.ts';
 
 // Gedeelde vaste lasten (spec: Gedeelde vaste lasten). Een aandeel per persoon per vaste last;
 // elke maand met een afschrijving krijgt ieder met een actief aandeel een openstaande post
@@ -775,6 +776,7 @@ export function confirmReceived(db: DB, owedId: string, today = toIsoDate(new Da
 			.returning()
 			.get();
 		recordChange(tx, 'ontvangen', 'transactions', row.id, null, row);
+		syncAutoTags(tx, [row.id]);
 		if (!settlePayment(tx, row.id, { owedId: post.id }))
 			throw new ValidationError('Deze post staat niet open');
 		return row.id;

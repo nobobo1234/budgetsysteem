@@ -68,6 +68,16 @@
 					warn: t.receipts.waiting > 0
 				},
 				{
+					href: '/tags',
+					title: 'Tags',
+					value: t.tags.current
+						? `${t.tags.current.name} loopt, ${formatCents(t.tags.current.totalCents, { whole: true })}`
+						: t.tags.count > 0
+							? plural(t.tags.count, 'tag', 'tags')
+							: 'Bijvoorbeeld een reis',
+					icon: icons.tags
+				},
+				{
 					href: '/saldocheck',
 					title: 'Saldocheck',
 					value:

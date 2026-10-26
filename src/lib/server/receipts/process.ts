@@ -24,6 +24,7 @@ import {
 } from './outcome.ts';
 import type { ReadFailure } from './reader.ts';
 import { READ_RECEIPT_JOB, receiptPath, type ReadReceiptPayload } from './store.ts';
+import { syncAutoTags } from '../tags.ts';
 import {
 	emptyConfidence,
 	emptyFields,
@@ -214,6 +215,7 @@ export function insertBonTransaction(
 		.returning()
 		.get();
 	recordChange(db, 'aangemaakt', 'transactions', row.id, null, row);
+	syncAutoTags(db, [row.id]);
 	return row.id;
 }
 

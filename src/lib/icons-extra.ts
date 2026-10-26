@@ -47,3 +47,6 @@ export const bonnen: IconDef = {
 	hue: 185,
 	path: 'M6 3h12v18l-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5L6 21z M9 8h6 M9 12h6 M9 16h3'
 };
+
+// Een vlag: een tag markeert een periode, zoals een reis
+export const tags: IconDef = { hue: 235, path: 'M5.5 21V3.5 M5.5 4.5h12l-2.5 4.25 2.5 4.25h-12' };

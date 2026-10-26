@@ -13,6 +13,7 @@ export const MEER_PAGES = [
 	'/vaste-lasten',
 	'/saldocheck',
 	'/bonnen',
+	'/tags',
 	'/categorieen',
 	'/regels',
 	'/personen',

@@ -11,8 +11,8 @@ test.beforeEach(async ({ context }) => {
 	await login(context);
 });
 
-/** Een transactie en een vaste last, zodat ook de detailpagina's meedoen. */
-function details(): { tx: string; recurring: string; receipt: string } {
+/** Een transactie, een vaste last, een bon en een tag, zodat ook de detailpagina's meedoen. */
+function details(): { tx: string; recurring: string; receipt: string; tag: string } {
 	const db = new Database('.e2e/budget.db', { fileMustExist: true });
 	db.pragma('busy_timeout = 5000');
 	const account = (
@@ -58,18 +58,28 @@ function details(): { tx: string; recurring: string; receipt: string } {
 		),
 		tx
 	);
+	// Een tag in een periode waar geen andere test iets boekt, met de transactie zelf aangezet
+	const tag = randomUUID();
+	db.prepare(
+		`INSERT INTO tags (id, name, start_date, end_date, hue) VALUES (?, ?, '2024-01-10', '2024-01-12', 169)`
+	).run(tag, name);
+	db.prepare(
+		`INSERT INTO transaction_tags (id, transaction_id, tag_id, source, active)
+		 VALUES (?, ?, ?, 'handmatig', 1)`
+	).run(randomUUID(), tx, tag);
 	db.close();
-	return { tx, recurring, receipt };
+	return { tx, recurring, receipt, tag };
 }
 
 /** Alle schermen achter de login; subpagina's zonder eigen tab apart. */
-function routes(ids: { tx: string; recurring: string; receipt: string }) {
+function routes(ids: { tx: string; recurring: string; receipt: string; tag: string }) {
 	const sub = [
 		...MEER_PAGES,
 		'/te-controleren',
 		`/transacties/${ids.tx}`,
 		`/vaste-lasten/${ids.recurring}`,
-		`/bonnen/${ids.receipt}`
+		`/bonnen/${ids.receipt}`,
+		`/tags/${ids.tag}`
 	] as string[];
 	return { tabs: [...TABS] as string[], sub };
 }

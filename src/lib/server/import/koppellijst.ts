@@ -26,6 +26,7 @@ import {
 import { ValidationError } from '../errors.ts';
 import { ADVANCED, MY_SHARE, settlePayment, syncShareSplits, unlinkPayment } from '../owed.ts';
 import { applySharedSplit, hasSharePosts } from '../shares.ts';
+import { moveManualTags, syncAutoTags } from '../tags.ts';
 
 // Koppellijst bij een bankimport (spec: Import en Bonnetjes en koppelen → Koppellijst). Een
 // nieuwe boeking van de bank wordt tegen je eigen invoer gehouden: handmatig, van een bon, of een
@@ -257,6 +258,8 @@ export function mergeIntoOwn(
 			...(replaced && { replaced })
 		}
 	);
+	// De datum van de bank kan een andere zijn: de tags volgen
+	syncAutoTags(db, [ownId]);
 	return diff;
 }
 
@@ -387,6 +390,7 @@ export function mergeImported(
 			.set({ transactionId: ownId })
 			.where(eq(reservations.transactionId, importedId))
 			.run();
+		moveManualTags(tx, importedId, ownId);
 		// Eerst weg, dan pas de bankreferentie op je invoer (die is uniek)
 		tx.delete(transactions).where(eq(transactions.id, importedId)).run();
 		const differenceCents = mergeIntoOwn(
