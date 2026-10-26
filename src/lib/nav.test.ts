@@ -32,6 +32,9 @@ describe('actieve tab', () => {
 		expect(activeTab('/instellingen/beveiliging')).toBe('/instellingen');
 		expect(activeTab('/transacties/0b7f3c52')).toBe('/transacties');
 		expect(activeTab('/te-controleren')).toBe('/');
+		expect(activeTab('/import')).toBe('/instellingen');
+		expect(activeTab('/analyses')).toBe('/analyses');
+		expect(activeTab('/analyses/trend')).toBe('/analyses');
 		// De afsluiting en de lijst afgesloten maanden horen bij Analyses
 		expect(activeTab('/afsluiting')).toBe('/analyses');
 		expect(activeTab('/afsluiting/2026-09')).toBe('/analyses');

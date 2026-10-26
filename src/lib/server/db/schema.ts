@@ -9,6 +9,8 @@ import {
 	text,
 	uniqueIndex
 } from 'drizzle-orm/sqlite-core';
+import { PRODUCT_GROUPS } from '../../productGroups.ts';
+import { LINE_KINDS } from '../receipts/schema.ts';
 
 // Alle ID's zijn willekeurige UUID's; bedragen altijd hele centen in euro.
 
@@ -229,6 +231,29 @@ export const receiptItems = sqliteTable(
 		uniqueIndex('receipt_items_position_idx').on(t.receiptId, t.position),
 		index('receipt_items_transaction_idx').on(t.transactionId)
 	]
+);
+
+// De regels van een verwerkte bon (spec: Analyses → Boodschappen per productgroep): wat Haiku las en
+// de code controleerde, met de productgroep per artikel. Een groep aanpassen verandert alleen deze
+// tabel, niet de ruwe uitvoer. Bonregels blijven op de server en gaan nooit los naar AI.
+export const receiptLines = sqliteTable(
+	'receipt_lines',
+	{
+		id: id(),
+		receiptId: text('receipt_id')
+			.notNull()
+			.references(() => receipts.id, { onDelete: 'cascade' }),
+		position: integer('position').notNull(),
+		// Zoals op de bon; onbetrouwbare tekst, alleen als gewone tekst tonen
+		description: text('description').notNull(),
+		kind: text('kind', { enum: LINE_KINDS }).notNull(),
+		// Met het teken waarmee de regel meetelt in het totaal: korting en bonus negatief
+		amountCents: integer('amount_cents').notNull(),
+		// Alleen bij een artikel; leeg bij bonnen van voor de productgroepen
+		productGroup: text('product_group', { enum: PRODUCT_GROUPS }),
+		createdAt: createdAt()
+	},
+	(t) => [uniqueIndex('receipt_lines_position_idx').on(t.receiptId, t.position)]
 );
 
 export const recurring = sqliteTable(
@@ -619,6 +644,58 @@ export const notificationsSent = sqliteTable(
 	(t) => [
 		uniqueIndex('notifications_sent_kind_key_idx').on(t.kind, t.key),
 		index('notifications_sent_at_idx').on(t.sentAt)
+	]
+);
+
+// Tags (spec: Dagelijks gebruik → Tags). Een tag heeft een periode en hangt zich vanzelf aan elke
+// transactie met een datum daarin; zonder einddatum loopt hij door.
+export const tags = sqliteTable(
+	'tags',
+	{
+		id: id(),
+		name: text('name').notNull(),
+		startDate: text('start_date').notNull(),
+		endDate: text('end_date'),
+		// Tint (oklch-hue) uit de vaste reeks in src/lib/tags.ts
+		hue: integer('hue').notNull(),
+		createdAt: createdAt(),
+		updatedAt: text('updated_at')
+	},
+	(t) => [
+		index('tags_start_idx').on(t.startDate),
+		check(
+			'tags_start_format',
+			sql`${t.startDate} GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'`
+		),
+		check(
+			'tags_end_format',
+			sql`${t.endDate} IS NULL OR ${t.endDate} GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'`
+		),
+		check('tags_period', sql`${t.endDate} IS NULL OR ${t.endDate} >= ${t.startDate}`),
+		check('tags_hue', sql`${t.hue} BETWEEN 0 AND 359`)
+	]
+);
+
+// Welke transactie welke tag heeft. `automatisch` volgt de periode van de tag; `handmatig` is je
+// eigen keuze en blijft staan, ook uitgezet (`active` false), zodat de periode hem niet terugzet.
+export const transactionTags = sqliteTable(
+	'transaction_tags',
+	{
+		id: id(),
+		transactionId: text('transaction_id')
+			.notNull()
+			.references(() => transactions.id, { onDelete: 'cascade' }),
+		tagId: text('tag_id')
+			.notNull()
+			.references(() => tags.id, { onDelete: 'cascade' }),
+		source: text('source', { enum: ['automatisch', 'handmatig'] }).notNull(),
+		active: integer('active', { mode: 'boolean' }).notNull().default(true),
+		createdAt: createdAt()
+	},
+	(t) => [
+		uniqueIndex('transaction_tags_tx_tag_idx').on(t.transactionId, t.tagId),
+		index('transaction_tags_tag_idx').on(t.tagId),
+		check('transaction_tags_auto_active', sql`${t.source} = 'handmatig' OR ${t.active} = 1`)
 	]
 );
 

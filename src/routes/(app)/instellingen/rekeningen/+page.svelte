@@ -1,5 +1,5 @@
 <script lang="ts">
-	import * as icons from '#lib/icons-extra.ts';
+	import * as icons from '#lib/icons.ts';
 	import { enhance } from '$app/forms';
 	import BackLink from '#lib/components/BackLink.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';

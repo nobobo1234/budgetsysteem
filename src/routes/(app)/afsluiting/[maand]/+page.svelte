@@ -8,7 +8,7 @@
 	import { groupColor } from '#lib/categoryColor.ts';
 	import { lastDayOf, monthName, outcomeWords, type OpenItem } from '#lib/closing.ts';
 	import { formatDayMonth, formatShortDate, shiftMonth } from '#lib/dates.ts';
-	import { afsluiting } from '#lib/icons-extra.ts';
+	import { afsluiting } from '#lib/icons.ts';
 	import { formatCents } from '#lib/money.ts';
 	import { displayName } from '#lib/text.ts';
 

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import Tile from '#lib/components/Tile.svelte';
-	import * as icons from '#lib/icons-extra.ts';
+	import * as icons from '#lib/icons.ts';
+	import { formatShortDate } from '#lib/dates.ts';
 	import { formatCents } from '#lib/money.ts';
 
 	let { data } = $props();
@@ -68,6 +69,16 @@
 					warn: t.receipts.waiting > 0
 				},
 				{
+					href: '/tags',
+					title: 'Tags',
+					value: t.tags.current
+						? `${t.tags.current.name} loopt, ${formatCents(t.tags.current.totalCents, { whole: true })}`
+						: t.tags.count > 0
+							? plural(t.tags.count, 'tag', 'tags')
+							: 'Bijvoorbeeld een reis',
+					icon: icons.tags
+				},
+				{
 					href: '/saldocheck',
 					title: 'Saldocheck',
 					value:
@@ -76,6 +87,14 @@
 							: 'Gedaan deze maand',
 					icon: icons.saldocheck,
 					warn: t.balanceDue.length > 0
+				},
+				{
+					href: '/import',
+					title: 'Importeren',
+					value: t.lastImport
+						? `Tot en met ${formatShortDate(t.lastImport.periodEnd ?? t.lastImport.createdAt.slice(0, 10))}`
+						: 'Historie importeren',
+					icon: icons.importeren
 				}
 			]
 		},

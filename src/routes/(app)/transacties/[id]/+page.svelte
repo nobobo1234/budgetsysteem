@@ -6,6 +6,7 @@
 	import StackedBar from '#lib/components/StackedBar.svelte';
 	import Switch from '#lib/components/Switch.svelte';
 	import Toast from '#lib/components/Toast.svelte';
+	import TransactionTags from '#lib/components/TransactionTags.svelte';
 	import { groupColor, groupHue } from '#lib/categoryColor.ts';
 	import { formatMonth, formatShortDate } from '#lib/dates.ts';
 	import { centsToInput, formatCents } from '#lib/money.ts';
@@ -625,6 +626,15 @@
 					)} terug.{:else}Het hele bedrag is terug.{/if}
 			</p>
 		</section>
+	{/if}
+
+	{#if data.tags && (data.tags.chips.length > 0 || data.tags.others.length > 0 || data.tags.follows.length > 0)}
+		<TransactionTags
+			chips={data.tags.chips}
+			others={data.tags.others}
+			follows={data.tags.follows}
+			message={form && 'tagMessage' in form ? form.tagMessage : undefined}
+		/>
 	{/if}
 
 	<form method="POST" action="?/delete" use:enhance class="delete">

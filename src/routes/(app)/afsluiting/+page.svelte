@@ -1,9 +1,10 @@
 <script lang="ts">
 	import BackLink from '#lib/components/BackLink.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
+	import IconBadge from '#lib/components/IconBadge.svelte';
 	import { monthName, outcomeSentence } from '#lib/closing.ts';
 	import { formatDayMonth } from '#lib/dates.ts';
-	import { afsluiting } from '#lib/icons-extra.ts';
+	import { afsluiting } from '#lib/icons.ts';
 
 	// Afgesloten maanden (spec: Analyses → Maandafsluiting, Terugkijken): per maand de uitkomst,
 	// elke afsluiting blijft te openen. Bovenaan de maand die nog klaarstaat, als die er is.
@@ -23,19 +24,8 @@
 	</div>
 
 	{#if data.pending}
-		<a class="card pending hue" style:--h={afsluiting.hue} href="/afsluiting/{data.pending}">
-			<span class="icon-badge" aria-hidden="true">
-				<svg viewBox="0 0 24 24"
-					><path
-						d={afsluiting.path}
-						fill="none"
-						stroke="currentColor"
-						stroke-width="1.7"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-					/></svg
-				>
-			</span>
+		<a class="card pending" href="/afsluiting/{data.pending}">
+			<IconBadge icon={afsluiting} />
 			<span class="text">
 				<strong data-morph-to="/afsluiting/{data.pending}" data-morph-part="titel"
 					>{label(data.pending)}</strong

@@ -349,8 +349,8 @@ textarea {
 
 /* Monogram (spec: Componenten): ronde initialen (`initials()` uit text.ts) in de tint van de
    categoriegroep of, voor een persoon, een vaste tint uit de naam (`groupHue`); zonder klasse
-   `hue` grijs. Een CSS-klasse en geen component, zodat het geen eigen chunk wordt. Altijd met
-   aria-hidden: de naam staat ernaast. */
+   `hue` grijs. Een CSS-klasse en geen component: het is alleen opmaak. Altijd met aria-hidden:
+   de naam staat ernaast. */
 .monogram {
 	--size: 40px;
 	display: inline-grid;

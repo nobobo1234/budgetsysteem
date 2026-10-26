@@ -115,6 +115,9 @@ for (const path of [
 	'/',
 	'/transacties',
 	'/budget',
+	'/analyses',
+	'/analyses/trend',
+	'/analyses/jaar',
 	'/import',
 	'/categorieen',
 	'/regels',
@@ -129,6 +132,7 @@ for (const path of [
 	'/instellingen/beveiliging',
 	'/instellingen/apparaten',
 	'/instellingen/rekeningen',
+	'/analyses/boodschappen',
 	'/afsluiting'
 ]) {
 	test(`${path} past op een telefoonscherm`, async ({ page }) => {

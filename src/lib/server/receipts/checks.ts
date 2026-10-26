@@ -1,5 +1,6 @@
 import { addDays, isIsoDate, toIsoDate } from '../../dates.ts';
 import { MAX_CENTS, parseDecimal } from '../../money.ts';
+import type { ProductGroup } from '../../productGroups.ts';
 import {
 	PAYMENT_METHODS,
 	type LineKind,
@@ -39,6 +40,8 @@ export interface CheckedLine {
 	/** Bedrag met het teken waarmee het meetelt in het totaal. */
 	cents: number;
 	kind: LineKind;
+	/** Alleen bij een artikel; kortingen, bonus, statiegeld en fooi hebben geen groep. */
+	group: ProductGroup | null;
 }
 
 export interface CheckedReceipt {
@@ -111,6 +114,12 @@ export function signedLineCents(cents: number, kind: LineKind): number {
 	return NEGATIVE_KINDS.has(kind) ? -Math.abs(cents) : cents;
 }
 
+/** Productgroep van een regel: alleen een artikel heeft er een, en zonder keuze is dat overig. */
+export function lineGroup(kind: LineKind, group: ProductGroup | ''): ProductGroup | null {
+	if (kind !== 'artikel') return null;
+	return group === '' ? 'overig' : group;
+}
+
 export function checkReceipt(output: ReceiptOutput, now: Date): CheckedReceipt {
 	// Winkel
 	const storeFailures: CheckFailure[] = [];
@@ -130,7 +139,8 @@ export function checkReceipt(output: ReceiptOutput, now: Date): CheckedReceipt {
 		lines.push({
 			description: line.omschrijving.trim(),
 			cents: signedLineCents(cents, line.soort),
-			kind: line.soort
+			kind: line.soort,
+			group: lineGroup(line.soort, line.productgroep)
 		});
 	}
 	const linesSumCents = linesValid ? lines.reduce((sum, l) => sum + l.cents, 0) : null;

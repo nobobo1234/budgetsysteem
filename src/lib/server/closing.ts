@@ -20,7 +20,7 @@ import {
 	type OpenSources
 } from '../closing.ts';
 import { shiftMonth } from '../dates.ts';
-import { afsluiting } from '../icons-extra.ts';
+import { afsluiting } from '../icons.ts';
 import { recordChange } from './audit.ts';
 import { monthOverview, setBudget, spendingByCategory } from './budgets.ts';
 import type { Conn, DB } from './db/index.ts';

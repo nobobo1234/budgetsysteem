@@ -1,11 +1,16 @@
 <script lang="ts">
 	import { enhance, type SubmitFunction } from '$app/forms';
+	import { fly } from 'svelte/transition';
+	import { groupHue } from '#lib/categoryColor.ts';
 	import BackLink from '#lib/components/BackLink.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
+	import ExpectedItem from '#lib/components/ExpectedItem.svelte';
 	import Toast from '#lib/components/Toast.svelte';
+	import TransactionItem from '#lib/components/TransactionItem.svelte';
 	import { formatShortDate } from '#lib/dates.ts';
 	import * as icons from '#lib/icons.ts';
-	import { centsToInput, formatCents } from '#lib/money.ts';
+	import { formatCents } from '#lib/money.ts';
+	import { motion } from '#lib/motion.ts';
 	import { daysBetween, formatOpenFor } from '#lib/owed.ts';
 	import { reminderText } from '#lib/remind.ts';
 	import { fieldList, itemCountText, receiptAmount } from '#lib/receipts.ts';
@@ -13,10 +18,6 @@
 
 	// Review-inbox (spec: Schermen): alles wat op een besluit wacht, per soort een groep met
 	// zijn eigen actie. Bonnen staan bovenaan.
-	// De rijen zijn bewust eigen markup en geen ExpectedItem of TransactionItem: deelt deze
-	// pagina die componenten met het startscherm, dan splitst Vite ze in losse chunks en wordt
-	// de eerste JS-bundel van het startscherm zo'n 2,5 kB groter (budget in lighthouse.mjs).
-	// Om dezelfde reden komen de tinten (`hue`) van de server.
 
 	let { data } = $props();
 	const inbox = $derived(data.inbox);
@@ -49,20 +50,6 @@
 	const sentence = $derived(
 		data.count === 1 ? 'ding wacht op een besluit van je.' : 'dingen wachten op een besluit van je.'
 	);
-
-	// Gemist of opgezegd? Eerst "Niet afgeschreven", dan de keuze; opgezegd stopt de vaste last
-	let asking = $state<string | null>(null);
-	const skipped = (name: string) => (form: FormData) =>
-		form.get('reason') === 'opgezegd' ? `${name} gestopt.` : `${name} deze keer overgeslagen.`;
-
-	// Zoals groupColor in categoryColor.ts
-	const dot = (hue: number | null) =>
-		hue === null ? null : `oklch(var(--dot-l) var(--dot-c) ${hue})`;
-
-	const amountText = (tx: (typeof inbox.transactions)[number]) =>
-		tx.amountCents === 0 && tx.origCurrency && tx.origAmountCents !== null
-			? `${tx.origCurrency === 'USD' ? '$' : `${tx.origCurrency} `}${centsToInput(tx.origAmountCents)}`
-			: formatCents(tx.amountCents, { sign: true });
 
 	// Koppellijst bij een import: je eigen invoer die bij de boeking kan horen
 	const labelText = {
@@ -270,92 +257,8 @@
 			)}
 			<ul class="card list">
 				{#each inbox.missed as item (item.id)}
-					{@const name = displayName(item.counterparty)}
-					<li class="item">
-						<div class="row">
-							<span
-								class={['monogram', 'sm', item.categoryGroup && 'hue']}
-								style:--h={item.hue}
-								aria-hidden="true">{initials(item.counterparty)}</span
-							>
-							<a class="who" href="/vaste-lasten/{item.recurringId}">
-								<span
-									class="name"
-									data-morph-to="/vaste-lasten/{item.recurringId}"
-									data-morph-part="titel">{name}</span
-								>
-								<span class="muted small">
-									<span
-										class={['dot', !item.categoryGroup && 'none']}
-										style:--dot={dot(item.hue)}
-										aria-hidden="true"
-									></span>
-									{item.categoryName ?? 'Geen categorie'} · verwacht {formatShortDate(item.date)}
-								</span>
-							</a>
-							<span class="num amount">{formatCents(item.amountCents)}</span>
-						</div>
-						{#if asking === item.id}
-							<form
-								class="actions"
-								method="POST"
-								action="?/skipExpected"
-								use:enhance={act(item.id, skipped(name))}
-							>
-								<input type="hidden" name="id" value={item.id} />
-								<button
-									class="button secondary small"
-									name="reason"
-									value="gemist"
-									disabled={busy === item.id}>Deze keer niet</button
-								>
-								<button
-									class="text-button danger-text"
-									name="reason"
-									value="opgezegd"
-									disabled={busy === item.id}>Opgezegd</button
-								>
-								<button type="button" class="text-button muted" onclick={() => (asking = null)}
-									>Annuleren</button
-								>
-							</form>
-						{:else}
-							<div class="actions">
-								<form
-									class="confirm"
-									method="POST"
-									action="?/confirmExpected"
-									use:enhance={act(item.id, `${name} bevestigd.`)}
-								>
-									<input type="hidden" name="id" value={item.id} />
-									{#if item.kind === 'wisselend'}
-										<label class="money">
-											<span class="visually-hidden">Bedrag {name}</span>
-											<span class="prefix" aria-hidden="true">€</span>
-											<input
-												name="amount"
-												inputmode="decimal"
-												class="num"
-												value={centsToInput(item.amountCents)}
-												autocomplete="off"
-												required
-											/>
-										</label>
-									{/if}
-									<button
-										class="button secondary small"
-										disabled={busy === item.id}
-										aria-label="Bevestig {name}">Toch afgeschreven</button
-									>
-								</form>
-								<button
-									type="button"
-									class="text-button"
-									onclick={() => (asking = item.id)}
-									aria-label="{name} niet afgeschreven">Niet afgeschreven</button
-								>
-							</div>
-						{/if}
+					<li out:fly={{ x: 32, duration: motion(220) }}>
+						<ExpectedItem {item} ondone={notify} grouped />
 					</li>
 				{/each}
 			</ul>
@@ -373,28 +276,8 @@
 			<ul class="card list">
 				{#each inbox.transactions as tx (tx.id)}
 					{@const name = displayName(tx.counterparty) || 'Deze boeking'}
-					<li class="item">
-						<div class="row">
-							<span
-								class={['monogram', 'sm', tx.categoryGroup && 'hue']}
-								style:--h={tx.hue}
-								aria-hidden="true">{initials(tx.counterparty || '?')}</span
-							>
-							<a class="who" href="/transacties/{tx.id}">
-								<span class="name" data-tx-name={tx.id}>{name}</span>
-								<span class="muted small">
-									<span
-										class={['dot', !tx.categoryGroup && 'none']}
-										style:--dot={dot(tx.hue)}
-										aria-hidden="true"
-									></span>
-									{tx.categoryName ?? 'Geen categorie'} · {formatShortDate(tx.date)} · {tx.accountAlias}
-								</span>
-							</a>
-							<span class={['num', 'amount', tx.amountCents > 0 && 'in']} data-tx-amount={tx.id}
-								>{amountText(tx)}</span
-							>
-						</div>
+					<li class="item tx" out:fly={{ x: 32, duration: motion(220) }}>
+						<TransactionItem {tx} href="/transacties/{tx.id}" showStatus={false} />
 						<div class="why">
 							{#if tx.reason === 'bedrag'}
 								<p class="small">Het eurobedrag ontbreekt nog.</p>
@@ -518,9 +401,9 @@
 			)}
 			<ul class="card list">
 				{#each inbox.late as item (item.id)}
-					<li class="item">
+					<li class="item" out:fly={{ x: 32, duration: motion(220) }}>
 						<div class="row">
-							<span class="monogram sm hue" style:--h={item.hue} aria-hidden="true"
+							<span class="monogram sm hue" style:--h={groupHue(item.personName)} aria-hidden="true"
 								>{initials(item.personName)}</span
 							>
 							<a class="who" href="/terugbetalingen">
@@ -564,9 +447,9 @@
 			)}
 			<ul class="card list">
 				{#each inbox.credit as item (item.personId)}
-					<li class="item">
+					<li class="item" out:fly={{ x: 32, duration: motion(220) }}>
 						<div class="row">
-							<span class="monogram sm hue" style:--h={item.hue} aria-hidden="true"
+							<span class="monogram sm hue" style:--h={groupHue(item.personName)} aria-hidden="true"
 								>{initials(item.personName)}</span
 							>
 							<a class="who" href="/terugbetalingen">
@@ -613,9 +496,9 @@
 			<ul class="card list">
 				{#each inbox.reminders as post (post.id)}
 					{@const who = post.personName ?? 'Nog niet gekozen'}
-					<li class="item">
+					<li class="item" out:fly={{ x: 32, duration: motion(220) }}>
 						<div class="row">
-							<span class="monogram sm hue" style:--h={post.hue} aria-hidden="true"
+							<span class="monogram sm hue" style:--h={groupHue(who)} aria-hidden="true"
 								>{initials(who)}</span
 							>
 							<a class="who" href="/te-krijgen">
@@ -768,8 +651,12 @@
 		white-space: nowrap;
 	}
 
-	/* Waarom hij hier staat en wat je ermee kunt, ingesprongen tot onder de naam (monogram van
-	   32 px plus 12 px tussenruimte) */
+	/* Waarom hij hier staat en wat je ermee kunt, ingesprongen tot onder de naam: monogram
+	   plus tussenruimte (40 + 12 px bij een boeking, 32 + 12 px bij een bon of persoon) */
+	.tx {
+		padding-top: 0;
+	}
+
 	.why {
 		display: grid;
 		gap: 4px;
@@ -780,52 +667,14 @@
 		padding-left: 44px;
 	}
 
-	/* Het bolletje loopt mee in de tekst, zodat het bij een smal scherm niet alleen staat */
-	.dot {
-		display: inline-block;
-		margin-right: 4px;
-		vertical-align: 1px;
-		width: 8px;
-		height: 8px;
-		border-radius: 999px;
-		background: var(--dot);
-	}
-
-	.dot.none {
-		background: transparent;
-		box-shadow: inset 0 0 0 1.5px var(--muted);
+	.tx .why {
+		margin-top: -4px;
+		padding-left: 52px;
 	}
 
 	.amount {
 		font-weight: 600;
 		white-space: nowrap;
-	}
-
-	.confirm {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 8px;
-	}
-
-	.money {
-		position: relative;
-		flex: 1 1 7rem;
-		max-width: 9rem;
-	}
-
-	.money input {
-		width: 100%;
-		padding-left: 28px;
-		font-weight: 600;
-	}
-
-	.prefix {
-		position: absolute;
-		left: 12px;
-		top: 50%;
-		translate: 0 -50%;
-		color: var(--muted);
-		pointer-events: none;
 	}
 
 	/* Koppellijst: een keuzerondje per kandidaat, met het label rechts */
@@ -893,10 +742,6 @@
 
 	.tag.waarschijnlijk {
 		color: var(--accent-strong);
-	}
-
-	.text-button.danger-text {
-		color: var(--danger);
 	}
 
 	.actions {

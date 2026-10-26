@@ -1,6 +1,7 @@
 <script lang="ts">
-	import * as icons from '#lib/icons-extra.ts';
+	import * as icons from '#lib/icons.ts';
 	import { enhance } from '$app/forms';
+	import BackLink from '#lib/components/BackLink.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import Select, { type SelectOption } from '#lib/components/Select.svelte';
 	import Tile from '#lib/components/Tile.svelte';
@@ -82,7 +83,18 @@
 
 <div class="page">
 	<div class="intro">
-		<h1>Importeren</h1>
+		<BackLink
+			parents={[
+				'/instellingen',
+				'/saldocheck',
+				'/',
+				'/transacties',
+				'/vaste-lasten',
+				'/regels',
+				'/instellingen/rekeningen'
+			]}
+		/>
+		<h1 data-morph-head="titel">Importeren</h1>
 		<p class="muted">
 			Download in Mijn SNS je transacties als CAMT.053 (of CSV), of in Revolut een CSV-afschrift in
 			het Nederlands met alle valuta, en kies het bestand hier. Dezelfde export twee keer importeren
