@@ -9,8 +9,11 @@ import { receiptReads, type ReceiptReadOutcome } from './schema.ts';
 
 const DAY = 86_400_000;
 
-/** Velden waarvan een correctie telt; dezelfde als in de eval. */
-export const CORRECTABLE_FIELDS = ['winkel', 'datum', 'totaal', 'valuta'] as const;
+/**
+ * Velden waarvan een correctie telt, zoals in de eval; `productgroep` is een aangepaste groep
+ * van een bonregel (spec: Boodschappen per productgroep).
+ */
+export const CORRECTABLE_FIELDS = ['winkel', 'datum', 'totaal', 'valuta', 'productgroep'] as const;
 export type CorrectableField = (typeof CORRECTABLE_FIELDS)[number];
 
 export function recordReceiptRead(
@@ -102,10 +105,13 @@ export function summarizeReceiptReads(
 		ongeldig: 0,
 		fout: 0
 	} satisfies Record<ReceiptReadOutcome, number>;
-	const correctedFields = { winkel: 0, datum: 0, totaal: 0, valuta: 0 } satisfies Record<
-		CorrectableField,
-		number
-	>;
+	const correctedFields = {
+		winkel: 0,
+		datum: 0,
+		totaal: 0,
+		valuta: 0,
+		productgroep: 0
+	} satisfies Record<CorrectableField, number>;
 	let inputTokens = 0;
 	let outputTokens = 0;
 	let costNanoUsd = 0;

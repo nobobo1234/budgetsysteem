@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { PRODUCT_GROUPS } from '../../productGroups.ts';
 
 // Het vaste JSON-schema dat Haiku teruggeeft (spec: Bonnetjes en koppelen, Verwerking). Haiku krijgt
 // geen tools en mag alleen dit schema invullen; de uitvoer blijft onbetrouwbare invoer en gaat
@@ -107,7 +108,15 @@ export const ReceiptOutputSchema = z.object({
 					.string()
 					.max(16)
 					.describe('Bedrag van de regel met punt en twee decimalen, zoals 2.49 of -0.50.'),
-				soort: z.enum(LINE_KINDS)
+				soort: z.enum(LINE_KINDS),
+				// Een onbekende of ontbrekende waarde wordt overig; de controles halen de groep weg
+				// bij alles wat geen artikel is (spec: Boodschappen per productgroep)
+				productgroep: z
+					.enum(['', ...PRODUCT_GROUPS])
+					.catch('overig')
+					.describe(
+						'Alleen bij soort artikel: de productgroep van het artikel. Bij korting, bonus, statiegeld, fooi en overig leeg.'
+					)
 			})
 		)
 		.max(150)
@@ -158,7 +167,7 @@ export const ReceiptOutputSchema = z.object({
 export type ReceiptOutput = z.infer<typeof ReceiptOutputSchema>;
 
 /** Sleutelwoorden die structured outputs weigert; de grenzen zelf controleert `safeParse`. */
-const UNSUPPORTED = new Set(['$schema', 'maxLength', 'minLength', 'maxItems']);
+const UNSUPPORTED = new Set(['$schema', 'maxLength', 'minLength', 'maxItems', 'default']);
 
 function strip(node: unknown): unknown {
 	if (Array.isArray(node)) return node.map(strip);
@@ -201,7 +210,12 @@ Bon of lijst:
 - Bij een lijst laat je winkel, datum, totaal, valuta en betaalwijze leeg met zekerheid "onleesbaar" en regels leeg, en zet je elke zichtbare transactie in transacties, van boven naar beneden. Een transactie die half buiten beeld valt, neem je alleen op als datum, naam en bedrag te lezen zijn.
 - Het bedrag van een transactie heeft een teken: negatief voor geld dat eraf ging, positief voor geld dat binnenkwam. Staat er geen teken, kijk dan naar kleur of pijl; weet je het niet zeker, dan is de zekerheid "twijfel".
 - De valuta is die van het getoonde bedrag. Staat er naast een bedrag in vreemde valuta ook een bedrag in euro, neem dan het bedrag in vreemde valuta met die valuta.
-- Een datum zonder jaar of een kopje als "Vandaag" of "Gisteren" reken je om met de ontvangstdatum hieronder. Gebruik die datum nooit als datum van een bon.`;
+- Een datum zonder jaar of een kopje als "Vandaag" of "Gisteren" reken je om met de ontvangstdatum hieronder. Gebruik die datum nooit als datum van een bon.
+
+Productgroep:
+- Geef elke regel met soort "artikel" een productgroep: groente_fruit (groente, fruit, aardappelen, verse kruiden), zuivel_eieren (melk, yoghurt, kaas, boter, eieren), vlees_vis (vlees, vis, vleeswaren, vleesvervangers), brood_ontbijt (brood, beschuit, ontbijtgranen, broodbeleg zoals jam of pindakaas), voorraad (pasta, rijst, conserven, sauzen, kruiden, bakproducten, koffie, thee), kant_en_klaar (maaltijden, salades, soep, pizza, diepvriesmaaltijden), snacks_snoep (chips, koek, snoep, chocolade, noten), frisdrank_sap (frisdrank, sap, water, energiedrank), alcohol (bier, wijn, sterke drank), huishouden (schoonmaak, wc-papier, afvalzakken, batterijen), verzorging (shampoo, tandpasta, deodorant, medicijnen) of overig (al het andere).
+- Kies op wat het product is. Weet je het niet, kies dan overig; verzin geen nieuwe groep.
+- Korting, bonus, statiegeld, fooi en regels met soort overig krijgen een lege productgroep.`;
 
 /** De vraag na de beelden; `received` (JJJJ-MM-DD) helpt alleen bij datums in een lijst. */
 export function userInstruction(parts: number, received?: string): string {

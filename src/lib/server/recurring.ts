@@ -958,7 +958,7 @@ export interface Charge {
  * de historie (de import) die dezelfde sleutel hebben maar nog niet gekoppeld zijn. Zonder dat
  * laatste is er vóór de eerste bevestiging niets te zien.
  */
-function chargesFor(
+export function chargesFor(
 	db: Conn,
 	items: { id: string; matchKey: string }[],
 	from: string,

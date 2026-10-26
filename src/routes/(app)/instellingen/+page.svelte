@@ -1,6 +1,7 @@
 <script lang="ts">
 	import Tile from '#lib/components/Tile.svelte';
 	import * as icons from '#lib/icons-extra.ts';
+	import { formatShortDate } from '#lib/dates.ts';
 	import { formatCents } from '#lib/money.ts';
 
 	let { data } = $props();
@@ -76,6 +77,14 @@
 							: 'Gedaan deze maand',
 					icon: icons.saldocheck,
 					warn: t.balanceDue.length > 0
+				},
+				{
+					href: '/import',
+					title: 'Importeren',
+					value: t.lastImport
+						? `Tot en met ${formatShortDate(t.lastImport.periodEnd ?? t.lastImport.createdAt.slice(0, 10))}`
+						: 'Historie importeren',
+					icon: icons.importeren
 				}
 			]
 		},

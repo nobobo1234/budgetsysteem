@@ -15,11 +15,11 @@ export function receiptOutput(overrides: Partial<ReceiptOutput> = {}): ReceiptOu
 		valuta: sure('EUR'),
 		betaalwijze: sure('pin'),
 		regels: [
-			{ omschrijving: 'Brood', bedrag: '2.49', soort: 'artikel' },
-			{ omschrijving: 'Melk', bedrag: '1.19', soort: 'artikel' },
-			{ omschrijving: 'Kaas', bedrag: '4.29', soort: 'artikel' },
-			{ omschrijving: 'Bonus kaas', bedrag: '-0.75', soort: 'bonus' },
-			{ omschrijving: 'Statiegeld', bedrag: '0.15', soort: 'statiegeld' }
+			{ omschrijving: 'Brood', bedrag: '2.49', soort: 'artikel', productgroep: 'brood_ontbijt' },
+			{ omschrijving: 'Melk', bedrag: '1.19', soort: 'artikel', productgroep: 'zuivel_eieren' },
+			{ omschrijving: 'Kaas', bedrag: '4.29', soort: 'artikel', productgroep: 'zuivel_eieren' },
+			{ omschrijving: 'Bonus kaas', bedrag: '-0.75', soort: 'bonus', productgroep: '' },
+			{ omschrijving: 'Statiegeld', bedrag: '0.15', soort: 'statiegeld', productgroep: '' }
 		],
 		transacties: [],
 		...overrides

@@ -1,7 +1,13 @@
 import { z } from 'zod';
 import { addDays, isIsoDate } from '../../dates.ts';
-import { parseAmount, parseSignedAmount } from '../../money.ts';
-import type { CheckedList, CheckedReceipt, FieldStatus } from './checks.ts';
+import { centsToInput, parseAmount, parseSignedAmount } from '../../money.ts';
+import { PRODUCT_GROUPS, type ProductGroup } from '../../productGroups.ts';
+import {
+	LINE_TOLERANCE_CENTS,
+	type CheckedList,
+	type CheckedReceipt,
+	type FieldStatus
+} from './checks.ts';
 import type { Variant } from './images.ts';
 import type { ReadFailure, ReadUsage } from './reader.ts';
 import { MAX_LIST_ITEMS, PAYMENT_METHODS, type ImageKind } from './schema.ts';
@@ -9,12 +15,16 @@ import { MAX_LIST_ITEMS, PAYMENT_METHODS, type ImageKind } from './schema.ts';
 // Haiku-eval (spec: Testplan voordat het live gaat): per variant en per veld hoe vaak Haiku het
 // goed heeft, en vooral hoe vaak "zeker" toch fout was. Een screenshot met transacties (een
 // lijst) wordt per transactie gescoord: gevonden, goed of fout, en wat het model erbij verzon.
-// Pure logica; het script in
+// Per bon ook of alle regels gevuld zijn en, als je de artikelen labelt, of de productgroep klopt
+// (spec: Boodschappen per productgroep). Pure logica; het script in
 // `scripts/bon-eval.ts` leest de bestanden en doet de aanroepen. De labels en bonnen staan
 // buiten git: echte bonnen komen nooit in de repo.
 
 /** Doel uit de spec: bij "zeker" minstens 98% goed op het totaal. */
 export const TARGET_PRECISION = 0.98;
+
+/** Doel uit de spec (fase 4, Klaar als): bij gevulde regels minstens 90% juiste productgroep. */
+export const TARGET_GROUPS = 0.9;
 
 export const EVAL_FIELDS = ['winkel', 'datum', 'totaal', 'valuta', 'betaalwijze'] as const;
 export type EvalField = (typeof EVAL_FIELDS)[number];
@@ -26,6 +36,18 @@ const fileName = z
 		'alleen een bestandsnaam (jpg, png of webp)'
 	);
 const isoDate = z.string().refine(isIsoDate, 'datum als JJJJ-MM-DD');
+
+/** Een artikel op de bon met zijn productgroep; kortingen, bonus en statiegeld label je niet. */
+const LabelLineSchema = z.strictObject({
+	/** Zoals je het typt: `2,49`. */
+	bedrag: z
+		.string()
+		.refine((s) => (parseSignedAmount(s) ?? 0) !== 0, 'bedrag van het artikel, zoals 2,49'),
+	groep: z.enum(PRODUCT_GROUPS),
+	/** Voor jezelf; telt niet mee. */
+	omschrijving: z.string().max(120).optional()
+});
+export type LabelLine = z.infer<typeof LabelLineSchema>;
 
 export const LabelSchema = z.strictObject({
 	/** Korte naam voor in het rapport; standaard het eerste bestand zonder extensie. */
@@ -49,7 +71,9 @@ export const LabelSchema = z.strictObject({
 	ontvangen: isoDate.optional(),
 	/** Vrije groep voor de uitsplitsing, zoals supermarkt, horeca, kreukel of screenshot. */
 	soort: z.string().max(40).optional(),
-	notitie: z.string().max(500).optional()
+	notitie: z.string().max(500).optional(),
+	/** De artikelen met hun productgroep, van boven naar beneden; zonder telt alleen "gevuld". */
+	regels: z.array(LabelLineSchema).min(1).max(150).optional()
 });
 
 const names = z.union([z.string().min(1).max(100), z.array(z.string().min(1).max(100)).min(1)]);
@@ -167,6 +191,25 @@ export interface ListScore {
 	extraZeker: number;
 }
 
+/** De regels van één bon. */
+export interface LineScore {
+	/** Alle regels gelezen, en samen het gelabelde totaal (binnen €0,05). */
+	complete: boolean;
+	/** Alleen als de artikelen gelabeld zijn. */
+	groups: GroupScore | null;
+}
+
+export interface GroupScore {
+	/** Gelabelde artikelen, en hoeveel daarvan een gelezen artikel met hetzelfde bedrag hebben. */
+	labeled: number;
+	matched: number;
+	/** Daarvan met de goede productgroep. */
+	correct: number;
+	/** Hetzelfde in centen: hoeveel geld in de goede groep valt. */
+	labeledCents: number;
+	correctCents: number;
+}
+
 export interface BonResult {
 	id: string;
 	variant: Variant;
@@ -180,6 +223,8 @@ export interface BonResult {
 	fields: Partial<Record<EvalField, FieldResult>>;
 	/** Alleen bij een lijst-label. */
 	list: ListScore | null;
+	/** Alleen bij een bon-label. */
+	lines: LineScore | null;
 	usage: ReadUsage | null;
 }
 
@@ -197,7 +242,14 @@ export function scoreBon(label: Label, variant: Variant, result: EvalInput): Bon
 		list: null
 	};
 	if (!result.ok)
-		return { ...base, beeld: null, outcome: result.reason, fields: {}, usage: result.usage };
+		return {
+			...base,
+			beeld: null,
+			outcome: result.reason,
+			fields: {},
+			lines: scoreLines(label, null),
+			usage: result.usage
+		};
 
 	const c = result.checked;
 	const field = (
@@ -218,6 +270,7 @@ export function scoreBon(label: Label, variant: Variant, result: EvalInput): Bon
 		// Als lijst gelezen boekt de app niets: de bonvelden zijn dan leeg en onzeker
 		outcome: c.outcome,
 		usage: result.usage,
+		lines: scoreLines(label, c),
 		fields: {
 			winkel: field(
 				c.store.value,
@@ -242,12 +295,74 @@ export function scoreBon(label: Label, variant: Variant, result: EvalInput): Bon
 }
 
 /**
+ * De regels van een bon: gevuld als ze allemaal gelezen zijn en samen het echte totaal vormen.
+ * Gelabelde artikelen worden op volgorde gekoppeld aan gelezen artikelen met hetzelfde bedrag;
+ * een artikel zonder paar telt als niet gevonden (en dus niet goed).
+ */
+export function scoreLines(label: Label, checked: CheckedReceipt | null): LineScore {
+	const total = parseAmount(label.totaal);
+	const complete =
+		checked !== null &&
+		checked.lines.length > 0 &&
+		checked.linesSumCents !== null &&
+		total !== null &&
+		Math.abs(checked.linesSumCents - total) <= LINE_TOLERANCE_CENTS;
+	if (!label.regels) return { complete, groups: null };
+
+	const read = (checked?.lines ?? []).filter((l) => l.kind === 'artikel');
+	const used = new Set<number>();
+	let last = -1;
+	const groups: GroupScore = {
+		labeled: 0,
+		matched: 0,
+		correct: 0,
+		labeledCents: 0,
+		correctCents: 0
+	};
+	for (const want of label.regels) {
+		const cents = parseSignedAmount(want.bedrag)!;
+		groups.labeled++;
+		groups.labeledCents += Math.abs(cents);
+		const same = (j: number) => !used.has(j) && read[j]!.cents === cents;
+		// Eerst verder op de bon dan het vorige paar, anders het eerste vrije met dat bedrag
+		let j = read.findIndex((_, k) => k > last && same(k));
+		if (j === -1) j = read.findIndex((_, k) => same(k));
+		if (j === -1) continue;
+		used.add(j);
+		last = j;
+		groups.matched++;
+		if (read[j]!.group === want.groep) {
+			groups.correct++;
+			groups.correctCents += Math.abs(cents);
+		}
+	}
+	return { complete, groups };
+}
+
+/** Wat Haiku las als label-regels, om na te kijken en in `labels.json` te zetten. */
+export function conceptLines(checked: CheckedReceipt): LabelLine[] {
+	return checked.lines
+		.filter((l) => l.kind === 'artikel')
+		.map((l) => ({
+			omschrijving: l.description,
+			bedrag: `${l.cents < 0 ? '-' : ''}${centsToInput(l.cents)}`,
+			groep: (l.group ?? 'overig') satisfies ProductGroup
+		}));
+}
+
+/**
  * Vergelijkt een gelezen lijst met het label. Elke gelabelde transactie krijgt hooguit één
  * gelezen transactie: eerst de paren die het meest overeenkomen (bedrag weegt het zwaarst), en
  * alleen als het bedrag klopt of datum én naam kloppen. Wat overblijft is gemist of extra.
  */
 export function scoreList(label: ListLabel, variant: Variant, result: EvalInput): BonResult {
-	const base = { id: labelId(label), variant, soort: label.soort ?? null, kind: 'lijst' as const };
+	const base = {
+		id: labelId(label),
+		variant,
+		soort: label.soort ?? null,
+		kind: 'lijst' as const,
+		lines: null
+	};
 	const missing = (): ItemResult => ({ found: false, correct: false, outcome: null, fields: {} });
 	if (!result.ok)
 		return {
@@ -361,6 +476,19 @@ export interface ListReport {
 	zekerWrongIds: { id: string; item: number; field: ListEvalField }[];
 }
 
+export interface LinesReport {
+	/** Bonnen waarvan alle regels gevuld zijn (samen het totaal), van alle bonnen. */
+	complete: number;
+	bonnen: number;
+	/** Bonnen met gelabelde artikelen, en de optelling van hun scores. */
+	labeledBonnen: number;
+	groups: GroupScore;
+	/** Hetzelfde, alleen voor bonnen waarvan alle regels gevuld zijn: daarop geldt het doel. */
+	completeGroups: GroupScore;
+	/** Bonnen met een artikel in de verkeerde groep of zonder paar, om zelf na te kijken. */
+	wrongIds: { id: string; wrong: number }[];
+}
+
 export interface VariantReport {
 	variant: Variant;
 	bonnen: number;
@@ -378,6 +506,8 @@ export interface VariantReport {
 	zekerWrongIds: { id: string; field: EvalField }[];
 	/** Screenshots met transacties; `null` als er geen lijst-labels zijn. */
 	lists: ListReport | null;
+	/** Regels en productgroepen van de bonnen. */
+	lines: LinesReport;
 }
 
 const emptyStats = (): FieldStats => ({
@@ -461,8 +591,45 @@ export function aggregate(variant: Variant, all: BonResult[]): VariantReport {
 		lists:
 			listResults.length > 0
 				? aggregateLists(listResults, results.filter((r) => r.beeld === 'lijst').length)
-				: null
+				: null,
+		lines: aggregateLines(results)
 	};
+}
+
+const emptyGroups = (): GroupScore => ({
+	labeled: 0,
+	matched: 0,
+	correct: 0,
+	labeledCents: 0,
+	correctCents: 0
+});
+
+function aggregateLines(results: BonResult[]): LinesReport {
+	const report: LinesReport = {
+		complete: 0,
+		bonnen: results.length,
+		labeledBonnen: 0,
+		groups: emptyGroups(),
+		completeGroups: emptyGroups(),
+		wrongIds: []
+	};
+	const add = (to: GroupScore, g: GroupScore) => {
+		to.labeled += g.labeled;
+		to.matched += g.matched;
+		to.correct += g.correct;
+		to.labeledCents += g.labeledCents;
+		to.correctCents += g.correctCents;
+	};
+	for (const r of results) {
+		if (r.lines?.complete) report.complete++;
+		const g = r.lines?.groups;
+		if (!g) continue;
+		report.labeledBonnen++;
+		add(report.groups, g);
+		if (r.lines!.complete) add(report.completeGroups, g);
+		if (g.correct < g.labeled) report.wrongIds.push({ id: r.id, wrong: g.labeled - g.correct });
+	}
+	return report;
 }
 
 function aggregateLists(results: BonResult[], bonAsList: number): ListReport {
@@ -573,9 +740,43 @@ export function formatReport(reports: VariantReport[]): string {
 				`  zeker maar fout: ${r.zekerWrongIds.map((w) => `${w.id} (${w.field})`).join(', ')}`
 			);
 		}
+		lines.push(...formatLines(r.lines));
 		if (r.lists) lines.push(...formatLists(r.lists));
 	}
 	return lines.join('\n');
+}
+
+function formatLines(l: LinesReport): string[] {
+	if (l.bonnen === 0) return [];
+	const out = [
+		`  regels: alle regels gevuld bij ${l.complete} van ${l.bonnen} bonnen (${pct(l.complete, l.bonnen)})`
+	];
+	if (l.labeledBonnen === 0) {
+		out.push('  productgroep: geen artikelen gelabeld ("regels" in labels.json)');
+		return out;
+	}
+	const g = l.groups;
+	out.push(
+		`  productgroep: ${g.labeled} artikelen gelabeld in ${l.labeledBonnen} bonnen, ${g.matched} gevonden, ${g.correct} goede groep (${pct(g.correct, g.labeled)}); geld in de goede groep: ${pct(g.correctCents, g.labeledCents)}`
+	);
+	const c = l.completeGroups;
+	out.push(
+		`  productgroep bij gevulde regels: ${
+			c.labeled === 0
+				? 'geen gelabelde bon met gevulde regels'
+				: `${pct(c.correct, c.labeled)} goed, ${
+						c.correct / c.labeled >= TARGET_GROUPS
+							? `doel gehaald (≥ ${TARGET_GROUPS * 100}%)`
+							: `doel NIET gehaald (< ${TARGET_GROUPS * 100}%)`
+					}`
+		}`
+	);
+	if (l.wrongIds.length > 0) {
+		out.push(
+			`  groep fout of niet gevonden: ${l.wrongIds.map((w) => `${w.id} (${w.wrong})`).join(', ')}`
+		);
+	}
+	return out;
 }
 
 function formatLists(l: ListReport): string[] {

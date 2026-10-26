@@ -9,6 +9,8 @@ import {
 	text,
 	uniqueIndex
 } from 'drizzle-orm/sqlite-core';
+import { PRODUCT_GROUPS } from '../../productGroups.ts';
+import { LINE_KINDS } from '../receipts/schema.ts';
 
 // Alle ID's zijn willekeurige UUID's; bedragen altijd hele centen in euro.
 
@@ -229,6 +231,29 @@ export const receiptItems = sqliteTable(
 		uniqueIndex('receipt_items_position_idx').on(t.receiptId, t.position),
 		index('receipt_items_transaction_idx').on(t.transactionId)
 	]
+);
+
+// De regels van een verwerkte bon (spec: Analyses → Boodschappen per productgroep): wat Haiku las en
+// de code controleerde, met de productgroep per artikel. Een groep aanpassen verandert alleen deze
+// tabel, niet de ruwe uitvoer. Bonregels blijven op de server en gaan nooit los naar AI.
+export const receiptLines = sqliteTable(
+	'receipt_lines',
+	{
+		id: id(),
+		receiptId: text('receipt_id')
+			.notNull()
+			.references(() => receipts.id, { onDelete: 'cascade' }),
+		position: integer('position').notNull(),
+		// Zoals op de bon; onbetrouwbare tekst, alleen als gewone tekst tonen
+		description: text('description').notNull(),
+		kind: text('kind', { enum: LINE_KINDS }).notNull(),
+		// Met het teken waarmee de regel meetelt in het totaal: korting en bonus negatief
+		amountCents: integer('amount_cents').notNull(),
+		// Alleen bij een artikel; leeg bij bonnen van voor de productgroepen
+		productGroup: text('product_group', { enum: PRODUCT_GROUPS }),
+		createdAt: createdAt()
+	},
+	(t) => [uniqueIndex('receipt_lines_position_idx').on(t.receiptId, t.position)]
 );
 
 export const recurring = sqliteTable(

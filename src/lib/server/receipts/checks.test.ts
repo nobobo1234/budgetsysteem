@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { checkList, checkReceipt, parseModelAmount, signedLineCents, worst } from './checks.ts';
+import {
+	checkList,
+	checkReceipt,
+	lineGroup,
+	parseModelAmount,
+	signedLineCents,
+	worst
+} from './checks.ts';
 import { field, listItem, listOutput, NOW, receiptOutput } from './fixtures.ts';
 
 describe('parseModelAmount', () => {
@@ -135,8 +142,13 @@ describe('checkReceipt', () => {
 				receiptOutput({
 					totaal: field('24.00'),
 					regels: [
-						{ omschrijving: 'Lunch', bedrag: '21.50', soort: 'artikel' },
-						{ omschrijving: 'Fooi', bedrag: '2.50', soort: 'fooi' }
+						{
+							omschrijving: 'Lunch',
+							bedrag: '21.50',
+							soort: 'artikel',
+							productgroep: 'kant_en_klaar'
+						},
+						{ omschrijving: 'Fooi', bedrag: '2.50', soort: 'fooi', productgroep: '' }
 					]
 				}),
 				NOW
@@ -301,5 +313,27 @@ describe('checkList', () => {
 
 	it('een lijst zonder transacties is onzeker', () => {
 		expect(checkList(listOutput([]), NOW)).toEqual({ items: [], outcome: 'onzeker' });
+	});
+});
+
+describe('productgroep van een regel', () => {
+	it('alleen een artikel krijgt een groep; zonder keuze is dat overig', () => {
+		expect(lineGroup('artikel', 'zuivel_eieren')).toBe('zuivel_eieren');
+		expect(lineGroup('artikel', '')).toBe('overig');
+		expect(lineGroup('korting', 'zuivel_eieren')).toBeNull();
+		expect(lineGroup('bonus', '')).toBeNull();
+		expect(lineGroup('statiegeld', 'frisdrank_sap')).toBeNull();
+		expect(lineGroup('fooi', 'overig')).toBeNull();
+	});
+
+	it('komt mee in de gecontroleerde regels', () => {
+		const c = checkReceipt(receiptOutput(), NOW);
+		expect(c.lines.map((l) => [l.kind, l.group])).toEqual([
+			['artikel', 'brood_ontbijt'],
+			['artikel', 'zuivel_eieren'],
+			['artikel', 'zuivel_eieren'],
+			['bonus', null],
+			['statiegeld', null]
+		]);
 	});
 });

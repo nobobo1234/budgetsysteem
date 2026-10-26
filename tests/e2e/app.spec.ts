@@ -115,6 +115,9 @@ for (const path of [
 	'/',
 	'/transacties',
 	'/budget',
+	'/analyses',
+	'/analyses/trend',
+	'/analyses/jaar',
 	'/import',
 	'/categorieen',
 	'/regels',
@@ -129,7 +132,8 @@ for (const path of [
 	'/instellingen/meldingen',
 	'/instellingen/beveiliging',
 	'/instellingen/apparaten',
-	'/instellingen/rekeningen'
+	'/instellingen/rekeningen',
+	'/analyses/boodschappen'
 ]) {
 	test(`${path} past op een telefoonscherm`, async ({ page }) => {
 		await page.goto(path);

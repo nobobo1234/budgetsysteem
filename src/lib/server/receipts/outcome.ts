@@ -1,5 +1,5 @@
 import type { MatchLabel, MatchQuery } from '../../match.ts';
-import type { FieldStatus } from './checks.ts';
+import { LINE_TOLERANCE_CENTS, type FieldStatus } from './checks.ts';
 import type { StoredFields } from './stored.ts';
 
 // Wat er met een gelezen bon gebeurt (spec: Bonnetjes en koppelen, Verwerking stap 5 en
@@ -40,6 +40,20 @@ export function isComplete(fields: StoredFields): boolean {
 		fields.totalCents !== null &&
 		fields.totalCents > 0 &&
 		fields.currency !== null
+	);
+}
+
+/**
+ * Of de bon regels heeft die het overzicht per productgroep kan gebruiken: alle regels gelezen,
+ * en samen het totaal (binnen €0,05). Half gelezen regels zouden de verdeling scheef trekken.
+ * Dezelfde regel staat in de migratie die de regels van oudere bonnen overnam.
+ */
+export function completeLines(fields: StoredFields): boolean {
+	return (
+		fields.lines.length > 0 &&
+		fields.linesSumCents !== null &&
+		fields.totalCents !== null &&
+		Math.abs(fields.linesSumCents - fields.totalCents) <= LINE_TOLERANCE_CENTS
 	);
 }
 
