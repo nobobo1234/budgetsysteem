@@ -123,6 +123,7 @@ for (const path of [
 	'/terugbetalingen',
 	'/personen',
 	'/instellingen/status',
+	'/instellingen/gebruik',
 	'/saldocheck',
 	'/bonnen',
 	'/instellingen/meldingen',
@@ -258,6 +259,52 @@ test('web-vitals komen op de statuspagina', async ({ page }) => {
 	await expect(vitals.getByRole('row')).not.toHaveCount(1);
 
 	// Met de tabel erop past de pagina ook op het smalste scherm (375 px)
+	await page.setViewportSize({ width: 375, height: 812 });
+	const { inner, scroll } = await page.evaluate(() => ({
+		inner: document.documentElement.clientWidth,
+		scroll: document.documentElement.scrollWidth
+	}));
+	expect(scroll).toBeLessThanOrEqual(inner);
+});
+
+// Je eigen gebruik: een invoer levert een meting op (dag, soort, tijd van openen tot opslaan),
+// ook offline op de dag van invoeren, en staat daarna op de pagina Gebruik.
+test('een invoer levert een meting op voor Gebruik', async ({ page, context }) => {
+	const day = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Amsterdam' }).format(new Date());
+	const measured = () =>
+		countTelemetry(
+			"SELECT count(*) AS n FROM usage_entries WHERE kind = 'snelinvoer' AND day = ?",
+			day
+		);
+	const before = measured();
+	await page.goto('/');
+	await page.waitForLoadState('networkidle');
+	await page.getByLabel('Snel invoeren').fill('4,20 Gebruik Bakker');
+	await page.getByRole('button', { name: 'Opslaan' }).click();
+	await expect.poll(measured).toBe(before + 1);
+	// De eerste invoer na het openen heeft een tijd
+	expect(
+		countTelemetry('SELECT count(*) AS n FROM usage_entries WHERE day = ? AND duration_ms > 0', day)
+	).toBeGreaterThan(0);
+
+	// Offline wacht de meting, en gaat mee zodra er weer verbinding is
+	await context.setOffline(true);
+	await page.getByLabel('Snel invoeren').fill('1,10 Gebruik Offline');
+	await page.getByRole('button', { name: 'Opslaan' }).click();
+	await expect(page.getByLabel('Snel invoeren')).toHaveValue('');
+	expect(measured()).toBe(before + 1);
+	await context.setOffline(false);
+	await page.evaluate(() => window.dispatchEvent(new Event('online')));
+	await expect.poll(measured).toBe(before + 2);
+
+	await page.goto('/instellingen');
+	await page.waitForLoadState('networkidle');
+	await page.getByRole('link', { name: /^Gebruik/ }).click();
+	await expect(page.getByRole('heading', { level: 1 })).toHaveText('Gebruik');
+	await expect(page.getByRole('list', { name: 'Dagen met invoer deze week' })).toBeVisible();
+	await expect(page.getByText('Vandaag al ingevoerd')).toBeVisible();
+	await expect(page.getByRole('table').getByRole('row')).not.toHaveCount(1);
+
 	await page.setViewportSize({ width: 375, height: 812 });
 	const { inner, scroll } = await page.evaluate(() => ({
 		inner: document.documentElement.clientWidth,

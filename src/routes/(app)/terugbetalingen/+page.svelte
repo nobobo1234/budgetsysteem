@@ -12,6 +12,7 @@
 	import { formatMonth, formatShortDate, formatShortMonth, shiftMonth } from '#lib/dates.ts';
 	import { centsToInput, formatCents } from '#lib/money.ts';
 	import { MONTH_STATE_LABEL, type MonthState } from '#lib/shares.ts';
+	import { recordEntry } from '#lib/usage.ts';
 
 	let { data, form } = $props();
 	const o = $derived(data.overview);
@@ -21,9 +22,10 @@
 	let opened = $state<{ personId: string; month: string } | null>(null);
 	let confirm = $state<string | null>(null);
 
-	const keep: SubmitFunction = () => {
+	const keep: SubmitFunction = ({ action }) => {
 		busy = true;
-		return async ({ update }) => {
+		return async ({ result, update }) => {
+			if (result.type === 'success' && action.search === '?/received') recordEntry('verwacht');
 			await update({ reset: false });
 			busy = false;
 			confirm = null;

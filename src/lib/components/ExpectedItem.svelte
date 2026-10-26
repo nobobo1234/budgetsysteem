@@ -6,6 +6,7 @@
 	import { formatShortDate } from '#lib/dates.ts';
 	import { centsToInput, formatCents } from '#lib/money.ts';
 	import { displayName, initials } from '#lib/text.ts';
+	import { recordEntry } from '#lib/usage.ts';
 
 	interface Item {
 		id: string;
@@ -47,6 +48,7 @@
 		return async ({ result, update }) => {
 			busy = false;
 			if (result.type === 'success') {
+				if (reason === null) recordEntry('verwacht');
 				ondone(
 					reason === null
 						? `${name} bevestigd.`

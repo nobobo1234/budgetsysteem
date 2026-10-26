@@ -38,6 +38,12 @@ export const beveiliging: IconDef = {
 
 export const status: IconDef = { hue: 270, path: 'M3 12h4l2.5-6 5 12 2.5-6h4' };
 
+// Een kalender met een vink: dagen waarop je iets invoerde
+export const gebruik: IconDef = {
+	hue: 100,
+	path: 'M4 5.5h16V20H4z M4 10h16 M8.5 3v4 M15.5 3v4 M9 15l2 2 4-4'
+};
+
 export const apparaten: IconDef = {
 	hue: 115,
 	path: 'M7 3h10v18H7z M10.5 18h3 M12 14V7 M9.5 9.5 12 7l2.5 2.5'

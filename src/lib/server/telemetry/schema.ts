@@ -97,3 +97,26 @@ export const receiptReads = sqliteTable(
 		index('receipt_reads_receipt_idx').on(t.receiptId)
 	]
 );
+
+/**
+ * Je eigen gebruik (spec: Telemetrie en monitoring, Volhouden): één rij per invoer, met de dag
+ * waarop je hem invoerde, de soort en hoe lang het duurde van het openen van de app tot het
+ * opslaan. Nooit een bedrag, tegenpartij of welke transactie het was.
+ */
+export const ENTRY_KINDS = ['snelinvoer', 'verwacht', 'bon'] as const;
+export type EntryKind = (typeof ENTRY_KINDS)[number];
+
+export const usageEntries = sqliteTable(
+	'usage_entries',
+	{
+		// Willekeurig ID van de client: opnieuw versturen telt niet dubbel
+		id: text('id').primaryKey(),
+		at: at(),
+		// Dag van invoeren in lokale tijd (`YYYY-MM-DD`), ook als hij pas later synchroniseert
+		day: text('day').notNull(),
+		kind: text('kind', { enum: ENTRY_KINDS }).notNull(),
+		// Van openen of terugkeren naar de voorgrond tot opslaan; leeg na de eerste invoer
+		durationMs: integer('duration_ms')
+	},
+	(t) => [index('usage_entries_at_idx').on(t.at), index('usage_entries_day_idx').on(t.day)]
+);

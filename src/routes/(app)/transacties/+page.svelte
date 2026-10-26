@@ -23,6 +23,7 @@
 	import { formatCents } from '#lib/money.ts';
 	import { threadLayout } from '#lib/refund.ts';
 	import { displayName } from '#lib/text.ts';
+	import { recordEntry } from '#lib/usage.ts';
 
 	let { data } = $props();
 
@@ -210,7 +211,9 @@
 	}
 
 	async function confirmRow(tx: (typeof data.transactions)[number]) {
-		if (await act('confirm', { id: tx.id })) notify(`${displayName(tx.counterparty)} bevestigd.`);
+		if (!(await act('confirm', { id: tx.id }))) return;
+		if (tx.status === 'verwacht') recordEntry('verwacht');
+		notify(`${displayName(tx.counterparty)} bevestigd.`);
 	}
 
 	function pickCategory(tx: (typeof data.transactions)[number]) {

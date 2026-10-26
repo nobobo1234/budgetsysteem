@@ -150,6 +150,16 @@
 							: 'Alles werkt',
 					icon: icons.status,
 					warn: t.statusAttention > 0
+				},
+				{
+					href: '/instellingen/gebruik',
+					title: 'Gebruik',
+					value: !t.usage
+						? 'Nog niets ingevoerd'
+						: t.usage.streak > 1
+							? `${t.usage.streak} dagen op rij`
+							: `${t.usage.days} van ${t.usage.daysSoFar} dagen deze week`,
+					icon: icons.gebruik
 				}
 			]
 		}

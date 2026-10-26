@@ -22,6 +22,7 @@
 	import { motion } from '#lib/motion.ts';
 	import { threadLayout } from '#lib/refund.ts';
 	import { displayName, initials } from '#lib/text.ts';
+	import { recordEntry } from '#lib/usage.ts';
 
 	let { data } = $props();
 
@@ -129,6 +130,7 @@
 		return async ({ result, update }) => {
 			receiving = null;
 			if (result.type === 'success') {
+				recordEntry('verwacht');
 				notify(`${item?.personName ?? 'Betaling'} ontvangen.`);
 				await update();
 				return;
