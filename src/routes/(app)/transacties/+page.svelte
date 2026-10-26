@@ -1,5 +1,5 @@
 <script lang="ts">
-	import * as icons from '#lib/icons-extra.ts';
+	import * as icons from '#lib/icons.ts';
 	import { tick } from 'svelte';
 	import { deserialize } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';

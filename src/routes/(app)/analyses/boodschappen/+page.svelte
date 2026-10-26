@@ -4,7 +4,7 @@
 	import StackedBar from '#lib/components/StackedBar.svelte';
 	import { formatDayMonth, formatMonth } from '#lib/dates.ts';
 	import { coveragePercent, type Bucket } from '#lib/groceries.ts';
-	import { boodschappen } from '#lib/icons-extra.ts';
+	import { boodschappen } from '#lib/icons.ts';
 	import { formatCents } from '#lib/money.ts';
 	import { PRODUCT_GROUP_LABEL, productGroupColor, type ProductGroup } from '#lib/productGroups.ts';
 	import { displayName } from '#lib/text.ts';

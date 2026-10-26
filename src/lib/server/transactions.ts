@@ -26,6 +26,7 @@ import {
 	unlinkPayment
 } from './owed.ts';
 import { applySharedSplit, hasSharePosts, removeSharedFor } from './shares.ts';
+import { syncAutoTags } from './tags.ts';
 import { dateInRange, type NewTransaction, type TransactionPatch } from './validation.ts';
 
 export { ValidationError };
@@ -102,6 +103,8 @@ export function createTransaction(
 		}
 
 		recordChange(tx, 'aangemaakt', 'transactions', row.id, null, row);
+		// Tags met een periode die deze dag dekt (spec: Tags)
+		syncAutoTags(tx, [row.id]);
 
 		// Retour: verrekenen met de gekozen uitgave. Past hij niet (meer), bijvoorbeeld omdat er
 		// offline al een andere retour op kwam, dan blijft hij staan en komt hij bij te controleren.
@@ -191,6 +194,7 @@ export function updateTransaction(
 		if (patch.categoryId !== undefined && patch.categoryId !== before.categoryId)
 			moveCorrections(tx, id, before.categoryId, patch.categoryId);
 		if (shared) applySharedSplit(tx, id);
+		if (patch.date !== undefined && patch.date !== before.date) syncAutoTags(tx, [id]);
 		// Een gekoppelde betaling met een ander bedrag wordt opnieuw over de posten verdeeld
 		if (patch.amountCents !== undefined && patch.amountCents !== before.amountCents) {
 			const links = tx

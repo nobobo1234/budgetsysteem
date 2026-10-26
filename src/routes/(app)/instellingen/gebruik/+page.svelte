@@ -2,7 +2,7 @@
 	import BackLink from '#lib/components/BackLink.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import { formatShortDate } from '#lib/dates.ts';
-	import * as icons from '#lib/icons-extra.ts';
+	import * as icons from '#lib/icons.ts';
 	import { formatEntryTime, streakSentence } from '#lib/usage-view.ts';
 
 	let { data } = $props();

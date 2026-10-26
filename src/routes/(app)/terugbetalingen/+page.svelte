@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { initials } from '#lib/text.ts';
 	import { groupHue } from '#lib/categoryColor.ts';
-	import * as icons from '#lib/icons-extra.ts';
+	import * as icons from '#lib/icons.ts';
 	import { enhance, type SubmitFunction } from '$app/forms';
 	import { fly } from 'svelte/transition';
 	import BackLink from '#lib/components/BackLink.svelte';

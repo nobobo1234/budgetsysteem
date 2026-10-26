@@ -22,6 +22,8 @@ const DB_PATH = `${DATA}/budget.db`;
 // Zoals gzip_types in nginx (text/html staat daar altijd aan)
 const COMPRESSIBLE =
 	/^(text\/(html|css|javascript)|application\/(javascript|json|manifest\+json)|image\/svg\+xml)/;
+// Zoals gzip_comp_level in nginx
+const GZIP_LEVEL = 5;
 const REPORTS = '.lighthouseci/rapporten';
 const RUNS = 3;
 
@@ -107,8 +109,7 @@ const proxy = createServer((req, res) => {
 				headers.vary = 'Accept-Encoding';
 			}
 			res.writeHead(up.statusCode ?? 502, headers);
-			// Niveau 1, zoals de standaard gzip_comp_level van nginx
-			(gzip ? up.pipe(createGzip({ level: 1 })) : up).pipe(res);
+			(gzip ? up.pipe(createGzip({ level: GZIP_LEVEL })) : up).pipe(res);
 		}
 	);
 	upstream.on('error', () => res.writeHead(502).end());

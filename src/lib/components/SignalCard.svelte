@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { MorphPart } from '#lib/morph.ts';
 	import type { IconDef } from '#lib/icons.ts';
+	import IconBadge from './IconBadge.svelte';
 
 	// Signaalkaartje (spec: Componenten): iets dat op je wacht, met een groot getal of woord
 	// en een korte regel eronder. Alleen tonen als er iets is. Het grote deel kan bij de
@@ -23,18 +24,7 @@
 </script>
 
 <a class={['signal', warn && 'warn']} {href}>
-	<span class="icon-badge hue" style:--h={icon.hue} aria-hidden="true">
-		<svg viewBox="0 0 24 24"
-			><path
-				d={icon.path}
-				fill="none"
-				stroke="currentColor"
-				stroke-width="1.7"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-			/></svg
-		>
-	</span>
+	<IconBadge {icon} />
 	<span class="text">
 		<span class="big num" data-morph-to={morph ? href : undefined} data-morph-part={morph}
 			>{big}</span

@@ -5,7 +5,7 @@
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import Sheet from '#lib/components/Sheet.svelte';
 	import Toast from '#lib/components/Toast.svelte';
-	import * as icons from '#lib/icons-extra.ts';
+	import * as icons from '#lib/icons.ts';
 	import { reauth } from '#lib/reauth.ts';
 
 	let { data, form } = $props();

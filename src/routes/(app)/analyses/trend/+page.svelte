@@ -6,6 +6,7 @@
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import Select, { type SelectOption } from '#lib/components/Select.svelte';
 	import { percent } from '#lib/analyses.ts';
+	import { FIXED_GROUP } from '#lib/budget.ts';
 	import { groupColor } from '#lib/categoryColor.ts';
 	import { formatMonth, formatShortMonth } from '#lib/dates.ts';
 	import { formatCents } from '#lib/money.ts';
@@ -70,7 +71,7 @@
 					{
 						label: 'Vaste lasten',
 						values: t.totals.map((m) => m.fixedCents),
-						color: groupColor(data.fixedGroup) ?? 'var(--accent)'
+						color: groupColor(FIXED_GROUP) ?? 'var(--accent)'
 					}
 				]}
 			/>

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import * as icons from '#lib/icons-extra.ts';
+	import * as icons from '#lib/icons.ts';
 	import { onMount } from 'svelte';
 	import { enhance, type SubmitFunction } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
