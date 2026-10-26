@@ -44,36 +44,46 @@ export function setBudget(db: DB, month: string, categoryId: string, limitCents:
 }
 
 /**
- * Uitgaven per categorie in een maand, als positief getal. Gedeelde uitgaven tellen via hun
- * verdeling; verwachte posten tellen pas na bevestiging. Een terugboeking telt in de maand van
- * de boeking die hij verrekent, ook als het geld later binnenkwam.
+ * Geboekte delen tussen twee datums, als CTE `parts` (id, date, category_id, counterparty,
+ * recurring_id, amount): een transactie, of bij een verdeling elke regel daarvan. Verwachte
+ * posten tellen pas na bevestiging. Een terugboeking telt op de datum van de boeking die hij
+ * verrekent, ook als het geld later binnenkwam. Gedeeld met de analyses, zodat Budget en
+ * Analyses hetzelfde optellen.
  */
-export function spendingByCategory(db: DB, month: string): Map<string | null, number> {
-	const from = `${month}-01`;
-	const to = `${month}-31`;
-	const rows = db.all<{ category_id: string | null; spent: number }>(sql`
+export function bookedParts(from: string, to: string) {
+	return sql`
 		WITH booked AS (
-			SELECT t.id, t.category_id, t.amount_cents
+			SELECT t.id, t.date, t.category_id, t.counterparty, t.recurring_id, t.amount_cents
 			FROM transactions t
 			WHERE t.date BETWEEN ${from} AND ${to}
 				AND t.correction_of IS NULL
 				AND t.status != 'verwacht'
 			UNION ALL
-			SELECT t.id, t.category_id, t.amount_cents
+			SELECT t.id, o.date, t.category_id, t.counterparty, t.recurring_id, t.amount_cents
 			FROM transactions o
 			JOIN transactions t ON t.correction_of = o.id
 			WHERE o.date BETWEEN ${from} AND ${to} AND t.status != 'verwacht'
-		)
-		SELECT category_id, -SUM(amount) AS spent FROM (
-			SELECT b.category_id, b.amount_cents AS amount
+		),
+		parts AS (
+			SELECT b.id, b.date, b.category_id, b.counterparty, b.recurring_id, b.amount_cents AS amount
 			FROM booked b
 			WHERE NOT EXISTS (SELECT 1 FROM transaction_splits s WHERE s.transaction_id = b.id)
 			UNION ALL
-			SELECT s.category_id, s.amount_cents AS amount
+			SELECT b.id, b.date, s.category_id, b.counterparty, b.recurring_id, s.amount_cents AS amount
 			FROM transaction_splits s
 			JOIN booked b ON b.id = s.transaction_id
 		)
-		GROUP BY category_id
+	`;
+}
+
+/**
+ * Uitgaven per categorie in een maand, als positief getal. Gedeelde uitgaven tellen via hun
+ * verdeling (zie `bookedParts`).
+ */
+export function spendingByCategory(db: DB, month: string): Map<string | null, number> {
+	const rows = db.all<{ category_id: string | null; spent: number }>(sql`
+		${bookedParts(`${month}-01`, `${month}-31`)}
+		SELECT category_id, -SUM(amount) AS spent FROM parts GROUP BY category_id
 	`);
 	return new Map(rows.map((r) => [r.category_id, r.spent]));
 }

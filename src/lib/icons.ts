@@ -27,10 +27,11 @@ export const budget: IconDef = {
 	path: 'M12 3a9 9 0 1 0 9 9h-9z M15 3.5A9 9 0 0 1 20.5 9H15z'
 };
 
-export const importeren: IconDef = {
-	hue: 250,
-	path: 'M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5M4 15v5h16v-5',
-	fill: 'M11 3.5h2v8.6l3.3-3.3 1.5 1.4L12 16 6.2 10.2l1.5-1.4 3.3 3.3z M3 14h2.2v4.8h13.6V14H21v7H3z'
+// Een lijn die stijgt en daalt boven een as: trends en overzichten
+export const analyses: IconDef = {
+	hue: 110,
+	path: 'M4 4v16h16 M8 15l3.5-4.5 3 2.5L19 7',
+	fill: 'M3 3.5h2.2v15.3H21V21H3z M7.5 16.5v-2.2l4-5 3 2.5 4.8-6V16.5z'
 };
 
 export const meer: IconDef = {

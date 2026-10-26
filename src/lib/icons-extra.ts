@@ -5,6 +5,11 @@ import type { IconDef } from './icons.ts';
 
 export * from './icons.ts';
 
+export const importeren: IconDef = {
+	hue: 250,
+	path: 'M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5M4 15v5h16v-5'
+};
+
 export const zoeken: IconDef = {
 	hue: 220,
 	path: 'M10.5 17a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13z M15.5 15.5 20 20'

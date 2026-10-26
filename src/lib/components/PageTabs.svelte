@@ -1,5 +1,6 @@
 <script lang="ts">
-	// Wisselen tussen pagina's binnen één onderwerp, elk met hun aantal (spec: Componenten, Tabs)
+	// Wisselen tussen pagina's binnen één onderwerp, elk met hun aantal als dat iets zegt (spec:
+	// Componenten, Tabs)
 	let {
 		label,
 		current,
@@ -7,7 +8,7 @@
 	}: {
 		label: string;
 		current: string;
-		tabs: { id: string; href: string; label: string; count: number }[];
+		tabs: { id: string; href: string; label: string; count?: number }[];
 	} = $props();
 </script>
 
@@ -15,7 +16,7 @@
 	{#each tabs as tab (tab.id)}
 		<a href={tab.href} aria-current={tab.id === current ? 'page' : undefined}>
 			{tab.label}
-			<span class="num">{tab.count}</span>
+			{#if tab.count !== undefined}<span class="num">{tab.count}</span>{/if}
 		</a>
 	{/each}
 </nav>

@@ -5,12 +5,16 @@ const LABELS: Record<string, string> = {
 	'/': 'Overzicht',
 	'/transacties': 'Transacties',
 	'/budget': 'Budget',
+	'/analyses': 'Analyses',
 	'/import': 'Import',
 	'/instellingen': 'Meer',
 	'/te-krijgen': 'Te krijgen',
 	'/te-controleren': 'Te controleren',
 	'/bonnen': 'Bonnen',
-	'/vaste-lasten': 'Vaste lasten'
+	'/vaste-lasten': 'Vaste lasten',
+	'/saldocheck': 'Saldocheck',
+	'/regels': 'Regels',
+	'/instellingen/rekeningen': 'Rekeningen'
 };
 
 export interface BackTarget {
@@ -35,7 +39,7 @@ export function backTarget(
 }
 
 /** De vijf tabs; elke andere pagina is een subpagina met een terugknop. */
-export const TABS = ['/', '/transacties', '/budget', '/import', '/instellingen'] as const;
+export const TABS = ['/', '/transacties', '/budget', '/analyses', '/instellingen'] as const;
 
 /** Pagina's met een vaste tab: een subpagina laat de tab van haar ouder actief. */
 const TAB_OF: [prefix: string, tab: string][] = [
@@ -47,7 +51,8 @@ const TAB_OF: [prefix: string, tab: string][] = [
 	['/personen', '/instellingen'],
 	['/terugbetalingen', '/instellingen'],
 	['/saldocheck', '/instellingen'],
-	['/bonnen', '/instellingen']
+	['/bonnen', '/instellingen'],
+	['/import', '/instellingen']
 ];
 
 const under = (path: string, prefix: string) => path === prefix || path.startsWith(`${prefix}/`);
