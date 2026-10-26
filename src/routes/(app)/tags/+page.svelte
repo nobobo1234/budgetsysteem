@@ -36,7 +36,7 @@
 
 <div class="page">
 	<div class="intro">
-		<BackLink parents={['/instellingen', '/analyses']} labels={{ '/analyses': 'Analyses' }} />
+		<BackLink parents={['/instellingen', '/analyses']} />
 		<h1 data-morph-head="titel">Tags</h1>
 	</div>
 

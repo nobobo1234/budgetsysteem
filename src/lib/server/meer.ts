@@ -1,4 +1,4 @@
-import { and, count, eq, isNull, ne } from 'drizzle-orm';
+import { and, count, desc, eq, isNull, ne } from 'drizzle-orm';
 import { toIsoDate } from '#lib/dates.ts';
 import { activePasskeys } from './auth/passkey.ts';
 import { hasRecoveryCode } from './auth/recovery.ts';
@@ -6,7 +6,7 @@ import { balanceCheckDue } from './balance.ts';
 import { config } from './config.ts';
 import type { DB } from './db/index.ts';
 import { db as appDb } from './db/index.ts';
-import { accounts, categories, people, receipts, rules } from './db/schema.ts';
+import { accounts, categories, importBatches, people, receipts, rules } from './db/schema.ts';
 import { owedSummary } from './owed.ts';
 import { currentShortcutStatus, needsRenewal } from './receipts/shortcut-download.ts';
 import { activeUploadTokens, isBlocked } from './receipts/tokens.ts';
@@ -57,6 +57,12 @@ export function meerTiles(db: DB, today = toIsoDate(new Date())) {
 		},
 		shares: { arrearsCents: shares.arrearsCents, lasts: shares.lasts.length },
 		balanceDue: balanceCheckDue(db, today).map((a) => a.name),
+		lastImport:
+			db
+				.select({ periodEnd: importBatches.periodEnd, createdAt: importBatches.createdAt })
+				.from(importBatches)
+				.orderBy(desc(importBatches.createdAt))
+				.get() ?? null,
 		categories:
 			db.select({ n: count() }).from(categories).where(eq(categories.archived, false)).get()?.n ??
 			0,

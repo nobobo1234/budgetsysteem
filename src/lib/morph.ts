@@ -12,6 +12,7 @@ export const MEER_PAGES = [
 	'/terugbetalingen',
 	'/vaste-lasten',
 	'/saldocheck',
+	'/import',
 	'/bonnen',
 	'/tags',
 	'/categorieen',
