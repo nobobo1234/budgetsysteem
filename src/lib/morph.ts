@@ -38,7 +38,9 @@ export interface MorphPlan {
 
 /** Detailpagina's met een naam die meeschuift, en de pagina's met een rij die erheen leidt. */
 const DETAILS: [pattern: RegExp, sources: string[]][] = [
-	[/^\/vaste-lasten\/[0-9a-f-]{36}$/, ['/', '/vaste-lasten', '/te-controleren']]
+	[/^\/vaste-lasten\/[0-9a-f-]{36}$/, ['/', '/vaste-lasten', '/te-controleren']],
+	// De maand van het signaalkaartje of de lijst schuift mee naar de kop van de afsluiting
+	[/^\/afsluiting\/\d{4}-\d{2}$/, ['/', '/afsluiting']]
 ];
 
 function sourceParts(source: string, target: string): MorphPart[] | undefined {

@@ -4,6 +4,7 @@ import { toIsoDate } from '#lib/dates.ts';
 import { parseAmount } from '#lib/money.ts';
 import { balanceCheckDue } from '#lib/server/balance.ts';
 import { monthOverview } from '#lib/server/budgets.ts';
+import { closingSignal } from '#lib/server/closing.ts';
 import { quickEntryContext } from '#lib/server/context.ts';
 import { db } from '#lib/server/db/index.ts';
 import { owedSummary } from '#lib/server/owed.ts';
@@ -29,17 +30,19 @@ export const load: PageServerLoad = ({ setHeaders }) => {
 	const month = today.slice(0, 7);
 	// Privé en niet zonder controle hergebruiken; wel bruikbaar als offline terugval
 	setHeaders({ 'cache-control': 'private, no-cache' });
+	const inbox = reviewInbox(db(), today);
 	return {
 		today,
 		overview: monthOverview(db(), month, today),
 		recent: withRefunds(db(), listTransactions(db(), { limit: 8, withoutExpected: true })),
-		reviewCount: inboxCount(reviewInbox(db(), today)),
+		reviewCount: inboxCount(inbox),
 		owed: owedSummary(db()),
 		expected: awaitingConfirmation(db(), today),
 		receipts: dueReceipts(db(), today),
 		upcoming: upcomingThisMonth(db(), today),
 		proposals: proposalCount(db()),
 		balanceCheckDue: balanceCheckDue(db(), today),
+		closing: closingSignal(db(), today, inbox),
 		context: quickEntryContext(db()),
 		suggestions: frequentManual(db(), today)
 	};

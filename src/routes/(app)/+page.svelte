@@ -52,6 +52,11 @@
 		warn?: boolean;
 	}
 	const plural = (n: number, one: string, more: string) => (n === 1 ? one : more);
+	// `September`: alleen de maand, het kaartje zegt "afsluiten"
+	const closingName = (month: string) => {
+		const name = formatMonth(month).replace(/\s+\d{4}$/, '');
+		return name.charAt(0).toUpperCase() + name.slice(1);
+	};
 	const signals = $derived.by(() => {
 		const all: (Signal | false)[] = [
 			data.owed.toReceiveCents > 0 && {
@@ -85,6 +90,16 @@
 					'voorstel voor een vaste last',
 					'voorstellen voor vaste lasten'
 				)
+			},
+			data.closing !== null && {
+				href: `/afsluiting/${data.closing.month}`,
+				icon: icons.afsluiting,
+				big: closingName(data.closing.month),
+				small:
+					data.closing.open > 0
+						? `afsluiten, nog ${data.closing.open} open ${plural(data.closing.open, 'punt', 'punten')}`
+						: 'afsluiten',
+				morph: 'titel'
 			}
 		];
 		return all.filter((s): s is Signal => s !== false);

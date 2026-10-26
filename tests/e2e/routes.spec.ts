@@ -52,7 +52,11 @@ const closed = [
 	['POST', '/saldocheck?/check'],
 	['POST', '/instellingen/meldingen?/toggle'],
 	['POST', '/api/push/subscription'],
-	['DELETE', '/api/push/subscription']
+	['DELETE', '/api/push/subscription'],
+	['GET', '/afsluiting'],
+	['GET', '/afsluiting/2026-09'],
+	['POST', '/afsluiting/2026-09?/close'],
+	['POST', '/afsluiting/2026-09?/proposal']
 ] as const;
 
 for (const [method, path] of closed) {

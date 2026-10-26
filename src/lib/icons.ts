@@ -58,3 +58,9 @@ export const controleren: IconDef = {
 	hue: 30,
 	path: 'M10.5 17a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13z M15.5 15.5 20 20 M10.5 8v3.5 M10.5 14h.01'
 };
+
+// Een kalenderblad met een vink: de maand afsluiten
+export const afsluiting: IconDef = {
+	hue: 345,
+	path: 'M4 5.5h16V20H4z M4 9.5h16 M8.5 3.5v4 M15.5 3.5v4 M9 14.5l2.2 2.2 4-4.2'
+};
