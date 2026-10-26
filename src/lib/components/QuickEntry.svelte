@@ -13,7 +13,6 @@
 		type CategoryRef,
 		type ResolveContext
 	} from '#lib/quickentry/resolve.ts';
-	import { recordEntry } from '#lib/usage.ts';
 
 	let {
 		context,
@@ -197,7 +196,7 @@
 		};
 		try {
 			await enqueue(item);
-			recordEntry('snelinvoer');
+			dispatchEvent(new CustomEvent('invoer', { detail: 'snelinvoer' }));
 			flashDone();
 			onsaved(item);
 			reset();

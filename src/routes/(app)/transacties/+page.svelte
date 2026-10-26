@@ -23,7 +23,6 @@
 	import { formatCents } from '#lib/money.ts';
 	import { threadLayout } from '#lib/refund.ts';
 	import { displayName } from '#lib/text.ts';
-	import { recordEntry } from '#lib/usage.ts';
 
 	let { data } = $props();
 
@@ -212,7 +211,7 @@
 
 	async function confirmRow(tx: (typeof data.transactions)[number]) {
 		if (!(await act('confirm', { id: tx.id }))) return;
-		if (tx.status === 'verwacht') recordEntry('verwacht');
+		if (tx.status === 'verwacht') dispatchEvent(new CustomEvent('invoer', { detail: 'verwacht' }));
 		notify(`${displayName(tx.counterparty)} bevestigd.`);
 	}
 

@@ -18,7 +18,6 @@
 		type ReceiptFieldName
 	} from '#lib/receipts.ts';
 	import { displayName } from '#lib/text.ts';
-	import { recordEntry } from '#lib/usage.ts';
 
 	// Bon (spec: Schermen, Bonnetjes en koppelen): wat Haiku las, per veld hoe zeker, en de
 	// koppellijst om hem te verwerken. Tijdens het lezen een rustige laadstaat die overgaat in de
@@ -359,7 +358,9 @@
 			action="?/confirmList"
 			class="card section"
 			aria-labelledby="list-title"
-			use:enhance={act('list', 'Lijst bevestigd.', () => recordEntry('bon'))}
+			use:enhance={act('list', 'Lijst bevestigd.', () =>
+				dispatchEvent(new CustomEvent('invoer', { detail: 'bon' }))
+			)}
 		>
 			<div class="section-head">
 				<h2 id="list-title">Transacties</h2>
@@ -508,7 +509,7 @@
 				class="match"
 				use:enhance={act('settle', 'Bon verwerkt.', () => {
 					relink = false;
-					recordEntry('bon');
+					dispatchEvent(new CustomEvent('invoer', { detail: 'bon' }));
 				})}
 			>
 				<fieldset>

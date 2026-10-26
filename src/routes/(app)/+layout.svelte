@@ -8,7 +8,7 @@
 	import { flush } from '#lib/offline/queue.ts';
 	import { sync } from '#lib/offline/sync.svelte.ts';
 	import { refreshSubscription } from '#lib/push.ts';
-	import { flushUsage, startUsage } from '#lib/usage.ts';
+	import { startUsage } from '#lib/usage.ts';
 
 	let { children, data } = $props();
 
@@ -44,7 +44,6 @@
 	});
 
 	async function trySync() {
-		void flushUsage();
 		const result = await flush();
 		sync.offline = result.offline;
 		sync.loggedOut = result.loggedOut;
