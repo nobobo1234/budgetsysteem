@@ -23,6 +23,9 @@ import { MAX_LIST_ITEMS, PAYMENT_METHODS, type ImageKind } from './schema.ts';
 /** Doel uit de spec: bij "zeker" minstens 98% goed op het totaal. */
 export const TARGET_PRECISION = 0.98;
 
+/** Doel uit de spec (fase 4, Klaar als): bij gevulde regels minstens 90% juiste productgroep. */
+export const TARGET_GROUPS = 0.9;
+
 export const EVAL_FIELDS = ['winkel', 'datum', 'totaal', 'valuta', 'betaalwijze'] as const;
 export type EvalField = (typeof EVAL_FIELDS)[number];
 
@@ -480,6 +483,8 @@ export interface LinesReport {
 	/** Bonnen met gelabelde artikelen, en de optelling van hun scores. */
 	labeledBonnen: number;
 	groups: GroupScore;
+	/** Hetzelfde, alleen voor bonnen waarvan alle regels gevuld zijn: daarop geldt het doel. */
+	completeGroups: GroupScore;
 	/** Bonnen met een artikel in de verkeerde groep of zonder paar, om zelf na te kijken. */
 	wrongIds: { id: string; wrong: number }[];
 }
@@ -591,24 +596,37 @@ export function aggregate(variant: Variant, all: BonResult[]): VariantReport {
 	};
 }
 
+const emptyGroups = (): GroupScore => ({
+	labeled: 0,
+	matched: 0,
+	correct: 0,
+	labeledCents: 0,
+	correctCents: 0
+});
+
 function aggregateLines(results: BonResult[]): LinesReport {
 	const report: LinesReport = {
 		complete: 0,
 		bonnen: results.length,
 		labeledBonnen: 0,
-		groups: { labeled: 0, matched: 0, correct: 0, labeledCents: 0, correctCents: 0 },
+		groups: emptyGroups(),
+		completeGroups: emptyGroups(),
 		wrongIds: []
+	};
+	const add = (to: GroupScore, g: GroupScore) => {
+		to.labeled += g.labeled;
+		to.matched += g.matched;
+		to.correct += g.correct;
+		to.labeledCents += g.labeledCents;
+		to.correctCents += g.correctCents;
 	};
 	for (const r of results) {
 		if (r.lines?.complete) report.complete++;
 		const g = r.lines?.groups;
 		if (!g) continue;
 		report.labeledBonnen++;
-		report.groups.labeled += g.labeled;
-		report.groups.matched += g.matched;
-		report.groups.correct += g.correct;
-		report.groups.labeledCents += g.labeledCents;
-		report.groups.correctCents += g.correctCents;
+		add(report.groups, g);
+		if (r.lines!.complete) add(report.completeGroups, g);
 		if (g.correct < g.labeled) report.wrongIds.push({ id: r.id, wrong: g.labeled - g.correct });
 	}
 	return report;
@@ -740,6 +758,18 @@ function formatLines(l: LinesReport): string[] {
 	const g = l.groups;
 	out.push(
 		`  productgroep: ${g.labeled} artikelen gelabeld in ${l.labeledBonnen} bonnen, ${g.matched} gevonden, ${g.correct} goede groep (${pct(g.correct, g.labeled)}); geld in de goede groep: ${pct(g.correctCents, g.labeledCents)}`
+	);
+	const c = l.completeGroups;
+	out.push(
+		`  productgroep bij gevulde regels: ${
+			c.labeled === 0
+				? 'geen gelabelde bon met gevulde regels'
+				: `${pct(c.correct, c.labeled)} goed, ${
+						c.correct / c.labeled >= TARGET_GROUPS
+							? `doel gehaald (≥ ${TARGET_GROUPS * 100}%)`
+							: `doel NIET gehaald (< ${TARGET_GROUPS * 100}%)`
+					}`
+		}`
 	);
 	if (l.wrongIds.length > 0) {
 		out.push(

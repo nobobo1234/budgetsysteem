@@ -411,6 +411,14 @@ describe('regels en productgroep', () => {
 				labeledCents: 2 * 1097,
 				correctCents: 678
 			},
+			// De mislukte lezing (d) telt niet mee voor het doel: die heeft geen gevulde regels
+			completeGroups: {
+				labeled: 4,
+				matched: 3,
+				correct: 2,
+				labeledCents: 1097,
+				correctCents: 678
+			},
 			wrongIds: [
 				{ id: 'a', wrong: 2 },
 				{ id: 'd', wrong: 4 }
@@ -422,6 +430,9 @@ describe('regels en productgroep', () => {
 			'productgroep: 8 artikelen gelabeld in 2 bonnen, 3 gevonden, 2 goede groep'
 		);
 		expect(text).toContain('a (2), d (4)');
+		expect(text).toContain(
+			'productgroep bij gevulde regels: 50.0% goed, doel NIET gehaald (< 90%)'
+		);
 		expect(text).not.toMatch(/Brood|Melk|2[.,]49|4[.,]29/);
 		expect(formatReport([aggregate('2576', [results[1]!])])).toContain('geen artikelen gelabeld');
 	});

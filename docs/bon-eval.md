@@ -186,7 +186,7 @@ node scripts/bon-eval.ts ~/Documents/bon-eval --varianten stukken --concept-rege
 node scripts/bon-eval.ts ~/Documents/bon-eval --varianten stukken
 ```
 
-Kijk dan of winkel, datum, totaal en valuta niet slechter zijn geworden dan bij de vorige run (het doel van 98% bij zeker op het totaal blijft), hoe vaak alle regels gevuld zijn, en hoe vaak de groep klopt.
+Kijk dan of winkel, datum, totaal en valuta niet slechter zijn geworden dan bij de vorige run (het doel van 98% bij zeker op het totaal blijft), hoe vaak alle regels gevuld zijn, en of de productgroep bij gevulde regels het doel van 90% haalt.
 
 Opties:
 
@@ -214,6 +214,7 @@ In de terminal per variant alleen aantallen, geen bedragen of winkelnamen:
 - de id's van bonnen waar "zeker" toch fout was, om na te kijken;
 - regels: bij hoeveel bonnen alle regels gevuld zijn (samen het totaal);
 - productgroep (alleen met `regels` in je labels): hoeveel gelabelde artikelen gevonden zijn, hoeveel de goede groep hadden, en welk deel van het geld in de goede groep viel; met de id's van bonnen met een fout, als `ah-bonus (2)` voor twee artikelen;
+- productgroep bij gevulde regels: hetzelfde percentage, alleen over bonnen waarvan alle regels gevuld zijn, en of het doel uit de spec gehaald is (minstens 90% juiste groep, fase 4 "Klaar als");
 - bij lijsten: hoeveel screenshots als bon gelezen werden (en bonnen als lijst), hoeveel gelabelde transacties gevonden en helemaal goed waren, per veld (`datum`, `tegenpartij`, `bedrag`, `valuta`) goed, gevuld en goed bij zeker, hoeveel transacties "zeker" waren met een fout veld, en hoeveel het model er las die niet in het label staan (extra, en daarvan zeker). Die laatste twee zijn het belangrijkst: zo'n transactie staat aangevinkt klaar om te boeken. De id's staan erbij als `sns-lijst #2 (bedrag)`, waarbij #2 de tweede transactie van boven is.
 
 De details per bon (wat Haiku las, de controles, de score) staan in `resultaten/eval-<tijd>.json` in je map, buiten de repo.
