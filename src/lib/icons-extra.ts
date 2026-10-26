@@ -38,10 +38,10 @@ export const beveiliging: IconDef = {
 
 export const status: IconDef = { hue: 270, path: 'M3 12h4l2.5-6 5 12 2.5-6h4' };
 
-// Een kalender met een vink: dagen waarop je iets invoerde
+// Een vlammetje: je reeks, dagen op rij met invoer (volhouden)
 export const gebruik: IconDef = {
-	hue: 100,
-	path: 'M4 5.5h16V20H4z M4 10h16 M8.5 3v4 M15.5 3v4 M9 15l2 2 4-4'
+	hue: 345,
+	path: 'M12 21c-3.9 0-6.5-2.6-6.5-6 0-3.6 2.7-5.6 3.7-9 1.9 1.3 3 3.2 3 5 1-.6 1.7-1.7 2-3 2.4 1.7 4.3 4.3 4.3 7 0 3.4-2.6 6-6.5 6z M12 21c-1.6 0-2.7-1.1-2.7-2.6 0-1.6 1.2-2.5 2.7-4.4 1.5 1.9 2.7 2.8 2.7 4.4 0 1.5-1.1 2.6-2.7 2.6z'
 };
 
 export const apparaten: IconDef = {
