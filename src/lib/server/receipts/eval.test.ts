@@ -2,11 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { checkList, checkReceipt } from './checks.ts';
 import {
 	aggregate,
+	conceptLines,
 	formatReport,
 	LabelFileSchema,
 	labelId,
 	normalizeStore,
 	scoreBon,
+	scoreLines,
 	scoreList,
 	storeMatches,
 	uploadMoment,
@@ -323,5 +325,114 @@ describe('screenshots met transacties', () => {
 		expect(text).toContain('9 gelabeld, 5 gevonden, 4 helemaal goed');
 		expect(text).toContain('fout #1 (valuta)');
 		expect(text).not.toMatch(/23[.,]45|2[.]?150|Werkgever|Koffiebar/);
+	});
+});
+
+describe('regels en productgroep', () => {
+	const regels: Label['regels'] = [
+		{ bedrag: '2,49', groep: 'brood_ontbijt', omschrijving: 'Brood' },
+		{ bedrag: '1,19', groep: 'voorraad' }, // Haiku zegt zuivel_eieren
+		{ bedrag: '4,29', groep: 'zuivel_eieren' },
+		{ bedrag: '3,00', groep: 'groente_fruit' } // niet gelezen
+	];
+	const checked = (output = receiptOutput()) => checkReceipt(output, uploadMoment(label()));
+
+	it('labels.json: artikelen met bedrag en een groep uit de vaste lijst', () => {
+		expect(label({ regels }).regels).toHaveLength(4);
+		const bad = (r: unknown) =>
+			LabelFileSchema.safeParse({
+				bonnen: [
+					{
+						bestanden: ['a.jpg'],
+						winkel: 'X',
+						datum: '2026-10-20',
+						totaal: '1,00',
+						regels: [r]
+					}
+				]
+			}).success;
+		expect(bad({ bedrag: '1,00', groep: 'zuivel' })).toBe(false);
+		expect(bad({ bedrag: '0,00', groep: 'overig' })).toBe(false);
+		expect(bad({ bedrag: '1,00', groep: 'overig', soort: 'korting' })).toBe(false);
+		expect(bad({ bedrag: '1,00', groep: 'overig' })).toBe(true);
+	});
+
+	it('alle regels gevuld: samen het gelabelde totaal, ook zonder gelabelde artikelen', () => {
+		expect(scoreLines(label(), checked())).toEqual({ complete: true, groups: null });
+		expect(scoreLines(label({ totaal: '7,73' }), checked()).complete).toBe(false);
+		expect(scoreLines(label(), checked(receiptOutput({ regels: [] }))).complete).toBe(false);
+		expect(scoreLines(label(), null).complete).toBe(false);
+	});
+
+	it('koppelt gelabelde artikelen op bedrag en volgorde, en telt goed in aantal en in geld', () => {
+		expect(scoreLines(label({ regels }), checked()).groups).toEqual({
+			labeled: 4,
+			matched: 3,
+			correct: 2,
+			labeledCents: 249 + 119 + 429 + 300,
+			correctCents: 249 + 429
+		});
+	});
+
+	it('twee artikelen met hetzelfde bedrag krijgen elk hun eigen gelezen regel', () => {
+		const output = receiptOutput({
+			totaal: field('2.00'),
+			regels: [
+				{ omschrijving: 'A', bedrag: '1.00', soort: 'artikel', productgroep: 'alcohol' },
+				{ omschrijving: 'B', bedrag: '1.00', soort: 'artikel', productgroep: 'voorraad' }
+			]
+		});
+		const l = label({
+			totaal: '2,00',
+			regels: [
+				{ bedrag: '1,00', groep: 'alcohol' },
+				{ bedrag: '1,00', groep: 'voorraad' }
+			]
+		});
+		expect(scoreLines(l, checked(output)).groups).toMatchObject({ matched: 2, correct: 2 });
+	});
+
+	it('telt over de bonnen op, zonder omschrijvingen of bedragen in het rapport', () => {
+		const results = [
+			score(label({ id: 'a', regels })),
+			score(label({ id: 'b' })),
+			score(label({ id: 'c', totaal: '7,73' })),
+			scoreBon(label({ id: 'd', regels }), '2576', { ok: false, reason: 'fout', usage: null })
+		];
+		const report = aggregate('2576', results);
+		expect(report.lines).toEqual({
+			complete: 2,
+			bonnen: 4,
+			labeledBonnen: 2,
+			groups: {
+				labeled: 8,
+				matched: 3,
+				correct: 2,
+				labeledCents: 2 * 1097,
+				correctCents: 678
+			},
+			wrongIds: [
+				{ id: 'a', wrong: 2 },
+				{ id: 'd', wrong: 4 }
+			]
+		});
+		const text = formatReport([report]);
+		expect(text).toContain('alle regels gevuld bij 2 van 4 bonnen (50.0%)');
+		expect(text).toContain(
+			'productgroep: 8 artikelen gelabeld in 2 bonnen, 3 gevonden, 2 goede groep'
+		);
+		expect(text).toContain('a (2), d (4)');
+		expect(text).not.toMatch(/Brood|Melk|2[.,]49|4[.,]29/);
+		expect(formatReport([aggregate('2576', [results[1]!])])).toContain('geen artikelen gelabeld');
+	});
+
+	it('maakt een begin voor de labels uit wat Haiku las, alleen artikelen', () => {
+		expect(conceptLines(checked())).toEqual([
+			{ omschrijving: 'Brood', bedrag: '2,49', groep: 'brood_ontbijt' },
+			{ omschrijving: 'Melk', bedrag: '1,19', groep: 'zuivel_eieren' },
+			{ omschrijving: 'Kaas', bedrag: '4,29', groep: 'zuivel_eieren' }
+		]);
+		// Het begin past in labels.json
+		expect(label({ regels: conceptLines(checked()) }).regels).toHaveLength(3);
 	});
 });

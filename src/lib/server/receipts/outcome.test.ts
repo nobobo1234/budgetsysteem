@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { MatchLabel } from '../../match.ts';
 import {
+	completeLines,
 	isComplete,
 	isItemComplete,
 	matchQueryFor,
@@ -211,5 +212,31 @@ describe('planListItems', () => {
 			).toEqual([{ action: 'onvolledig', checked: false }]);
 		}
 		expect(isItemComplete(item({ amountCents: 215000 }))).toBe(true);
+	});
+});
+
+describe('regels voor het overzicht per productgroep', () => {
+	const fields = (over: Partial<StoredFields> = {}): StoredFields => ({
+		...emptyFields(),
+		totalCents: 737,
+		lines: [
+			{ description: 'Brood', cents: 249, kind: 'artikel', group: 'brood_ontbijt' },
+			{ description: 'Kaas', cents: 488, kind: 'artikel', group: 'zuivel_eieren' }
+		],
+		linesSumCents: 737,
+		...over
+	});
+
+	it('zijn compleet als alle regels gelezen zijn en samen het totaal vormen', () => {
+		expect(completeLines(fields())).toBe(true);
+		// €0,05 speling, net als de controle op het totaal
+		expect(completeLines(fields({ totalCents: 742 }))).toBe(true);
+	});
+
+	it('niet bij half gelezen regels, een ander totaal of zonder regels', () => {
+		expect(completeLines(fields({ linesSumCents: null }))).toBe(false);
+		expect(completeLines(fields({ totalCents: 743 }))).toBe(false);
+		expect(completeLines(fields({ totalCents: null }))).toBe(false);
+		expect(completeLines(fields({ lines: [], linesSumCents: 0, totalCents: 0 }))).toBe(false);
 	});
 });

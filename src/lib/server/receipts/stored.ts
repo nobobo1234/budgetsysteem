@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { MAX_CENTS } from '../../money.ts';
+import { PRODUCT_GROUPS } from '../../productGroups.ts';
 import type { CheckedField, CheckedListItem, CheckedReceipt, FieldStatus } from './checks.ts';
 import { LINE_KINDS, MODEL_CONFIDENCE, PAYMENT_METHODS } from './schema.ts';
 
@@ -48,7 +49,9 @@ export const StoredFieldsSchema = z.object({
 			z.object({
 				description: z.string().max(120),
 				cents: z.number().int(),
-				kind: z.enum(LINE_KINDS)
+				kind: z.enum(LINE_KINDS),
+				// Bonnen van voor de productgroepen hebben dit veld niet: dan geen groep
+				group: z.enum(PRODUCT_GROUPS).nullable().catch(null)
 			})
 		)
 		.max(150),

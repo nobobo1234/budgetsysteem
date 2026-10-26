@@ -47,3 +47,8 @@ export const bonnen: IconDef = {
 	hue: 185,
 	path: 'M6 3h12v18l-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5L6 21z M9 8h6 M9 12h6 M9 16h3'
 };
+
+export const boodschappen: IconDef = {
+	hue: 140,
+	path: 'M3 9h18l-1.8 10.5H4.8z M8 9l3-5 M16 9l-3-5 M9.5 13v3.5 M14.5 13v3.5'
+};

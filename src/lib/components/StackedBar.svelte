@@ -18,13 +18,16 @@
 	let {
 		segments,
 		total,
-		label
+		label,
+		legend = true
 	}: {
 		segments: Segment[];
 		/** Het geheel; standaard de som. Is het meer, dan blijft de rest leeg. */
 		total?: number;
 		/** Toegankelijke naam van de legenda */
 		label: string;
+		/** Zonder legenda zegt een lijst ernaast hetzelfde in woorden (zoals op Boodschappen) */
+		legend?: boolean;
 	} = $props();
 
 	const sum = $derived(segments.reduce((s, x) => s + Math.max(0, x.cents), 0));
@@ -51,19 +54,19 @@
 			></span>
 		{/each}
 	</div>
-	<ul class="legend num" aria-label={label}>
-		{#each segments as s (s.key)}
-			<li>
-				<span
-					class={['swatch', s.hatched && 'hatched']}
-					style:--c={s.color ?? 'var(--accent)'}
-					aria-hidden="true"
-				></span>
-				<span class="what">{s.label}</span>
-				<span class="amount">{formatCents(s.cents, { whole: Math.abs(s.cents) >= 10_000 })}</span>
-			</li>
-		{/each}
-	</ul>
+	{#if legend}<ul class="legend num" aria-label={label}>
+			{#each segments as s (s.key)}
+				<li>
+					<span
+						class={['swatch', s.hatched && 'hatched']}
+						style:--c={s.color ?? 'var(--accent)'}
+						aria-hidden="true"
+					></span>
+					<span class="what">{s.label}</span>
+					<span class="amount">{formatCents(s.cents, { whole: Math.abs(s.cents) >= 10_000 })}</span>
+				</li>
+			{/each}
+		</ul>{/if}
 </div>
 
 <style>
