@@ -5,7 +5,7 @@
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import Toast from '#lib/components/Toast.svelte';
 	import { formatShortDate } from '#lib/dates.ts';
-	import * as icons from '#lib/icons-extra.ts';
+	import * as icons from '#lib/icons.ts';
 	import { motion } from '#lib/motion.ts';
 	import { UploadError, uploadReceipt } from '#lib/receipt-upload.ts';
 	import { STAGE_TEXT, itemCountText, needsYou, receiptAmount } from '#lib/receipts.ts';

@@ -2,15 +2,16 @@
 	import { enhance, type SubmitFunction } from '$app/forms';
 	import BackLink from '#lib/components/BackLink.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
+	import IconBadge from '#lib/components/IconBadge.svelte';
 	import StackedBar from '#lib/components/StackedBar.svelte';
 	import TagFields from '#lib/components/TagFields.svelte';
 	import Toast from '#lib/components/Toast.svelte';
-	import { groupColor, groupHue } from '#lib/categoryColor.ts';
-	import { formatDayHeading, formatShortDate } from '#lib/dates.ts';
-	import * as icons from '#lib/icons-extra.ts';
+	import TransactionItem from '#lib/components/TransactionItem.svelte';
+	import { groupColor } from '#lib/categoryColor.ts';
+	import { formatDayHeading } from '#lib/dates.ts';
+	import * as icons from '#lib/icons.ts';
 	import { formatCents } from '#lib/money.ts';
 	import { formatPeriod, HUE_NAMES, tagSegments, tagSentence } from '#lib/tags.ts';
-	import { displayName, initials } from '#lib/text.ts';
 
 	let { data, form } = $props();
 
@@ -42,7 +43,6 @@
 	const refunded = $derived(data.byCategory.filter((c) => c.cents < 0));
 
 	type Item = (typeof data.items)[number];
-	type Row = Item['corrections'][number];
 	const days = $derived.by(() => {
 		const out: { date: string; items: Item[] }[] = [];
 		for (const item of data.items) {
@@ -71,43 +71,15 @@
 	<title>{tag.name} · Tags · Budget</title>
 </svelte:head>
 
-<!-- Een eigen, kleine rij in plaats van TransactionItem: die deelt op het startscherm een chunk
-     met LinkThreads, en een extra pagina met alleen TransactionItem splitst die chunk, wat de
-     eerste bundel van het startscherm groter maakt (Lighthouse-budget). -->
-{#snippet line(t: Row, showDate: boolean)}
-	{@const hue = t.categoryName ? groupHue(t.categoryGroup ?? t.categoryName) : null}
-	<a class="line" href="/transacties/{t.id}">
-		<span class={['monogram', hue !== null && 'hue']} style:--h={hue} aria-hidden="true"
-			>{initials(t.counterparty || '?')}</span
-		>
-		<span class="what">
-			<span class="who">{displayName(t.counterparty) || 'Zonder naam'}</span>
-			<span class="meta">
-				<span
-					class={['dot', !t.categoryName && 'none']}
-					style:--dot={t.categoryName ? groupColor(t.categoryGroup ?? t.categoryName) : null}
-					aria-hidden="true"
-				></span>
-				<span class="cat">{t.categoryName ?? 'Geen categorie'}</span>
-				{#if showDate}<span aria-hidden="true">·</span>{formatShortDate(t.date)}{/if}
-				{#if t.status === 'verwacht'}<span aria-hidden="true">·</span>verwacht{/if}
-			</span>
-		</span>
-		<span class={['amount', 'num', t.amountCents > 0 && 'in']}
-			>{formatCents(t.amountCents, { sign: true })}</span
-		>
-	</a>
-{/snippet}
-
 {#snippet row(item: Item)}
-	{@render line(item, false)}
+	<TransactionItem tx={item} href="/transacties/{item.id}" showDate={false} />
 	{#if item.mineCents !== null && item.mineCents !== item.amountCents}
 		<p class="mine muted num">Telt mee: jouw deel {formatCents(-item.mineCents)}</p>
 	{/if}
 	{#if item.corrections.length > 0}
 		<ul class="corrections" aria-label="Retour op {item.counterparty}">
 			{#each item.corrections as c (c.id)}
-				<li>{@render line(c, true)}</li>
+				<li><TransactionItem tx={c} href="/transacties/{c.id}" /></li>
 			{/each}
 		</ul>
 	{/if}
@@ -118,18 +90,7 @@
 
 	<header>
 		<div class="title">
-			<span class="icon-badge hue" style:--h={tag.hue} aria-hidden="true">
-				<svg viewBox="0 0 24 24"
-					><path
-						d={icons.tags.path}
-						fill="none"
-						stroke="currentColor"
-						stroke-width="1.7"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-					/></svg
-				>
-			</span>
+			<IconBadge icon={icons.tags} hue={tag.hue} />
 			<h1 data-morph-head="titel">{tag.name}</h1>
 		</div>
 		<p class="amount num">
@@ -190,7 +151,7 @@
 			<ul>
 				{#each data.notCounted as item (item.id)}
 					<li>
-						{@render line(item, true)}
+						<TransactionItem tx={item} href="/transacties/{item.id}" />
 						<p class="mine muted">{why(item)}</p>
 					</li>
 				{/each}
@@ -207,7 +168,7 @@
 			<ul>
 				{#each data.off as item (item.id)}
 					<li class="off">
-						{@render line(item, true)}
+						<TransactionItem tx={item} href="/transacties/{item.id}" />
 						<form method="POST" action="?/toggle" use:enhance={keep}>
 							<input type="hidden" name="transactionId" value={item.id} />
 							<input type="hidden" name="on" value="1" />
@@ -342,81 +303,6 @@
 	.list li + li,
 	.fold li + li {
 		border-top: 1px solid var(--line);
-	}
-
-	.line {
-		display: flex;
-		align-items: center;
-		gap: 12px;
-		min-height: 64px;
-		margin-inline: -10px;
-		padding: 10px;
-		border-radius: var(--radius-sm);
-		color: inherit;
-		text-decoration: none;
-		transition: transform 160ms var(--ease-spring);
-	}
-
-	@media (hover: hover) {
-		.line:hover {
-			background: var(--surface-2);
-		}
-	}
-
-	.line:active {
-		transform: scale(0.99);
-	}
-
-	.what {
-		display: grid;
-		flex: 1;
-		gap: 3px;
-		min-width: 0;
-	}
-
-	.who {
-		font-weight: 560;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
-	.meta {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		min-width: 0;
-		color: var(--muted);
-		font-size: 0.9rem;
-		white-space: nowrap;
-	}
-
-	.cat {
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-
-	.dot {
-		flex: none;
-		width: 8px;
-		height: 8px;
-		border-radius: 999px;
-		background: var(--dot);
-	}
-
-	.dot.none {
-		background: transparent;
-		box-shadow: inset 0 0 0 1.5px var(--muted);
-	}
-
-	.amount {
-		flex: none;
-		font-weight: 600;
-		text-align: right;
-	}
-
-	.amount.in {
-		color: var(--accent-strong);
 	}
 
 	.mine {

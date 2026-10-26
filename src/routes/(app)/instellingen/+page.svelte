@@ -1,6 +1,6 @@
 <script lang="ts">
 	import Tile from '#lib/components/Tile.svelte';
-	import * as icons from '#lib/icons-extra.ts';
+	import * as icons from '#lib/icons.ts';
 	import { formatShortDate } from '#lib/dates.ts';
 	import { formatCents } from '#lib/money.ts';
 
