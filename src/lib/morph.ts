@@ -14,6 +14,7 @@ export const MEER_PAGES = [
 	'/saldocheck',
 	'/import',
 	'/bonnen',
+	'/tags',
 	'/categorieen',
 	'/regels',
 	'/personen',

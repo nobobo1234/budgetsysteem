@@ -57,3 +57,6 @@ export const boodschappen: IconDef = {
 	hue: 140,
 	path: 'M3 9h18l-1.8 10.5H4.8z M8 9l3-5 M16 9l-3-5 M9.5 13v3.5 M14.5 13v3.5'
 };
+
+// Een vlag: een tag markeert een periode, zoals een reis
+export const tags: IconDef = { hue: 235, path: 'M5.5 21V3.5 M5.5 4.5h12l-2.5 4.25 2.5 4.25h-12' };

@@ -62,3 +62,10 @@ export function value<T>(sql: string, ...params: unknown[]): T | undefined {
 	db.close();
 	return row?.v;
 }
+
+/** Rechtstreeks in de testdatabase schrijven, voor gegevens die een test als uitgangspunt nodig heeft. */
+export function run(sql: string, ...params: unknown[]): void {
+	const db = open();
+	db.prepare(sql).run(...params);
+	db.close();
+}

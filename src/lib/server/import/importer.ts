@@ -22,6 +22,7 @@ import { personByIban } from '../people.ts';
 import { autoLinkPayment, findReceiptToMerge } from '../shares.ts';
 import { mccCategory, parseCardPayment } from './card.ts';
 import { findOwnMatch, hasUnlinkedOwn, tryMergeIntoOwn } from './koppellijst.ts';
+import { syncAutoTags } from '../tags.ts';
 import { ImportError, type ImportFormat, type ImportRecord, type OpeningBalance } from './types.ts';
 
 export interface UncategorizedGroup {
@@ -221,6 +222,8 @@ export function importRecords(
 		let periodEnd: string | null = null;
 		// Nieuwe inkomende boekingen met een tegen-IBAN: na de import automatisch koppelen
 		const incoming: { id: string; date: string }[] = [];
+		// Nieuwe boekingen en boekingen met een nieuwe datum, voor de tags
+		const redated: string[] = [];
 		const matched: ImportSummary['matched'] = { merged: [], reviewCount: 0 };
 		// Zonder eigen invoer (de eerste import) valt er niets tegen te houden
 		const ownEntries = hasUnlinkedOwn(tx);
@@ -284,6 +287,7 @@ export function importRecords(
 						source: 'import',
 						importBatchId: batch.id
 					});
+					redated.push(merge);
 					duplicateCount++;
 					continue;
 				}
@@ -369,6 +373,7 @@ export function importRecords(
 
 			if (inserted.length === 1) {
 				newCount++;
+				redated.push(inserted[0]!.id);
 				// Wacht hij op de koppellijst, dan niet ook nog aan een post koppelen
 				if (awaitsMatch) matched.reviewCount++;
 				else if (incomingFromOther) incoming.push({ id: inserted[0]!.id, date: r.date });
@@ -421,6 +426,9 @@ export function importRecords(
 			if (linked) reversals.linked.push({ id, ...row, originalDate: original!.date });
 			else reversals.reviewCount++;
 		}
+
+		// Tags met een periode hangen zich aan de nieuwe boekingen (spec: Tags)
+		syncAutoTags(tx, redated);
 
 		// Oudste eerst, zodat een betaling de oudste open post dekt
 		incoming.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));

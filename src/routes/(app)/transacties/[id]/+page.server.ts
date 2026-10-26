@@ -30,6 +30,7 @@ import {
 import { mergeInfo, ownMatchesFor } from '#lib/server/import/koppellijst.ts';
 import { findOrCreatePerson, listPeople, personByIban } from '#lib/server/people.ts';
 import { addIban } from '#lib/server/shares.ts';
+import { setTransactionTag, transactionTagChips } from '#lib/server/tags.ts';
 import { deleteTransaction, updateTransaction, ValidationError } from '#lib/server/transactions.ts';
 import { personName, transactionPatchSchema } from '#lib/server/validation.ts';
 import type { Actions, PageServerLoad } from './$types';
@@ -62,6 +63,8 @@ const linkSchema = z.object({
 	mode: z.enum(['verhouding', 'mijn_deel']).optional(),
 	categoryId: z.uuid().optional()
 });
+
+const tagSchema = z.object({ tagId: z.uuid(), on: z.enum(['0', '1']) });
 
 const shareSchema = z.object({
 	mode: z.enum(['gelijk', 'bedrag']),
@@ -117,6 +120,7 @@ export const load: PageServerLoad = ({ params }) => {
 		awaitsMatch: ownMatchesFor(db(), tx.id) !== null,
 		people: listPeople(db()).filter((p) => p.active),
 		ibanSuggestion: ibanSuggestion(tx.id, tx.counterIban),
+		tags: transactionTagChips(db(), tx.id),
 		categories: db()
 			.select({ id: categories.id, name: categories.name, group: categories.group })
 			.from(categories)
@@ -259,6 +263,19 @@ export const actions: Actions = {
 			if (e instanceof ValidationError) return fail(400, { linkMessage: `${e.message}.` });
 			throw e;
 		}
+	},
+	/** Een tag aan- of uitzetten: je eigen keuze, die de periode niet terugdraait */
+	tag: async ({ request, params }) => {
+		const form = await request.formData();
+		const parsed = tagSchema.safeParse({ tagId: form.get('tagId'), on: form.get('on') });
+		if (!parsed.success) return fail(400, { tagMessage: 'Kies een tag.' });
+		try {
+			setTransactionTag(db(), params.id, parsed.data.tagId, parsed.data.on === '1');
+		} catch (e) {
+			if (e instanceof ValidationError) return fail(400, { tagMessage: `${e.message}.` });
+			throw e;
+		}
+		return { tagged: true };
 	},
 	delete: async ({ params }) => {
 		deleteTransaction(db(), params.id);

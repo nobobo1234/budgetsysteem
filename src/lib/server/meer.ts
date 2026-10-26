@@ -13,6 +13,7 @@ import { activeUploadTokens, isBlocked } from './receipts/tokens.ts';
 import { listDevices } from './push/subscriptions.ts';
 import { recurringOverview } from './recurring.ts';
 import { sharesOverview } from './shares.ts';
+import { tagsTile } from './tags.ts';
 import { collectHealth, healthPaths } from './telemetry/health.ts';
 import { telemetryDb } from './telemetry/index.ts';
 import { attention } from './telemetry/status.ts';
@@ -88,6 +89,7 @@ export function meerTiles(db: DB, today = toIsoDate(new Date())) {
 					.where(and(isNull(receipts.handledAt), ne(receipts.status, 'wordt_gelezen')))
 					.get()?.n ?? 0
 		},
+		tags: tagsTile(db, today),
 		recoveryCode: hasRecoveryCode(db),
 		statusAttention: statusAttention()
 	};

@@ -31,6 +31,7 @@ import { ValidationError } from './errors.ts';
 import { log } from './log.ts';
 import { dropSourcePosts, MY_SHARE, syncShareSplits } from './owed.ts';
 import { applySharedSplit, isShared, myShareCents, removeSharedFor } from './shares.ts';
+import { syncAutoTags } from './tags.ts';
 import { describeError } from './telemetry/index.ts';
 
 /** Niet bevestigd zoveel dagen na de verwachte dag: "gemist of opgezegd?" (spec: Verwachte posten). */
@@ -391,6 +392,7 @@ export function generateMonth(
 					.get();
 				// Gedeeld: een post per persoon voor die maand, en splits met jouw deel
 				applySharedSplit(tx, row.id);
+				syncAutoTags(tx, [row.id]);
 				if (reservationId && date.slice(0, 7) === month)
 					tx.update(reservations)
 						.set({ transactionId: row.id })
@@ -626,6 +628,7 @@ export function updateRecurring(
 				})
 				.where(eq(transactions.id, t.id))
 				.run();
+			syncAutoTags(tx, [t.id]);
 			if (after.categoryId !== before.categoryId)
 				tx.update(transactionSplits)
 					.set({ categoryId: after.categoryId })
