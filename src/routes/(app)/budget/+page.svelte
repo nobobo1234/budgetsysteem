@@ -8,6 +8,7 @@
 	import { budgetSplit } from '#lib/budgetSplit.ts';
 	import { groupColor } from '#lib/categoryColor.ts';
 	import { formatDayMonth, formatMonth } from '#lib/dates.ts';
+	import { GROCERIES, groceriesHref } from '#lib/groceries.ts';
 	import { centsToInput, formatCents } from '#lib/money.ts';
 	import { displayName } from '#lib/text.ts';
 
@@ -212,6 +213,9 @@
 										afschrijving rond {formatDayMonth(r.nextDate)}{/if}
 								</p>
 							{/each}
+							{#if l.name === GROCERIES}
+								<a class="more-link groceries" href={groceriesHref(o.month)}>Per productgroep</a>
+							{/if}
 							{#if l.plannedCents > l.limitCents}
 								<form method="POST" action="?/limit" class="too-low" use:enhance={quick}>
 									<p>
@@ -318,6 +322,9 @@
 						Gepland: <span class="num">{formatCents(line.plannedCents, { whole: true })}</span> aan vaste
 						lasten en reserveringen.
 					</p>
+				{/if}
+				{#if line.name === GROCERIES}
+					<a class="more-link groceries" href={groceriesHref(o.month)}>Per productgroep</a>
 				{/if}
 				{#if error}<p class="error-text" role="alert">{error}</p>{/if}
 				<div class="actions">
@@ -666,7 +673,8 @@
 		background: var(--dot);
 	}
 
-	.manage {
+	.manage,
+	.groceries {
 		justify-self: start;
 		margin-left: -12px;
 	}

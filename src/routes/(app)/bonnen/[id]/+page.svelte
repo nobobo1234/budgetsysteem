@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { enhance, type SubmitFunction } from '$app/forms';
 	import { invalidate } from '$app/navigation';
+	import { tick } from 'svelte';
 	import { fade } from 'svelte/transition';
 	import BackLink from '#lib/components/BackLink.svelte';
 	import Select, { type SelectOption } from '#lib/components/Select.svelte';
@@ -8,6 +9,12 @@
 	import { formatShortDate } from '#lib/dates.ts';
 	import { centsToInput, formatCents } from '#lib/money.ts';
 	import { motion } from '#lib/motion.ts';
+	import {
+		PRODUCT_GROUPS,
+		PRODUCT_GROUP_LABEL,
+		productGroupColor,
+		type ProductGroup
+	} from '#lib/productGroups.ts';
 	import {
 		itemCountText,
 		itemFieldList,
@@ -208,6 +215,39 @@
 			{ value: 'nieuw', label: 'Nieuwe transactie' }
 		];
 	}
+
+	// Bonregels (spec: Boodschappen per productgroep): ingeklapt, met per artikel de productgroep.
+	// Een andere groep kiezen slaat meteen op en telt in de telemetrie als correctie.
+	let showLines = $state(false);
+	let groupForm = $state<HTMLFormElement>();
+	let groupLine = $state('');
+	let groupValue = $state('');
+	const groupOptions: SelectOption[] = PRODUCT_GROUPS.map((g) => ({
+		value: g,
+		label: PRODUCT_GROUP_LABEL[g],
+		dot: productGroupColor(g)
+	}));
+	const KIND_TEXT = {
+		artikel: 'Artikel',
+		korting: 'Korting',
+		bonus: 'Bonus',
+		statiegeld: 'Statiegeld',
+		statiegeld_retour: 'Statiegeld terug',
+		fooi: 'Fooi',
+		overig: 'Overig'
+	};
+
+	async function changeGroup(lineId: string, group: string) {
+		groupLine = lineId;
+		groupValue = group;
+		await tick();
+		groupForm?.requestSubmit();
+	}
+
+	const ungrouped = $derived(
+		data.lines.filter((l) => l.kind === 'artikel' && l.group === null).length
+	);
+	const groupName = (g: ProductGroup | null) => (g ? PRODUCT_GROUP_LABEL[g] : 'Nog geen groep');
 
 	const listSummary = $derived.by(() => {
 		if (picked.length === 0) return 'Niets aangevinkt.';
@@ -610,6 +650,67 @@
 					>Andere koppeling</button
 				>
 			</div>
+		</section>
+	{/if}
+
+	{#if !reading && data.lines.length > 0}
+		<section class="card section lines" aria-labelledby="lines-title">
+			<button
+				type="button"
+				class="toggle"
+				aria-expanded={showLines}
+				aria-controls="lines-list"
+				onclick={() => (showLines = !showLines)}
+			>
+				<span class="count num">{data.lines.length}</span>
+				<span class="label">
+					<span id="lines-title">Regels</span>
+					<span class="muted small"
+						>{ungrouped > 0
+							? `${ungrouped} ${ungrouped === 1 ? 'artikel' : 'artikelen'} nog zonder groep`
+							: 'met de productgroep per artikel'}</span
+					>
+				</span>
+				<svg class={['chevron', showLines && 'open']} viewBox="0 0 20 20" aria-hidden="true"
+					><path d="M5.5 7.5 10 12l4.5-4.5" /></svg
+				>
+			</button>
+			{#if showLines}
+				<ul id="lines-list" class="line-list">
+					{#each data.lines as l (l.id)}
+						<li>
+							<span class="line-text">
+								<span>{l.description || 'Zonder omschrijving'}</span>
+								{#if l.kind !== 'artikel'}<span class="muted small">{KIND_TEXT[l.kind]}</span>{/if}
+							</span>
+							<span class="num line-amount">{formatCents(l.amountCents)}</span>
+							{#if l.kind === 'artikel'}
+								<span class="line-group">
+									<Select
+										variant="chip"
+										options={groupOptions}
+										value={l.group ?? ''}
+										placeholder="Kies een groep"
+										label="Productgroep van {l.description || 'deze regel'}: {groupName(l.group)}"
+										disabled={busy === 'group'}
+										onchange={(v) => changeGroup(l.id, v)}
+									/>
+								</span>
+							{/if}
+						</li>
+					{/each}
+				</ul>
+				<form
+					bind:this={groupForm}
+					method="POST"
+					action="?/group"
+					hidden
+					use:enhance={act('group', 'Groep aangepast.')}
+				>
+					<input type="hidden" name="lineId" value={groupLine} />
+					<input type="hidden" name="group" value={groupValue} />
+				</form>
+			{/if}
 		</section>
 	{/if}
 
@@ -1031,5 +1132,97 @@
 		.bar {
 			animation: none;
 		}
+	}
+
+	/* Regels: ingeklapt achter een knop met het aantal, zoals "zonder limiet" op Budget */
+	.lines {
+		gap: 0;
+		padding-block: 6px;
+	}
+
+	.toggle {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		width: 100%;
+		min-height: var(--tap);
+		padding: 0;
+		border: 0;
+		background: none;
+		color: var(--text);
+		font-weight: 600;
+		text-align: left;
+		cursor: pointer;
+	}
+
+	.toggle .label {
+		flex: 1;
+		display: grid;
+	}
+
+	.toggle .muted {
+		font-weight: 400;
+	}
+
+	.count {
+		display: inline-grid;
+		place-items: center;
+		min-width: 28px;
+		height: 28px;
+		padding: 0 8px;
+		border-radius: 999px;
+		background: var(--surface-2);
+		font-size: 0.9rem;
+	}
+
+	.chevron {
+		width: 18px;
+		height: 18px;
+		fill: none;
+		stroke: currentColor;
+		stroke-width: 1.8;
+		stroke-linecap: round;
+		stroke-linejoin: round;
+		color: var(--muted);
+		transition: transform 220ms var(--ease-spring);
+	}
+
+	.chevron.open {
+		transform: rotate(180deg);
+	}
+
+	.line-list {
+		list-style: none;
+		margin: 6px 0 0;
+		padding: 0;
+		border-top: 1px solid var(--line);
+	}
+
+	.line-list li {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto;
+		align-items: center;
+		gap: 4px 12px;
+		padding: 10px 0;
+	}
+
+	.line-list li + li {
+		border-top: 1px solid var(--line);
+	}
+
+	.line-text {
+		display: grid;
+		min-width: 0;
+		overflow-wrap: anywhere;
+	}
+
+	.line-amount {
+		font-weight: 600;
+		white-space: nowrap;
+	}
+
+	.line-group {
+		grid-column: 1 / -1;
+		min-width: 0;
 	}
 </style>

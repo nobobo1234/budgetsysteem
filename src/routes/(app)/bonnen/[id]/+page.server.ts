@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { groupHue } from '#lib/categoryColor.ts';
 import { isIsoDate } from '#lib/dates.ts';
 import { parseAmount } from '#lib/money.ts';
+import { PRODUCT_GROUPS } from '#lib/productGroups.ts';
 import { db } from '#lib/server/db/index.ts';
 import { accounts, transactions } from '#lib/server/db/schema.ts';
 import { ValidationError } from '#lib/server/errors.ts';
@@ -14,6 +15,7 @@ import {
 	listWithMatches,
 	type ListChoice
 } from '#lib/server/receipts/list.ts';
+import { receiptLinesOf, setLineGroup } from '#lib/server/receipts/lines.ts';
 import { isComplete } from '#lib/server/receipts/outcome.ts';
 import {
 	confirmReceipt,
@@ -84,7 +86,9 @@ export const load: PageServerLoad = ({ params, depends, setHeaders }) => {
 			.orderBy(asc(accounts.createdAt))
 			.all(),
 		defaultAccount: list?.defaultAccount ?? defaultAccountId(db(), receipt.fields.currency),
-		items: list?.items ?? []
+		items: list?.items ?? [],
+		// De regels van een verwerkte bon, met de productgroep per artikel (aan te passen)
+		lines: list ? [] : receiptLinesOf(db(), receipt.id)
 	};
 };
 
@@ -152,6 +156,10 @@ const targetSchema = z.union([
 		.transform((t) => t.split(':'))
 		.pipe(z.tuple([z.literal('transactie'), z.uuid()]))
 ]);
+const groupSchema = z.object({
+	lineId: z.uuid(),
+	group: z.enum(PRODUCT_GROUPS)
+});
 const settleSchema = z.object({
 	target: targetSchema,
 	accountId: z.uuid().optional()
@@ -225,6 +233,15 @@ export const actions: Actions = {
 		return guarded(() => {
 			const done = confirmList(db(), params.id, choices, account.success ? account.data : null);
 			return { listed: done };
+		});
+	},
+	group: async ({ params, request }) => {
+		if (!idSchema.safeParse(params.id).success) return fail(404, { message: 'Niet gevonden.' });
+		const parsed = groupSchema.safeParse(fromForm(await request.formData()));
+		if (!parsed.success) return fail(400, { message: 'Kies een productgroep.' });
+		return guarded(() => {
+			setLineGroup(db(), params.id, parsed.data.lineId, parsed.data.group);
+			return { grouped: parsed.data.lineId };
 		});
 	},
 	confirm: ({ params }) =>

@@ -4,6 +4,7 @@
 //
 //   node scripts/bon-eval.ts <map-met-bonnen> [--varianten 1600,2576,stukken] [--effort medium]
 //        [--model claude-haiku-5-5] [--gelijktijdig 3] [--alleen id1,id2] [--bewaar-beelden] [--droog]
+//        [--concept-regels]
 //
 // De API-sleutel komt uit je eigen omgeving (ANTHROPIC_API_KEY of `ant auth login`); dit script
 // leest of toont hem nooit.
@@ -14,6 +15,7 @@ import { join, relative, resolve, isAbsolute } from 'node:path';
 import { parseArgs } from 'node:util';
 import {
 	aggregate,
+	conceptLines,
 	formatReport,
 	labelId,
 	LabelFileSchema,
@@ -49,7 +51,8 @@ const { values, positionals } = parseArgs({
 		gelijktijdig: { type: 'string', default: '3' },
 		alleen: { type: 'string' },
 		'bewaar-beelden': { type: 'boolean', default: false },
-		droog: { type: 'boolean', default: false }
+		droog: { type: 'boolean', default: false },
+		'concept-regels': { type: 'boolean', default: false }
 	}
 });
 
@@ -122,6 +125,8 @@ const client = values.droog ? null : new Anthropic();
 const stamp = new Date().toISOString().replace(/[:.]/g, '-');
 const details: unknown[] = [];
 const reports = [];
+// Wat Haiku per bon als artikelen las, om als label na te kijken (laatste variant wint)
+const concepts = new Map<string, ReturnType<typeof conceptLines>>();
 
 for (const variant of variants as Variant[]) {
 	let done = 0;
@@ -156,6 +161,9 @@ for (const variant of variants as Variant[]) {
 			result = processed
 				? score(label, variant, processed)
 				: score(label, variant, { ok: false, reason: 'fout', usage: null });
+			if (processed?.ok && !processed.list && !('transacties' in label)) {
+				concepts.set(labelId(label), conceptLines(processed.checked));
+			}
 			details.push({ variant, id: labelId(label), result, uitvoer: processed });
 		}
 		if (client) process.stdout.write(`\r${variant}: ${++done}/${labels.length}`);
@@ -176,4 +184,13 @@ if (client) {
 		JSON.stringify({ model: values.model, effort, gemaakt: stamp, reports, details }, null, 2)
 	);
 	console.log(`\nDetails: ${file}`);
+	if (values['concept-regels']) {
+		// Een begin voor "regels" in labels.json: groepen nakijken en verbeteren, dan overnemen
+		const concept = join(out, `concept-regels-${stamp}.json`);
+		await writeFile(
+			concept,
+			JSON.stringify({ bonnen: [...concepts].map(([id, regels]) => ({ id, regels })) }, null, '\t')
+		);
+		console.log(`Concept-regels: ${concept}`);
+	}
 }

@@ -79,7 +79,8 @@ function routes(ids: { tx: string; recurring: string; receipt: string; tag: stri
 		`/transacties/${ids.tx}`,
 		`/vaste-lasten/${ids.recurring}`,
 		`/bonnen/${ids.receipt}`,
-		`/tags/${ids.tag}`
+		`/tags/${ids.tag}`,
+		'/analyses/boodschappen'
 	] as string[];
 	return { tabs: [...TABS] as string[], sub };
 }

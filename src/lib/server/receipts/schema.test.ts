@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { PRODUCT_GROUPS } from '../../productGroups.ts';
 import { listItem, listOutput, receiptOutput } from './fixtures.ts';
 import {
 	MAX_LIST_ITEMS,
@@ -22,7 +23,15 @@ describe('outputJsonSchema', () => {
 
 	it('gebruikt alleen wat structured outputs ondersteunt', () => {
 		walk(schema, (n) => {
-			for (const key of ['$schema', 'maxLength', 'minLength', 'maxItems', 'minimum', 'maximum']) {
+			for (const key of [
+				'$schema',
+				'maxLength',
+				'minLength',
+				'maxItems',
+				'minimum',
+				'maximum',
+				'default'
+			]) {
 				expect(n, key).not.toHaveProperty(key);
 			}
 			if (n.type === 'object') expect(n.additionalProperties).toBe(false);
@@ -68,7 +77,8 @@ describe('ReceiptOutputSchema', () => {
 			regels: Array.from({ length: 151 }, () => ({
 				omschrijving: 'x',
 				bedrag: '0.01',
-				soort: 'artikel' as const
+				soort: 'artikel' as const,
+				productgroep: 'overig' as const
 			}))
 		});
 		expect(ReceiptOutputSchema.safeParse(tooMany).success).toBe(false);
@@ -116,6 +126,37 @@ describe('screenshot met transacties', () => {
 		expect(userInstruction(1)).toBe('Lees deze bon volgens het schema.');
 		expect(userInstruction(2, '2026-10-21')).toBe(
 			'Hierboven staan 2 delen van één bon, van boven naar beneden. Lees de bon volgens het schema.\nOntvangen op 2026-10-21.'
+		);
+	});
+});
+
+describe('productgroep per regel', () => {
+	const schema = outputJsonSchema() as {
+		properties: { regels: { items: { properties: Record<string, { enum?: string[] }> } } };
+	};
+
+	it('is een verplichte enum met de twaalf groepen en leeg, na de soort', () => {
+		const item = schema.properties.regels.items.properties;
+		expect(Object.keys(item)).toEqual(['omschrijving', 'bedrag', 'soort', 'productgroep']);
+		expect(item.productgroep!.enum).toEqual(['', ...PRODUCT_GROUPS]);
+		expect(PRODUCT_GROUPS).toHaveLength(12);
+	});
+
+	it('een onbekende of ontbrekende groep wordt overig in plaats van de hele bon te weigeren', () => {
+		const output = receiptOutput();
+		const raw = JSON.parse(JSON.stringify(output));
+		raw.regels[0].productgroep = 'zuivel';
+		delete raw.regels[1].productgroep;
+		const parsed = ReceiptOutputSchema.parse(raw);
+		expect(parsed.regels[0]!.productgroep).toBe('overig');
+		expect(parsed.regels[1]!.productgroep).toBe('overig');
+		expect(parsed.regels[2]!.productgroep).toBe('zuivel_eieren');
+	});
+
+	it('de prompt noemt elke groep en wat geen groep krijgt', () => {
+		for (const g of PRODUCT_GROUPS) expect(SYSTEM_PROMPT).toContain(g);
+		expect(SYSTEM_PROMPT).toContain(
+			'Korting, bonus, statiegeld, fooi en regels met soort overig krijgen een lege productgroep.'
 		);
 	});
 });
