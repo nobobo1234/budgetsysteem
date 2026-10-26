@@ -278,6 +278,26 @@ sudo BUDGET_IMAGE="ghcr.io/nobobo1234/budgetsysteem@$(cat /var/lib/budget/curren
 - Daarna op je iPhone, vanuit de app op je beginscherm: Meer → Meldingen → Meldingen aanzetten, en Testmelding sturen.
 - Drempels: restic-backup ouder dan 26 uur (dezelfde marge als de externe backup-check), Litestream meer dan een uur achter op de laatste wijziging aan de database, schijf boven 80% (weer in orde onder 78%). Elke soort meldt één keer tot hij weer in orde is.
 
+### Bonnetjes (Claude Haiku)
+
+Het lezen van bonnen loopt via de Anthropic API. Zonder sleutel werkt de rest van de app gewoon: bonnen komen binnen, maar blijven op "wordt gelezen" staan, en in het log staat bij het starten `geen ANTHROPIC_API_KEY: bonnen blijven wachten`. Na een herstart met sleutel worden de wachtende bonnen alsnog gelezen.
+
+| Variabele           | Waar                  | Inhoud                                  |
+| ------------------- | --------------------- | --------------------------------------- |
+| `ANTHROPIC_API_KEY` | `/etc/budget/app.env` | API-sleutel uit de Console (**geheim**) |
+
+Maak in de [Claude Console](https://platform.claude.com) een aparte workspace voor deze app, met een eigen sleutel en een maandelijkse uitgavenlimiet. Een bon kost ongeveer een tiende cent, dus een lage limiet volstaat en beperkt de schade als de sleutel ooit uitlekt. Zet de sleutel met de editor in het omgevingsbestand, zodat hij niet in je shell-geschiedenis komt, en maak de app opnieuw aan:
+
+```bash
+sudoedit /etc/budget/app.env
+sudo BUDGET_IMAGE="ghcr.io/nobobo1234/budgetsysteem@$(cat /var/lib/budget/current-digest)" docker compose -f /opt/budget/docker-compose.yml up -d --force-recreate app
+```
+
+- De sleutel is alleen nodig op de VPS; de deploy-workflow geeft hem niet door, dus in GitHub Secrets hoeft hij niet.
+- Controleren: stuur een bon via de app of het deelmenu. Binnen een minuut staat hij op zeker, controleren of onzeker, en je krijgt een pushmelding. Op Meer → Status zie je per aanroep tokens, kosten en duur.
+- Een nieuwe sleutel: maak hem in de Console aan, zet hem in `app.env`, maak de app opnieuw aan, en trek daarna de oude in.
+- Identity federation (zonder vaste sleutel) vraagt een OIDC-identiteit van de workload; een losse VPS heeft die niet, dus hier blijft het een sleutel met uitgavenlimiet.
+
 ## Wijzigingen in `deploy/`
 
 De deploy-workflow rolt alleen het image uit. De bestanden uit stap 4 staan als kopie op de VPS en worden niet automatisch bijgewerkt. Verandert een PR iets in `deploy/`, kopieer de bestanden dan na de merge opnieuw, vanaf je laptop:
