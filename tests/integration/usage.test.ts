@@ -11,7 +11,8 @@ import { meerTiles } from '../../src/lib/server/meer.ts';
 import type { TelemetryDB } from '../../src/lib/server/telemetry/db.ts';
 import { RETENTION_DAYS, pruneTelemetry } from '../../src/lib/server/telemetry/errors.ts';
 import { usageEntries } from '../../src/lib/server/telemetry/schema.ts';
-import { MAX_DURATION_MS, usageSummary } from '../../src/lib/server/telemetry/usage.ts';
+import { usageSummary } from '../../src/lib/server/telemetry/usage.ts';
+import { MAX_DURATION_MS } from '../../src/lib/usage.ts';
 import { fakeEvent, tempDatabase, tempTelemetry } from './helpers.ts';
 
 let db: DB;

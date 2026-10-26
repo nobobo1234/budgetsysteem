@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { enhance, type SubmitFunction } from '$app/forms';
+	import { recordEntry } from '#lib/usage.ts';
 	import { invalidate } from '$app/navigation';
 	import { tick } from 'svelte';
 	import { fade } from 'svelte/transition';
@@ -398,9 +399,7 @@
 			action="?/confirmList"
 			class="card section"
 			aria-labelledby="list-title"
-			use:enhance={act('list', 'Lijst bevestigd.', () =>
-				dispatchEvent(new CustomEvent('invoer', { detail: 'bon' }))
-			)}
+			use:enhance={act('list', 'Lijst bevestigd.', () => recordEntry('bon'))}
 		>
 			<div class="section-head">
 				<h2 id="list-title">Transacties</h2>
@@ -549,7 +548,7 @@
 				class="match"
 				use:enhance={act('settle', 'Bon verwerkt.', () => {
 					relink = false;
-					dispatchEvent(new CustomEvent('invoer', { detail: 'bon' }));
+					recordEntry('bon');
 				})}
 			>
 				<fieldset>

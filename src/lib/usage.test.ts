@@ -140,16 +140,16 @@ describe('startUsage', () => {
 		vi.stubGlobal('addEventListener', target.addEventListener.bind(target));
 	});
 
-	it('een invoer-event telt, en terug op de voorgrond begint de tijd opnieuw', async () => {
+	it('terug op de voorgrond begint de tijd opnieuw', async () => {
 		usage.startUsage();
 		vi.advanceTimersByTime(60_000);
-		target.dispatchEvent(new CustomEvent('invoer', { detail: 'bon' }));
+		usage.recordEntry('bon');
 		await settle();
 
 		vi.advanceTimersByTime(10_000);
 		target.dispatchEvent(new Event('visibilitychange'));
 		vi.advanceTimersByTime(2500);
-		target.dispatchEvent(new CustomEvent('invoer', { detail: 'snelinvoer' }));
+		usage.recordEntry('snelinvoer');
 		await settle();
 		expect(durations()).toEqual([60_000, 2500]);
 	});
@@ -157,7 +157,7 @@ describe('startUsage', () => {
 	it('geopend op de achtergrond: geen tijd tot de app op de voorgrond komt', async () => {
 		vi.stubGlobal('document', { visibilityState: 'hidden' });
 		usage.startUsage();
-		target.dispatchEvent(new CustomEvent('invoer', { detail: 'verwacht' }));
+		usage.recordEntry('verwacht');
 		await settle();
 		expect(durations()).toEqual([null]);
 	});

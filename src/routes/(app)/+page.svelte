@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { enhance, type SubmitFunction } from '$app/forms';
+	import { recordEntry } from '#lib/usage.ts';
 	import { refreshAll } from '$app/navigation';
 	import { fly } from 'svelte/transition';
 	import { FIXED_GROUP, homeBars, monthStory, storySentence } from '#lib/budget.ts';
@@ -129,7 +130,7 @@
 		return async ({ result, update }) => {
 			receiving = null;
 			if (result.type === 'success') {
-				dispatchEvent(new CustomEvent('invoer', { detail: 'verwacht' }));
+				recordEntry('verwacht');
 				notify(`${item?.personName ?? 'Betaling'} ontvangen.`);
 				await update();
 				return;

@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { index, integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { ENTRY_KINDS } from '../../usage.ts';
 
 // Telemetrie staat in een aparte database (spec: Telemetrie en monitoring) en wordt na
 // 90 dagen opgeruimd. Nooit persoonsgegevens: geen foutmeldingen, geen invoer, alleen soort
@@ -103,8 +104,6 @@ export const receiptReads = sqliteTable(
  * waarop je hem invoerde, de soort en hoe lang het duurde van het openen van de app tot het
  * opslaan. Nooit een bedrag, tegenpartij of welke transactie het was.
  */
-export const ENTRY_KINDS = ['snelinvoer', 'verwacht', 'bon'] as const;
-export type EntryKind = (typeof ENTRY_KINDS)[number];
 
 export const usageEntries = sqliteTable(
 	'usage_entries',

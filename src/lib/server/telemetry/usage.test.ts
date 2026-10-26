@@ -1,13 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { addDays } from '../../dates.ts';
-import {
-	MAX_DURATION_MS,
-	MAX_ENTRIES,
-	inFuture,
-	median,
-	summarizeUsage,
-	usageBody
-} from './usage.ts';
+import { MAX_DURATION_MS } from '../../usage.ts';
+import { MAX_ENTRIES, inFuture, median, summarizeUsage, usageBody } from './usage.ts';
 
 // Woensdag; de week begint op maandag 26 oktober
 const TODAY = '2026-10-28';

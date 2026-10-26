@@ -3,7 +3,8 @@ import { z } from 'zod';
 import { addDays, fromIsoDate, isIsoDate, toIsoDate } from '../../dates.ts';
 import type { TelemetryDB } from './db.ts';
 import { RETENTION_DAYS } from './errors.ts';
-import { ENTRY_KINDS, usageEntries } from './schema.ts';
+import { ENTRY_KINDS, MAX_DURATION_MS } from '../../usage.ts';
+import { usageEntries } from './schema.ts';
 import { p75, weekStart } from './vitals.ts';
 
 // Je eigen gebruik (spec: Telemetrie en monitoring, Volhouden): de PWA meldt elke invoer met
@@ -11,8 +12,6 @@ import { p75, weekStart } from './vitals.ts';
 // week, je reeks, en mediaan en p75 van openen tot opslaan. Alleen voor jezelf.
 
 export const MAX_ENTRIES = 20;
-/** Langer dan een half uur open is geen meting van invoeren meer; de client stuurt dan niets. */
-export const MAX_DURATION_MS = 30 * 60_000;
 
 const entry = z.strictObject({
 	id: z.uuid(),

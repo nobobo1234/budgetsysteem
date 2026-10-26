@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { initials } from '#lib/text.ts';
+	import { recordEntry } from '#lib/usage.ts';
 	import { groupHue } from '#lib/categoryColor.ts';
 	import * as icons from '#lib/icons.ts';
 	import { enhance, type SubmitFunction } from '$app/forms';
@@ -24,8 +25,7 @@
 	const keep: SubmitFunction = ({ action }) => {
 		busy = true;
 		return async ({ result, update }) => {
-			if (result.type === 'success' && action.search === '?/received')
-				dispatchEvent(new CustomEvent('invoer', { detail: 'verwacht' }));
+			if (result.type === 'success' && action.search === '?/received') recordEntry('verwacht');
 			await update({ reset: false });
 			busy = false;
 			confirm = null;
