@@ -170,6 +170,10 @@ export const receipts = sqliteTable(
 			.notNull()
 			.default('image/jpeg'),
 		source: text('source', { enum: ['app', 'deelmenu'] }).notNull(),
+		// Een kassabon, of een screenshot van een bankapp met meerdere transacties (receipt_items)
+		kind: text('kind', { enum: ['bon', 'lijst'] })
+			.notNull()
+			.default('bon'),
 		// Bij `deelmenu`: met welk upload-token hij binnenkwam
 		uploadTokenId: text('upload_token_id').references(() => uploadTokens.id, {
 			onDelete: 'set null'
@@ -195,6 +199,35 @@ export const receipts = sqliteTable(
 	(t) => [
 		index('receipts_transaction_idx').on(t.transactionId),
 		index('receipts_status_idx').on(t.status, t.handledAt)
+	]
+);
+
+// De transacties op een screenshot van een bankapp (spec: Verwerking stap 6), zoals Haiku ze las en
+// de code ze controleerde. Bij bevestigen krijgt elke aangevinkte regel een transactie: een nieuwe
+// met bron `bon`, of een die er al was. Uitgevinkt blijft `transaction_id` leeg.
+export const receiptItems = sqliteTable(
+	'receipt_items',
+	{
+		id: id(),
+		receiptId: text('receipt_id')
+			.notNull()
+			.references(() => receipts.id, { onDelete: 'cascade' }),
+		position: integer('position').notNull(),
+		date: text('date'),
+		counterparty: text('counterparty'),
+		// Met teken (negatief is afgeschreven), in centen van `currency`
+		amountCents: integer('amount_cents'),
+		currency: text('currency'),
+		// Zekerheid per veld (zie receipts/stored.ts); notities van Haiku alleen als gewone tekst
+		confidence: text('confidence', { mode: 'json' }),
+		transactionId: text('transaction_id').references(() => transactions.id, {
+			onDelete: 'set null'
+		}),
+		createdAt: createdAt()
+	},
+	(t) => [
+		uniqueIndex('receipt_items_position_idx').on(t.receiptId, t.position),
+		index('receipt_items_transaction_idx').on(t.transactionId)
 	]
 );
 

@@ -1,6 +1,6 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import { describe, expect, it, vi } from 'vitest';
-import { NOW, receiptOutput } from './fixtures.ts';
+import { listItem, listOutput, NOW, receiptOutput } from './fixtures.ts';
 import {
 	buildRequest,
 	costNanoUsd,
@@ -137,6 +137,11 @@ describe('parseOutput', () => {
 		expect(out?.totaal.zekerheid).toBe('zeker');
 		expect(out?.regels[0]?.soort).toBe('artikel');
 		expect(out?.betaalwijze.waarde).toBe('pin');
+		const list = JSON.parse(
+			JSON.stringify(listOutput([listItem('2026-10-20', 'Voorbeeld', '-1.00')]))
+		);
+		list.beeld = 'Lijst';
+		expect(parseOutput(message(JSON.stringify(list)).content)?.beeld).toBe('lijst');
 		// Vrije tekst blijft zoals hij is
 		expect(out?.winkel.waarde).toBe('Supermarkt Voorbeeld 0001');
 	});
@@ -183,6 +188,39 @@ describe('readReceipt', () => {
 });
 
 describe('processReceipt', () => {
+	it('geeft de ontvangstdatum mee en controleert een lijst per transactie', async () => {
+		const output = listOutput([
+			listItem('2026-10-20', 'Voorbeeld', '-23.45'),
+			listItem('2026-10-19', 'Voorbeeld', '12.00', 'USD')
+		]);
+		output.transacties[1]!.bedrag.zekerheid = 'twijfel';
+		const { client, create } = fakeClient(message(JSON.stringify(output)));
+		const events: ReceiptTelemetry[] = [];
+		const result = await processReceipt(client, [part()], NOW, {
+			clock: fixedClock(),
+			onTelemetry: (e) => events.push(e)
+		});
+		const request = (
+			create.mock.calls[0] as unknown as [Anthropic.MessageCreateParamsNonStreaming]
+		)[0];
+		const content = request.messages[0]!.content as Anthropic.ContentBlockParam[];
+		expect(content.at(-1)).toEqual({
+			type: 'text',
+			text: 'Lees deze bon volgens het schema.\nOntvangen op 2026-10-21.'
+		});
+		expect(result.ok && result.list?.items.map((i) => i.amountCents.value)).toEqual([-2345, 1200]);
+		// De lijst bepaalt de uitkomst, niet de lege bonvelden
+		expect(result.ok && result.list?.outcome).toBe('controleren');
+		expect(result.ok && result.checked.outcome).toBe('onzeker');
+		expect(events.map((e) => e.outcome)).toEqual(['controleren']);
+	});
+
+	it('een bon heeft geen lijst', async () => {
+		const { client } = fakeClient(message(JSON.stringify(receiptOutput())));
+		const result = await processReceipt(client, [part()], NOW, { clock: fixedClock() });
+		expect(result.ok && result.list).toBeNull();
+	});
+
 	it('controleert de uitvoer en meldt één telemetriegebeurtenis met de uitkomst', async () => {
 		const { client } = fakeClient(message(JSON.stringify(receiptOutput())));
 		const events: ReceiptTelemetry[] = [];

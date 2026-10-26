@@ -8,7 +8,7 @@
 	import * as icons from '#lib/icons-extra.ts';
 	import { motion } from '#lib/motion.ts';
 	import { UploadError, uploadReceipt } from '#lib/receipt-upload.ts';
-	import { STAGE_TEXT, needsYou, receiptAmount } from '#lib/receipts.ts';
+	import { STAGE_TEXT, itemCountText, needsYou, receiptAmount } from '#lib/receipts.ts';
 	import { displayName } from '#lib/text.ts';
 
 	// Bonnen (spec: Schermen, Bonnetjes en koppelen): een foto of screenshot kiezen, en de laatste
@@ -121,7 +121,8 @@
 					</li>
 				{/each}
 				{#each data.receipts as r (r.id)}
-					{@const name = r.store ? displayName(r.store) || r.store : 'Bon'}
+					{@const name =
+						r.kind === 'lijst' ? 'Screenshot' : r.store ? displayName(r.store) || r.store : 'Bon'}
 					<li>
 						<a class="row" href="/bonnen/{r.id}">
 							<img
@@ -140,12 +141,18 @@
 									<span class="name">{name}</span>
 									<span class="muted small">
 										<span class={['state', needsYou(r.stage) && 'warn']} aria-hidden="true"></span>
-										{r.date ? formatShortDate(r.date) : 'Zonder datum'} · {STAGE_TEXT[r.stage]}
+										{r.kind === 'lijst'
+											? `Ontvangen ${formatShortDate(r.createdAt.slice(0, 10))}`
+											: r.date
+												? formatShortDate(r.date)
+												: 'Zonder datum'} · {STAGE_TEXT[r.stage]}
 										{#if r.source === 'deelmenu'}· via deelmenu{/if}
 									</span>
 								</span>
 								<span class="num amount" in:fade={{ duration: motion(240) }}
-									>{receiptAmount(r.totalCents, r.currency)}</span
+									>{r.kind === 'lijst'
+										? itemCountText(r.itemCount)
+										: receiptAmount(r.totalCents, r.currency)}</span
 								>
 							{/if}
 						</a>

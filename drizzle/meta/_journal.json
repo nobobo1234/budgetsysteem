@@ -78,6 +78,13 @@
       "when": 1792966434820,
       "tag": "0010_bon_verwerking",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1793014285121,
+      "tag": "0011_bon_lijst",
+      "breakpoints": true
     }
   ]
 }

@@ -4,10 +4,13 @@ import { RECEIPT_FIELDS } from './stored.ts';
 // Wat een pagina van een bon te zien krijgt: de gecontroleerde velden en per veld de zekerheid,
 // nooit de ruwe uitvoer van Haiku. Notities van het model zijn gewone tekst (nooit `{@html}`).
 
-export function receiptView(r: LoadedReceipt) {
+/** `itemCount`: aantal transacties als het een screenshot met een lijst is. */
+export function receiptView(r: LoadedReceipt, itemCount = 0) {
 	return {
 		id: r.id,
 		stage: r.stage,
+		kind: r.kind,
+		itemCount,
 		status: r.status,
 		source: r.source,
 		failure: r.failure,

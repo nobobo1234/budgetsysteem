@@ -17,6 +17,7 @@ import {
 	categories,
 	owed,
 	owedPayments,
+	receiptItems,
 	receipts,
 	reservations,
 	transactionSplits,
@@ -373,10 +374,14 @@ export function mergeImported(
 		if (hasLinks(tx, importedId))
 			throw new ValidationError('Deze boeking is al gekoppeld; maak dat eerst los');
 
-		// Een bon of reservering die al aan de bankboeking hing, gaat mee naar je invoer
+		// Een bon, screenshot of reservering die al aan de bankboeking hing, gaat mee naar je invoer
 		tx.update(receipts)
 			.set({ transactionId: ownId })
 			.where(eq(receipts.transactionId, importedId))
+			.run();
+		tx.update(receiptItems)
+			.set({ transactionId: ownId })
+			.where(eq(receiptItems.transactionId, importedId))
 			.run();
 		tx.update(reservations)
 			.set({ transactionId: ownId })
