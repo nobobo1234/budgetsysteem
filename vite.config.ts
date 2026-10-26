@@ -6,6 +6,40 @@ import { defineConfig } from 'vitest/config';
 // voor CSRF-controles wordt bij het bouwen vastgelegd in `paths.origin`.
 const origin = process.env.ORIGIN;
 
+const FRAMEWORK = /[\\/]node_modules[\\/](?:svelte|@sveltejs[\\/]kit)[\\/]|vite[\\/]preload-helper/;
+// Kit laadt client-entry.js dynamisch vanuit entry.js en zoekt die twee chunks na het bouwen
+// terug; ze moeten dus eigen bestanden blijven
+const KIT_ENTRY =
+	/[\\/]@sveltejs[\\/]kit[\\/]src[\\/]runtime[\\/]client[\\/](?:client-)?entry\.js$/;
+
+/**
+ * Chunks van de browserbundel (spec: Performance). Zonder groepen wordt elke module die twee
+ * pagina's delen een eigen bestand: het startscherm laadde zo 35 bestanden, de helft onder de
+ * 1 kB, en elk bestand kost een request, eigen headers en slechtere compressie. Daarom:
+ * - `framework`: Svelte en SvelteKit (met hun afhankelijkheden) in één bestand; elke pagina
+ *   laadt ze toch.
+ * - `lib`: kleine modules uit src/lib die veel pagina's delen (geld, datums, iconen, Toast ...)
+ *   in één bestand. Een pagina laadt daarmee soms een paar kB die ze niet gebruikt, maar dat
+ *   is minder dan wat losse bestanden kosten. Grotere of zelden gedeelde modules en
+ *   componenten blijven gewoon eigen chunks. Alleen JS: CSS gaat mee met zijn component.
+ */
+const codeSplitting = {
+	groups: [
+		{
+			name: 'framework',
+			test: (id: string) => FRAMEWORK.test(id) && !KIT_ENTRY.test(id),
+			priority: 2
+		},
+		{
+			name: 'lib',
+			test: /[\\/]src[\\/]lib[\\/][^?]*$/,
+			minShareCount: 4,
+			maxModuleSize: 4 * 1024,
+			priority: 1
+		}
+	]
+};
+
 export default defineConfig({
 	plugins: [
 		sveltekit({
@@ -36,6 +70,10 @@ export default defineConfig({
 	build: {
 		// Geen sourcemaps in de client-bundel: houdt de broncode en paden uit productie
 		sourcemap: false
+	},
+	// Alleen de browserbundel; de service worker blijft één bestand (codeSplitting uit, door Kit)
+	environments: {
+		client: { build: { rolldownOptions: { output: { codeSplitting } } } }
 	},
 	test: {
 		projects: [

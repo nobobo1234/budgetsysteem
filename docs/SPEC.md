@@ -58,7 +58,7 @@ De app past in je huidige opzet: een container die alleen lokaal luistert, en é
 - **Doorgestuurde headers.** nginx zet `X-Forwarded-Proto` en `X-Real-IP` zelf en overschrijft wat de client meestuurt. In de app: `ORIGIN=https://finance.mijndomein.nl` en `ADDRESS_HEADER=x-real-ip`. Dat is alleen veilig omdat nginx de header altijd overschrijft ([SvelteKit adapter-node](https://svelte.dev/docs/kit/adapter-node)). Zonder dit werken de CSRF-controle en de rate limiting op IP niet goed.
 - **Groottes.** `client_max_body_size 12m` voor uploads, `25m` alleen op de import-route.
 - **Eerste rem.** `limit_req` op `/login` en `/api/ingest`; de app heeft daarnaast zijn eigen limieten.
-- **Compressie.** gzip of brotli in nginx in plaats van in Node; volgens de SvelteKit-docs is dat sneller.
+- **Compressie.** gzip in nginx in plaats van in Node; volgens de SvelteKit-docs is dat sneller. Niveau 5 (`gzip_comp_level`), zoals ook de Lighthouse-check meet.
 - **Overig.** `server_tokens off`. Een default server die onbekende hostnamen direct afkapt (`return 444`), zodat scanners die je VPS op IP benaderen niets zien. De CSP komt uit SvelteKit, niet dubbel uit nginx.
 
 ## Beveiliging
@@ -683,6 +683,7 @@ Bij `prefers-reduced-motion` vallen de View Transitions weg en worden alle ander
 - Bij `prefers-reduced-motion` worden animaties korte fades of vallen ze weg.
 - Toegankelijk: contrast volgens WCAG AA, zichtbare focusstijlen, alles bereikbaar met het toetsenbord en tikdoelen van minstens 44 px.
 - Performance-budget: de eerste JavaScript-bundel blijft onder 100 kB gzip, bewaakt in CI.
+- Bundeling: Svelte en SvelteKit staan samen in één chunk, en kleine modules uit `src/lib` die veel pagina's delen ook (`codeSplitting` in `vite.config.ts`). Zo wordt een module die het startscherm met een andere pagina deelt geen los bestandje met een eigen request; delen mag dus gewoon, kopiëren om het budget te halen is niet nodig.
 
 ### Klaar voor UI
 
