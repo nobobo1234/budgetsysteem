@@ -1,11 +1,11 @@
 import { and, asc, desc, eq, gte, isNull, lte, ne, sql } from 'drizzle-orm';
 import { rm } from 'node:fs/promises';
 import { addDays } from '../../dates.ts';
-import { rankMatches, type MatchLabel } from '../../match.ts';
+import { rankMatches, type MatchLabel, type MatchQuery } from '../../match.ts';
 import { matchRule, sortRules } from '../../rules.ts';
 import { recordChange } from '../audit.ts';
 import type { Conn, DB } from '../db/index.ts';
-import { accounts, categories, receipts, rules, transactions } from '../db/schema.ts';
+import { accounts, categories, receiptItems, receipts, rules, transactions } from '../db/schema.ts';
 import { ValidationError } from '../errors.ts';
 import { enqueue, runJobsSoon } from '../jobs.ts';
 import { log } from '../log.ts';
@@ -30,7 +30,8 @@ import {
 	readStored,
 	type RawOutput,
 	type StoredConfidence,
-	type StoredFields
+	type StoredFields,
+	type StoredListItem
 } from './stored.ts';
 
 // Een gelezen bon verwerken (spec: Bonnetjes en koppelen): de koppellijst tegen bestaande
@@ -71,6 +72,18 @@ export function receiptCandidates(
 ): { candidates: ReceiptCandidate[]; preselect: string | null } {
 	const query = matchQueryFor(fields);
 	if (!query) return { candidates: [], preselect: null };
+	return transactionCandidates(db, query, { currency: fields.currency, incoming: false });
+}
+
+/**
+ * De koppellijst tegen bestaande transacties, voor een bon of een transactie op een screenshot:
+ * rond de datum, met hetzelfde teken (uitgaven of inkomsten), gesorteerd op score.
+ */
+export function transactionCandidates(
+	db: Conn,
+	query: MatchQuery,
+	{ currency, incoming }: { currency: string | null; incoming: boolean }
+): { candidates: ReceiptCandidate[]; preselect: string | null } {
 	const rows = db
 		.select({
 			id: transactions.id,
@@ -93,7 +106,7 @@ export function receiptCandidates(
 				gte(transactions.date, addDays(query.date, -WINDOW_DAYS)),
 				lte(transactions.date, addDays(query.date, WINDOW_DAYS)),
 				ne(transactions.status, 'verwacht'),
-				lte(transactions.amountCents, 0)
+				incoming ? gte(transactions.amountCents, 0) : lte(transactions.amountCents, 0)
 			)
 		)
 		// Dichtst bij de bondatum eerst, zodat bij gelijke score de dichtstbijzijnde wint
@@ -103,12 +116,12 @@ export function receiptCandidates(
 		)
 		.limit(MAX_TARGETS)
 		.all();
-	const foreign = fields.currency !== null && fields.currency !== 'EUR';
+	const foreign = currency !== null && currency !== 'EUR';
 	const targets = rows.map((r) => ({
 		...r,
 		name: r.counterparty,
 		amountCents:
-			foreign && r.origCurrency === fields.currency && r.origAmountCents !== null
+			foreign && r.origCurrency === currency && r.origAmountCents !== null
 				? Math.abs(r.origAmountCents)
 				: Math.abs(r.amountCents),
 		row: r
@@ -150,8 +163,34 @@ function createReceiptTransaction(
 		.where(eq(accounts.id, accountId))
 		.get();
 	if (!account) throw new ValidationError('Onbekende rekening');
-	const foreign = fields.currency !== 'EUR';
-	const counterparty = fields.store!.trim().slice(0, 100);
+	return insertBonTransaction(db, {
+		amountCents: -fields.totalCents!,
+		currency: fields.currency!,
+		date: fields.date!,
+		counterparty: fields.store!,
+		accountId,
+		status
+	});
+}
+
+/**
+ * Een transactie met bron `bon` (van een bon of een screenshot), met de categorie via je
+ * regels. `amountCents` heeft het teken en de valuta van wat er gelezen is; bij vreemde valuta
+ * blijft het eurobedrag 0 en staat hij op te controleren.
+ */
+export function insertBonTransaction(
+	db: Conn,
+	t: {
+		amountCents: number;
+		currency: string;
+		date: string;
+		counterparty: string;
+		accountId: string;
+		status: 'bevestigd' | 'te_controleren';
+	}
+): string {
+	const foreign = t.currency !== 'EUR';
+	const counterparty = t.counterparty.trim().slice(0, 100);
 	const rule = matchRule(sortRules(db.select().from(rules).all()), {
 		counterparty,
 		counterIban: null,
@@ -160,17 +199,17 @@ function createReceiptTransaction(
 	const row = db
 		.insert(transactions)
 		.values({
-			amountCents: foreign ? 0 : -fields.totalCents!,
-			date: fields.date!,
+			amountCents: foreign ? 0 : t.amountCents,
+			date: t.date,
 			counterparty,
 			categoryId: rule?.categoryId ?? null,
 			categorySource: rule ? 'regel' : null,
 			categoryRuleId: rule?.id ?? null,
-			accountId,
+			accountId: t.accountId,
 			source: 'bon',
-			origAmountCents: foreign ? -fields.totalCents! : null,
-			origCurrency: foreign ? fields.currency : null,
-			status: foreign ? 'te_controleren' : status
+			origAmountCents: foreign ? t.amountCents : null,
+			origCurrency: foreign ? t.currency : null,
+			status: foreign ? 'te_controleren' : t.status
 		})
 		.returning()
 		.get();
@@ -204,6 +243,8 @@ export type ReadingResult =
 			outcome: FieldStatus;
 			fields: StoredFields;
 			confidence: StoredConfidence;
+			/** Alleen bij een screenshot met transacties; die boekt nooit vanzelf. */
+			list?: StoredListItem[] | null;
 			raw: RawOutput;
 	  }
 	| { ok: false; reason: ReadFailure | 'api'; raw: RawOutput | null };
@@ -231,10 +272,13 @@ export function saveReading(
 	return db.transaction((tx) => {
 		const receipt = tx.select().from(receipts).where(eq(receipts.id, receiptId)).get();
 		if (!receipt || receipt.status !== 'wordt_gelezen') return null;
+		// Opnieuw gelezen: wat er van een eerdere lezing als lijst stond, telt niet meer
+		tx.delete(receiptItems).where(eq(receiptItems.receiptId, receiptId)).run();
 		if (!result.ok) {
 			const fields = emptyFields();
 			tx.update(receipts)
 				.set({
+					kind: 'bon',
 					status: 'fout',
 					failure: result.reason,
 					rawAiOutput: result.raw,
@@ -248,8 +292,10 @@ export function saveReading(
 				.run();
 			return { status: 'fout', plan: null, fields, stage: 'fout', transactionId: null };
 		}
+		const list = result.list ?? null;
 		tx.update(receipts)
 			.set({
+				kind: list ? 'lijst' : 'bon',
 				status: result.outcome,
 				failure: null,
 				rawAiOutput: result.raw,
@@ -261,8 +307,27 @@ export function saveReading(
 			})
 			.where(eq(receipts.id, receiptId))
 			.run();
-		const plan = planReceipt(result.outcome, result.fields, receiptCandidates(tx, result.fields));
-		applyPlan(tx, receiptId, plan, result.fields, now);
+		let plan: ReceiptPlan;
+		if (list) {
+			// Een lijst boekt nooit stil: hij wacht tot je hem bevestigt
+			list.forEach((item, position) => {
+				tx.insert(receiptItems)
+					.values({
+						receiptId,
+						position,
+						date: item.date,
+						counterparty: item.counterparty,
+						amountCents: item.amountCents,
+						currency: item.currency,
+						confidence: item.confidence
+					})
+					.run();
+			});
+			plan = { action: 'inbox', reason: 'lijst' };
+		} else {
+			plan = planReceipt(result.outcome, result.fields, receiptCandidates(tx, result.fields));
+			applyPlan(tx, receiptId, plan, result.fields, now);
+		}
 		const after = tx
 			.select({ transactionId: receipts.transactionId, handledAt: receipts.handledAt })
 			.from(receipts)
@@ -272,7 +337,7 @@ export function saveReading(
 			status: result.outcome,
 			plan,
 			fields: result.fields,
-			stage: receiptStage({ status: result.outcome, ...after }),
+			stage: receiptStage({ status: result.outcome, kind: list ? 'lijst' : 'bon', ...after }),
 			transactionId: after.transactionId
 		};
 	});
@@ -289,6 +354,7 @@ export interface LoadedReceipt {
 	id: string;
 	status: ReceiptStatus;
 	stage: ReceiptStage;
+	kind: ReceiptRow['kind'];
 	source: ReceiptRow['source'];
 	mediaType: ReceiptRow['mediaType'];
 	fileId: string;
@@ -307,6 +373,7 @@ function toLoaded(r: ReceiptRow): LoadedReceipt {
 		id: r.id,
 		status: r.status,
 		stage: receiptStage(r),
+		kind: r.kind,
 		source: r.source,
 		mediaType: r.mediaType,
 		fileId: r.fileId,
@@ -354,6 +421,13 @@ function requireReceipt(db: Conn, id: string): LoadedReceipt {
 	return r;
 }
 
+/** Koppelen, nakijken en velden aanpassen horen bij een bon; een lijst bevestig je in één keer. */
+function requireBon(db: Conn, id: string): LoadedReceipt {
+	const r = requireReceipt(db, id);
+	if (r.kind === 'lijst') throw new ValidationError('Dit screenshot bevestig je als lijst');
+	return r;
+}
+
 /** De transactie is uit deze bon ontstaan en hoort bij geen andere bon. */
 function ownTransaction(db: Conn, receipt: LoadedReceipt): string | null {
 	if (!receipt.transactionId) return null;
@@ -380,7 +454,7 @@ export type SettleChoice =
  * kies je nu iets anders, dan verdwijnt die transactie, zodat niets dubbel telt.
  */
 export function settleReceipt(db: DB, id: string, choice: SettleChoice, now = new Date()): string {
-	const receipt = requireReceipt(db, id);
+	const receipt = requireBon(db, id);
 	if (!isComplete(receipt.fields))
 		throw new ValidationError('Vul eerst winkel, datum en bedrag in');
 	// Alles controleren voordat een eigen transactie verdwijnt
@@ -430,7 +504,7 @@ export function settleReceipt(db: DB, id: string, choice: SettleChoice, now = ne
  * en op te controleren staat, wordt bevestigd (behalve als het eurobedrag nog ontbreekt).
  */
 export function confirmReceipt(db: DB, id: string, now = new Date()): void {
-	const receipt = requireReceipt(db, id);
+	const receipt = requireBon(db, id);
 	if (!receipt.transactionId) throw new ValidationError('Kies eerst waar deze bon bij hoort');
 	if (receipt.handledAt) throw new ValidationError('Deze bon is al nagekeken');
 	db.transaction((tx) => {
@@ -472,7 +546,7 @@ const CORRECTABLE: [keyof FieldPatch, CorrectableField][] = [
  * Hoort er een transactie bij die uit deze bon ontstond, dan verandert die mee.
  */
 export function correctReceipt(db: DB, id: string, patch: FieldPatch): CorrectableField[] {
-	const receipt = requireReceipt(db, id);
+	const receipt = requireBon(db, id);
 	if (!dateInRange(patch.date)) throw new ValidationError('Datum ligt te ver weg');
 	const fields: StoredFields = { ...receipt.fields };
 	const confidence: StoredConfidence = structuredClone(receipt.confidence);

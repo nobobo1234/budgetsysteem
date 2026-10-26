@@ -15,7 +15,9 @@ bon-eval/
 ├── cafe-fooi.jpg
 ├── jumbo-lang-1.jpg
 ├── jumbo-lang-2.jpg
-└── revolut-usd.png
+├── revolut-usd.png
+├── sns-lijst.png
+└── revolut-lijst.png
 ```
 
 Foto's als JPEG, PNG of WebP. iPhone-foto's in HEIC eerst als JPEG exporteren (in Foto's: Exporteer, of AirDrop naar de Mac kiest vaak al JPEG). Lever ze aan zoals de app ze straks krijgt: de originele foto, niet alvast verkleind. Lange bonnen bijsnijden tot de bon zelf, want dat doet de app straks ook (randdetectie in de browser); alleen dan valt een lange bon onder "in stukken".
@@ -70,6 +72,53 @@ Foto's als JPEG, PNG of WebP. iPhone-foto's in HEIC eerst als JPEG exporteren (i
 
 Neem een mix zoals de spec vraagt: supermarkt met bonuskorting, horeca met fooi, een kreukelige bon, een lange bon en een Revolut-screenshot in dollar.
 
+## Screenshots met meerdere transacties
+
+Een screenshot van je bankapp met een lijst transacties (spec: Verwerking stap 6) label je per transactie, onder `lijsten` in hetzelfde `labels.json`. `bonnen` en `lijsten` mogen allebei; één van de twee mag ontbreken.
+
+```json
+{
+	"bonnen": [],
+	"lijsten": [
+		{
+			"id": "sns-lijst",
+			"bestanden": ["sns-lijst.png"],
+			"ontvangen": "2026-10-26",
+			"transacties": [
+				{ "datum": "2026-10-25", "tegenpartij": ["Albert Heijn", "AH"], "bedrag": "-23,45" },
+				{ "datum": "2026-10-25", "tegenpartij": "NS", "bedrag": "-4,80" },
+				{ "datum": "2026-10-24", "tegenpartij": "Werkgever B.V.", "bedrag": "2.150,00" }
+			]
+		},
+		{
+			"bestanden": ["revolut-lijst.png"],
+			"transacties": [
+				{
+					"datum": "2026-10-20",
+					"tegenpartij": "Blue Bottle Coffee",
+					"bedrag": "-6,50",
+					"valuta": "USD"
+				},
+				{ "datum": "2026-10-19", "tegenpartij": "Uber", "bedrag": "-18,20", "valuta": "USD" }
+			]
+		}
+	]
+}
+```
+
+| Veld                     | Verplicht | Betekenis                                                                                                                                            |
+| ------------------------ | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bestanden`              | ja        | Het screenshot (of een paar, van boven naar beneden).                                                                                                |
+| `transacties`            | ja        | Elke transactie die (grotendeels) in beeld staat, van boven naar beneden. Geen saldo, kopjes of totalen.                                             |
+| `datum`                  | ja        | Per transactie, als `JJJJ-MM-DD`. Staat er "Vandaag" of een datum zonder jaar, schrijf dan de echte datum.                                           |
+| `tegenpartij`            | ja        | De naam zoals in de app, of een lijst namen die allemaal goed zijn; vergeleken zoals `winkel` hierboven.                                             |
+| `bedrag`                 | ja        | Met teken, zoals je het typt: `-23,45` voor geld dat eraf ging, `2.150,00` voor geld dat binnenkwam.                                                 |
+| `valuta`                 | nee       | ISO-code van dat bedrag, standaard `EUR`. Toont Revolut een bedrag in dollar met het eurobedrag eronder, label dan het dollarbedrag met `USD`.       |
+| `ontvangen`              | nee       | Wanneer je het screenshot zou uploaden; Haiku krijgt deze datum om "Vandaag" en "Gisteren" om te rekenen. Standaard de dag na de laatste transactie. |
+| `id`, `soort`, `notitie` | nee       | Als bij een bon.                                                                                                                                     |
+
+Neem een paar soorten: een SNS-lijst met uitgaven en een binnenkomend bedrag, een Revolut-lijst in vreemde valuta, en een lijst waarvan de onderste transactie half buiten beeld valt.
+
 ## Draaien
 
 Met je eigen API-sleutel in de omgeving (`ANTHROPIC_API_KEY`, of eenmalig `ant auth login`). Het script leest of toont de sleutel nooit.
@@ -108,11 +157,14 @@ In de terminal per variant alleen aantallen, geen bedragen of winkelnamen:
 - per veld: hoe vaak goed, hoe vaak gevuld, hoe vaak zeker, en het percentage goed bij zeker;
 - of het doel gehaald is (totaal bij zeker ≥ 98%);
 - tokens, kosten en mediane duur;
-- de id's van bonnen waar "zeker" toch fout was, om na te kijken.
+- de id's van bonnen waar "zeker" toch fout was, om na te kijken;
+- bij lijsten: hoeveel screenshots als bon gelezen werden (en bonnen als lijst), hoeveel gelabelde transacties gevonden en helemaal goed waren, per veld (`datum`, `tegenpartij`, `bedrag`, `valuta`) goed, gevuld en goed bij zeker, hoeveel transacties "zeker" waren met een fout veld, en hoeveel het model er las die niet in het label staan (extra, en daarvan zeker). Die laatste twee zijn het belangrijkst: zo'n transactie staat aangevinkt klaar om te boeken. De id's staan erbij als `sns-lijst #2 (bedrag)`, waarbij #2 de tweede transactie van boven is.
 
 De details per bon (wat Haiku las, de controles, de score) staan in `resultaten/eval-<tijd>.json` in je map, buiten de repo.
 
 Een mislukte lezing (weigering, afgekapt, ongeldige uitvoer of API-fout) telt als onzeker en niet gevuld: in de app zou die bon in de review-inbox komen.
+
+Een gelabelde transactie hoort bij hooguit één gelezen transactie: het script koppelt eerst de paren die het meest overeenkomen (bedrag weegt het zwaarst), en alleen als het bedrag klopt of datum en naam allebei kloppen. Een transactie zonder paar telt als niet gevonden; een gelezen transactie zonder paar als extra.
 
 ## Hoe de uitkomst ontstaat
 
@@ -120,6 +172,6 @@ Dezelfde code als de app straks gebruikt (`src/lib/server/receipts/`):
 
 1. **Beeld** (`images.ts`): rechtzetten volgens EXIF, verkleinen, één keer JPEG met kwaliteit 90, metadata eraf. `1600`: lange kant 1600 px. `2576`: zo groot als het model aankan (2576 px én 4784 beeldtokens; een 4:3-foto wordt daardoor zo'n 1650 × 2200). `stukken`: als `2576`, maar een bon die meer dan 3,5 keer zo lang als breed is wordt op volle breedte (tot 1288 px) in hooguit vijf gelijke stukken met minstens 10% overlap gesneden.
 2. **Lezen** (`reader.ts`): één verzoek met de delen als "Deel 1", "Deel 2", een vast JSON-schema via structured outputs en geen tools.
-3. **Controleren** (`checks.ts`): totaal aanwezig en positief, datum niet in de toekomst en niet ouder dan 60 dagen, regels (met korting, bonus en statiegeld) opgeteld gelijk aan het totaal binnen €0,05. Een veld is zeker als het model zeker is én de controles slagen; controleren als het model twijfelt maar de controles slagen; anders onzeker.
+3. **Controleren** (`checks.ts`): totaal aanwezig en positief, datum niet in de toekomst en niet ouder dan 60 dagen, regels (met korting, bonus en statiegeld) opgeteld gelijk aan het totaal binnen €0,05. Een veld is zeker als het model zeker is én de controles slagen; controleren als het model twijfelt maar de controles slagen; anders onzeker. Bij een lijst per transactie: datum als bij een bon, naam aanwezig, bedrag aanwezig en niet nul (met teken), valuta een ISO-code.
 
 Haal je het doel niet, dan gaat volgens de spec elke bon langs de review-inbox, of we scherpen de prompt (`schema.ts`) en de controles aan en draaien de eval opnieuw.

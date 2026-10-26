@@ -8,7 +8,7 @@
 	import { centsToInput, formatCents } from '#lib/money.ts';
 	import { daysBetween, formatOpenFor } from '#lib/owed.ts';
 	import { reminderText } from '#lib/remind.ts';
-	import { fieldList, receiptAmount } from '#lib/receipts.ts';
+	import { fieldList, itemCountText, receiptAmount } from '#lib/receipts.ts';
 	import { displayName, initials } from '#lib/text.ts';
 
 	// Review-inbox (spec: Schermen): alles wat op een besluit wacht, per soort een groep met
@@ -155,27 +155,50 @@
 				'receipts-title',
 				'Bonnen',
 				inbox.receipts.length,
-				'Wat Haiku niet zeker las, of waar je zelf kiest bij welke transactie hij hoort.',
+				'Wat Haiku niet zeker las, waar je zelf kiest bij welke transactie hij hoort, of een screenshot om te bevestigen.',
 				'/bonnen'
 			)}
 			<ul class="card list">
 				{#each inbox.receipts as bon (bon.id)}
-					{@const name = bon.store ? displayName(bon.store) || bon.store : 'Bon'}
+					{@const name =
+						bon.stage === 'lijst'
+							? 'Screenshot'
+							: bon.store
+								? displayName(bon.store) || bon.store
+								: 'Bon'}
 					<li class="item">
 						<div class="row">
-							<span class="monogram sm" aria-hidden="true">{initials(bon.store || 'Bon')}</span>
+							<span class="monogram sm" aria-hidden="true">{initials(bon.store || name)}</span>
 							<a class="who" href="/bonnen/{bon.id}">
 								<span class="name">{name}</span>
 								<span class="muted small">
-									{bon.date ? formatShortDate(bon.date) : 'Zonder datum'}{bon.source === 'deelmenu'
-										? ' · via deelmenu'
-										: ''}
+									{bon.stage === 'lijst'
+										? `Ontvangen ${formatShortDate(bon.createdAt.slice(0, 10))}`
+										: bon.date
+											? formatShortDate(bon.date)
+											: 'Zonder datum'}{bon.source === 'deelmenu' ? ' · via deelmenu' : ''}
 								</span>
 							</a>
-							<span class="num amount">{receiptAmount(bon.totalCents, bon.currency)}</span>
+							<span class="num amount"
+								>{bon.stage === 'lijst'
+									? itemCountText(bon.items)
+									: receiptAmount(bon.totalCents, bon.currency)}</span
+							>
 						</div>
 						<div class="why">
-							{#if bon.stage === 'fout'}
+							{#if bon.stage === 'lijst'}
+								<p class="small">
+									Een screenshot met {itemCountText(bon.items)}. Er is nog niets geboekt.
+								</p>
+								<div class="actions">
+									<a
+										class="button secondary small"
+										href="/bonnen/{bon.id}"
+										aria-label="Lijst van {formatShortDate(bon.createdAt.slice(0, 10))} bevestigen"
+										>Bevestigen</a
+									>
+								</div>
+							{:else if bon.stage === 'fout'}
 								<p class="small">Kon niet gelezen worden.</p>
 								<div class="actions">
 									<a

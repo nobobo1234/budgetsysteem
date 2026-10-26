@@ -18,9 +18,11 @@ import {
 	labelId,
 	LabelFileSchema,
 	scoreBon,
+	scoreList,
 	uploadMoment,
 	type BonResult,
-	type Label
+	type Label,
+	type ListLabel
 } from '../src/lib/server/receipts/eval.ts';
 import { prepareReceipt, VARIANTS, type Variant } from '../src/lib/server/receipts/images.ts';
 import {
@@ -81,14 +83,23 @@ if (!labelFile.success) {
 	);
 }
 const only = values.alleen ? new Set(values.alleen.split(',')) : null;
-const labels = labelFile.data.bonnen.filter((l) => !only || only.has(labelId(l)));
+// Bonnen en screenshots met transacties (lijsten) gaan door dezelfde lezer
+const labels: (Label | ListLabel)[] = [...labelFile.data.bonnen, ...labelFile.data.lijsten].filter(
+	(l) => !only || only.has(labelId(l))
+);
+const score = (
+	label: Label | ListLabel,
+	variant: Variant,
+	result: Parameters<typeof scoreBon>[2]
+) =>
+	'transacties' in label ? scoreList(label, variant, result) : scoreBon(label, variant, result);
 const ids = new Set<string>();
 for (const l of labels) {
 	if (ids.has(labelId(l))) fail(`dubbele id "${labelId(l)}"; geef de bon een eigen "id"`);
 	ids.add(labelId(l));
 }
 
-async function loadFiles(label: Label): Promise<Buffer[]> {
+async function loadFiles(label: Label | ListLabel): Promise<Buffer[]> {
 	return Promise.all(label.bestanden.map((name) => readFile(join(dir, name))));
 }
 
@@ -130,7 +141,7 @@ for (const variant of variants as Variant[]) {
 			console.log(
 				`${variant} ${labelId(label)}: ${parts.map((p) => `${p.width}×${p.height}`).join(' + ')} (${tokens} beeldtokens)`
 			);
-			result = scoreBon(label, variant, { ok: false, reason: 'fout', usage: null });
+			result = score(label, variant, { ok: false, reason: 'fout', usage: null });
 		} else {
 			let processed: ProcessResult | null = null;
 			try {
@@ -143,8 +154,8 @@ for (const variant of variants as Variant[]) {
 				console.error(`${variant} ${labelId(label)}: aanroep mislukt${status}`);
 			}
 			result = processed
-				? scoreBon(label, variant, processed)
-				: scoreBon(label, variant, { ok: false, reason: 'fout', usage: null });
+				? score(label, variant, processed)
+				: score(label, variant, { ok: false, reason: 'fout', usage: null });
 			details.push({ variant, id: labelId(label), result, uitvoer: processed });
 		}
 		if (client) process.stdout.write(`\r${variant}: ${++done}/${labels.length}`);

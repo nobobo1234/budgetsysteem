@@ -3,22 +3,32 @@
 	import { invalidate } from '$app/navigation';
 	import { fade } from 'svelte/transition';
 	import BackLink from '#lib/components/BackLink.svelte';
-	import Select from '#lib/components/Select.svelte';
+	import Select, { type SelectOption } from '#lib/components/Select.svelte';
 	import Toast from '#lib/components/Toast.svelte';
 	import { formatShortDate } from '#lib/dates.ts';
 	import { centsToInput, formatCents } from '#lib/money.ts';
 	import { motion } from '#lib/motion.ts';
-	import { receiptAmount, stageSentence, type ReceiptFieldName } from '#lib/receipts.ts';
+	import {
+		itemCountText,
+		itemFieldList,
+		receiptAmount,
+		signedAmount,
+		stageSentence,
+		type ItemFieldName,
+		type ReceiptFieldName
+	} from '#lib/receipts.ts';
 	import { displayName } from '#lib/text.ts';
 
 	// Bon (spec: Schermen, Bonnetjes en koppelen): wat Haiku las, per veld hoe zeker, en de
 	// koppellijst om hem te verwerken. Tijdens het lezen een rustige laadstaat die overgaat in de
-	// herkende velden. Notities van Haiku zijn gewone tekst.
+	// herkende velden. Notities van Haiku zijn gewone tekst. Een screenshot met transacties toont
+	// een lijst: per regel aanvinken en de koppeling, en daarna één bevestigknop.
 
 	let { data } = $props();
 	const r = $derived(data.receipt);
 	const reading = $derived(r.stage === 'wordt_gelezen');
-	const name = $derived(r.store ? displayName(r.store) || r.store : 'Bon');
+	const isList = $derived(r.kind === 'lijst');
+	const name = $derived(isList ? 'Screenshot' : r.store ? displayName(r.store) || r.store : 'Bon');
 	const doubt = $derived(
 		(['winkel', 'datum', 'totaal', 'valuta'] as const).filter(
 			(f) => r.confidence[f].status !== 'zeker'
@@ -35,9 +45,10 @@
 	let large = $state(false);
 
 	// Een onvolledige bon opent meteen in het formulier
-	const formOpen = $derived(editing || (!reading && !data.complete));
+	const formOpen = $derived(editing || (!reading && !isList && !data.complete));
 	const showMatch = $derived(
 		!reading &&
+			!isList &&
 			data.complete &&
 			!formOpen &&
 			(relink || r.stage === 'kiezen' || r.stage === 'onzeker' || r.stage === 'fout')
@@ -144,6 +155,68 @@
 			: formatCents(t.amountCents, { sign: true });
 
 	const accountOptions = $derived(data.accounts.map((a) => ({ value: a.id, label: a.name })));
+
+	// Screenshot met transacties: wat is aangevinkt en waar elke regel bij hoort
+	type Item = (typeof data.items)[number];
+	let checked = $derived<Record<string, boolean>>(
+		Object.fromEntries(data.items.map((i) => [i.id, i.plan.checked]))
+	);
+	let targets = $derived<Record<string, string>>(
+		Object.fromEntries(
+			data.items.map((i) => [
+				i.id,
+				i.plan.action === 'koppelen'
+					? `transactie:${i.plan.transactionId}`
+					: i.plan.action === 'nieuw'
+						? 'nieuw'
+						: ''
+			])
+		)
+	);
+	const picked = $derived(data.items.filter((i) => checked[i.id]));
+	const newCount = $derived(picked.filter((i) => targets[i.id] === 'nieuw').length);
+	const linkCount = $derived(picked.filter((i) => targets[i.id]?.startsWith('transactie:')).length);
+	const openCount = $derived(picked.filter((i) => !targets[i.id]).length);
+	const doubled = $derived.by(() => {
+		const links = picked.map((i) => targets[i.id]).filter((t) => t?.startsWith('transactie:'));
+		return new Set(links).size !== links.length;
+	});
+
+	const ITEM_FIELDS: ItemFieldName[] = ['datum', 'tegenpartij', 'bedrag', 'valuta'];
+	const itemName = (i: Item) =>
+		i.counterparty ? displayName(i.counterparty) || i.counterparty : 'Zonder naam';
+	const itemDoubt = (i: Item) => ITEM_FIELDS.filter((f) => i.confidence[f].status !== 'zeker');
+	const itemNotes = (i: Item) =>
+		ITEM_FIELDS.map((f) => i.confidence[f].note)
+			.filter((n) => n !== '')
+			.join(' ');
+
+	function itemState(i: Item): string {
+		if (!i.complete) return 'niet volledig gelezen';
+		if (!checked[i.id]) return 'overslaan';
+		const t = targets[i.id];
+		if (t === 'nieuw') return i.currency === 'EUR' ? 'nieuw' : 'nieuw, eurobedrag later';
+		return t ? 'staat er al' : 'kies zelf';
+	}
+
+	function itemOptions(i: Item): SelectOption[] {
+		return [
+			...i.candidates.map((c) => ({
+				value: `transactie:${c.id}`,
+				label: `${displayName(c.counterparty) || 'Zonder naam'} · ${formatShortDate(c.date)} · ${txAmount(c)} · ${labelText[c.label]}`
+			})),
+			{ value: 'nieuw', label: 'Nieuwe transactie' }
+		];
+	}
+
+	const listSummary = $derived.by(() => {
+		if (picked.length === 0) return 'Niets aangevinkt.';
+		const parts = [];
+		if (newCount > 0) parts.push(`${newCount} nieuw`);
+		if (linkCount > 0) parts.push(`${linkCount} al in je cijfers`);
+		if (openCount > 0) parts.push(`${openCount} nog te kiezen`);
+		return `${parts.join(', ')}.`;
+	});
 </script>
 
 <svelte:head>
@@ -160,7 +233,11 @@
 			<p class="tell" role="status">{stageSentence('wordt_gelezen', [])}</p>
 		{:else}
 			<p class="amount num" in:fade={{ duration: motion(240) }}>
-				{r.totalCents === null ? '—' : receiptAmount(r.totalCents, r.currency)}
+				{#if isList}
+					{itemCountText(r.itemCount)}
+				{:else}
+					{r.totalCents === null ? '—' : receiptAmount(r.totalCents, r.currency)}
+				{/if}
 			</p>
 			<p class="tell" in:fade={{ duration: motion(240) }}>{stageSentence(r.stage, doubt)}</p>
 		{/if}
@@ -172,7 +249,11 @@
 	</header>
 
 	<figure class={['preview', 'card', large && 'large']}>
-		<img src="/api/receipts/{r.id}/image" alt="Foto van de bon" decoding="async" />
+		<img
+			src="/api/receipts/{r.id}/image"
+			alt={isList ? 'Het screenshot' : 'Foto van de bon'}
+			decoding="async"
+		/>
 		<button type="button" class="text-button" onclick={() => (large = !large)}
 			>{large ? 'Kleiner' : 'Groter'}</button
 		>
@@ -233,7 +314,7 @@
 				{/if}
 			</div>
 		</form>
-	{:else}
+	{:else if !isList || reading}
 		<section class="card details" aria-labelledby="details-title" aria-busy={reading}>
 			<div class="section-head">
 				<h2 id="details-title">Gegevens</h2>
@@ -268,6 +349,152 @@
 					{r.lineCount === 1 ? 'regel' : 'regels'} gelezen.
 				</p>
 			{/if}
+		</section>
+	{/if}
+
+	{#if isList && !reading && r.stage === 'lijst'}
+		<form
+			method="POST"
+			action="?/confirmList"
+			class="card section"
+			aria-labelledby="list-title"
+			use:enhance={act('list', 'Lijst bevestigd.')}
+		>
+			<div class="section-head">
+				<h2 id="list-title">Transacties</h2>
+				<span class="muted small" aria-live="polite"
+					>{picked.length} van {data.items.length} aangevinkt</span
+				>
+			</div>
+			{#if data.items.length === 0}
+				<p class="muted small">
+					Haiku vond geen transacties op dit screenshot. Laat het opnieuw lezen of gooi het weg.
+				</p>
+			{:else}
+				<ul class="items">
+					{#each data.items as item (item.id)}
+						{@const label = itemName(item)}
+						{@const doubt = itemDoubt(item)}
+						{@const notes = itemNotes(item)}
+						<li class="item">
+							<label class={['pick', !item.complete && 'off']}>
+								<input
+									type="checkbox"
+									name="item"
+									value={item.id}
+									checked={checked[item.id]}
+									disabled={!item.complete}
+									onchange={(e) => (checked = { ...checked, [item.id]: e.currentTarget.checked })}
+								/>
+								<span class="who-what">
+									<strong>{label}</strong>
+									<span class="muted small"
+										>{item.date ? formatShortDate(item.date) : 'Zonder datum'} · {itemState(
+											item
+										)}</span
+									>
+								</span>
+								<span class={['num', 'side', (item.amountCents ?? 0) > 0 && 'in']}
+									>{item.amountCents === null
+										? '—'
+										: signedAmount(item.amountCents, item.currency)}</span
+								>
+							</label>
+							{#if checked[item.id]}
+								{#if item.plan.action === 'koppelen' || item.plan.action === 'kiezen'}
+									<div class="target">
+										<Select
+											name="target-{item.id}"
+											label="Waar hoort {label} bij?"
+											value={targets[item.id]}
+											options={itemOptions(item)}
+											onchange={(v) => (targets = { ...targets, [item.id]: v })}
+											required
+										/>
+									</div>
+								{:else}
+									<input type="hidden" name="target-{item.id}" value="nieuw" />
+								{/if}
+							{/if}
+							{#if !item.complete}
+								<p class="hint">
+									<span class="conf onzeker"><span class="mark" aria-hidden="true"></span></span>
+									Niet alles te lezen{notes ? `: ${notes}` : ''}. Voer hem zelf in als hij erbij
+									hoort.
+								</p>
+							{:else if doubt.length > 0}
+								<p class="hint">
+									<span class="conf controleren"><span class="mark" aria-hidden="true"></span></span
+									>
+									Twijfel over {itemFieldList(doubt)}.{notes ? ` ${notes}` : ''}
+								</p>
+							{/if}
+						</li>
+					{/each}
+				</ul>
+				{#if newCount > 0}
+					<div class="field">
+						<label for="lijst-account">Rekening voor nieuwe transacties</label>
+						<Select
+							id="lijst-account"
+							name="accountId"
+							label="Rekening"
+							value={data.defaultAccount ?? ''}
+							options={accountOptions}
+							required
+						/>
+					</div>
+				{/if}
+				<p class="muted small">
+					{doubled ? 'Twee regels horen bij dezelfde transactie; kies er één.' : listSummary}
+				</p>
+				<div class="buttons">
+					<button
+						class="button"
+						disabled={picked.length === 0 || openCount > 0 || doubled || busy === 'list'}
+						>{busy === 'list' ? 'Bevestigen…' : 'Bevestigen'}</button
+					>
+				</div>
+			{/if}
+		</form>
+	{:else if isList && !reading}
+		<section class="card section" aria-labelledby="list-title">
+			<h2 id="list-title">Transacties</h2>
+			<ul class="items">
+				{#each data.items as item (item.id)}
+					{@const label = itemName(item)}
+					<li>
+						{#if item.linked}
+							{@const t = item.linked}
+							<a class="row-link" href="/transacties/{t.id}">
+								<span>
+									{label}
+									<span class="muted small"
+										>{formatShortDate(t.date)}{t.status === 'te_controleren'
+											? ' · te controleren'
+											: ''}</span
+									>
+								</span>
+								<span class={['num', t.amountCents > 0 && 'in']}>{txAmount(t)}</span>
+							</a>
+						{:else}
+							<div class="row-link skipped">
+								<span>
+									{label}
+									<span class="muted small"
+										>{item.date ? formatShortDate(item.date) : 'Zonder datum'} · overgeslagen</span
+									>
+								</span>
+								<span class="num muted"
+									>{item.amountCents === null
+										? '—'
+										: signedAmount(item.amountCents, item.currency)}</span
+								>
+							</div>
+						{/if}
+					</li>
+				{/each}
+			</ul>
 		</section>
 	{/if}
 
@@ -386,7 +613,7 @@
 		</section>
 	{/if}
 
-	{#if r.stage === 'fout' && !data.linked}
+	{#if (r.stage === 'fout' || r.stage === 'lijst') && !data.linked}
 		<form
 			method="POST"
 			action="?/reread"
@@ -669,6 +896,73 @@
 		min-height: 48px;
 		color: inherit;
 		text-decoration: none;
+	}
+
+	.items {
+		display: grid;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	.items > li + li {
+		border-top: 1px solid var(--line);
+	}
+
+	.item {
+		display: grid;
+		gap: 6px;
+		padding: 4px 0 8px;
+	}
+
+	.pick {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		min-height: 52px;
+		padding: 4px 6px;
+		border-radius: var(--radius-sm);
+		cursor: pointer;
+	}
+
+	.pick:has(input:checked) {
+		background: var(--accent-soft);
+	}
+
+	.pick.off {
+		cursor: default;
+		color: var(--muted);
+	}
+
+	.pick input {
+		flex: none;
+		width: 20px;
+		height: 20px;
+		min-height: 0;
+		margin: 0;
+		accent-color: var(--accent);
+	}
+
+	.target {
+		padding-left: 36px;
+		min-width: 0;
+	}
+
+	.item .hint {
+		display: flex;
+		align-items: baseline;
+		gap: 6px;
+		margin: 0;
+		padding-left: 36px;
+		color: var(--muted);
+	}
+
+	.in {
+		color: var(--accent-strong);
+	}
+
+	.skipped {
+		color: var(--muted);
 	}
 
 	.row-link > span:first-child {

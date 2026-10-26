@@ -20,6 +20,7 @@ export type CheckFailure =
 	| 'onleesbaar'
 	| 'ongeldig'
 	| 'niet_positief'
+	| 'nul'
 	| 'in_de_toekomst'
 	| 'te_oud'
 	| 'regels_kloppen_niet';
@@ -115,21 +116,7 @@ export function checkReceipt(output: ReceiptOutput, now: Date): CheckedReceipt {
 	const storeFailures: CheckFailure[] = [];
 	const store = build(output.winkel, readText(output.winkel.waarde, storeFailures), storeFailures);
 
-	// Datum: geldig, niet in de toekomst en niet ouder dan 60 dagen
-	const dateFailures: CheckFailure[] = [];
-	let date = readText(output.datum.waarde, dateFailures);
-	if (date !== null) {
-		const today = toIsoDate(now);
-		if (!isIsoDate(date)) {
-			dateFailures.push('ongeldig');
-			date = null;
-		} else if (date > today) {
-			dateFailures.push('in_de_toekomst');
-		} else if (date < addDays(today, -MAX_AGE_DAYS)) {
-			dateFailures.push('te_oud');
-		}
-	}
-	const dateField = build(output.datum, date, dateFailures);
+	const dateField = checkDate(output.datum, now);
 
 	// Regels: alleen optellen als ze allemaal leesbaar zijn
 	const lines: CheckedLine[] = [];
@@ -162,17 +149,7 @@ export function checkReceipt(output: ReceiptOutput, now: Date): CheckedReceipt {
 	}
 	const totalField = build(output.totaal, total, totalFailures);
 
-	// Valuta
-	const currencyFailures: CheckFailure[] = [];
-	let currency = readText(output.valuta.waarde, currencyFailures);
-	if (currency !== null) {
-		currency = currency.toUpperCase();
-		if (!CURRENCY.test(currency)) {
-			currencyFailures.push('ongeldig');
-			currency = null;
-		}
-	}
-	const currencyField = build(output.valuta, currency, currencyFailures);
+	const currencyField = checkCurrency(output.valuta);
 
 	// Betaalwijze: alleen informatief, telt niet mee in de uitkomst
 	const paymentFailures: CheckFailure[] = [];
@@ -191,6 +168,98 @@ export function checkReceipt(output: ReceiptOutput, now: Date): CheckedReceipt {
 		lines,
 		linesSumCents,
 		outcome: worst([store.status, dateField.status, totalField.status, currencyField.status])
+	};
+}
+
+type RawField = { waarde: string; zekerheid: ModelConfidence; notitie: string };
+
+/** Datum: geldig, niet in de toekomst en niet ouder dan 60 dagen. */
+function checkDate(raw: RawField, now: Date): CheckedField<string> {
+	const failures: CheckFailure[] = [];
+	let date = readText(raw.waarde, failures);
+	if (date !== null) {
+		const today = toIsoDate(now);
+		if (!isIsoDate(date)) {
+			failures.push('ongeldig');
+			date = null;
+		} else if (date > today) {
+			failures.push('in_de_toekomst');
+		} else if (date < addDays(today, -MAX_AGE_DAYS)) {
+			failures.push('te_oud');
+		}
+	}
+	return build(raw, date, failures);
+}
+
+/** Valuta: een ISO 4217-code van drie letters. */
+function checkCurrency(raw: RawField): CheckedField<string> {
+	const failures: CheckFailure[] = [];
+	let currency = readText(raw.waarde, failures);
+	if (currency !== null) {
+		currency = currency.toUpperCase();
+		if (!CURRENCY.test(currency)) {
+			failures.push('ongeldig');
+			currency = null;
+		}
+	}
+	return build(raw, currency, failures);
+}
+
+// Een screenshot van een bankapp met meerdere transacties (spec: Verwerking stap 6). Per
+// transactie dezelfde regels als bij een bon: zeker alleen als het model zeker is én de
+// controles slagen. Een lijst boekt nooit vanzelf; de uitkomst bepaalt alleen wat er is
+// aangevinkt als je hem bevestigt.
+
+export interface CheckedListItem {
+	date: CheckedField<string>;
+	counterparty: CheckedField<string>;
+	/** Met teken: negatief is afgeschreven. In de valuta van `currency`, in centen. */
+	amountCents: CheckedField<number>;
+	currency: CheckedField<string>;
+	/** Slechtste uitkomst van de vier velden. */
+	outcome: FieldStatus;
+}
+
+export interface CheckedList {
+	items: CheckedListItem[];
+	/** Slechtste uitkomst van de transacties; onzeker als er geen enkele te lezen was. */
+	outcome: FieldStatus;
+}
+
+export function checkList(output: ReceiptOutput, now: Date): CheckedList {
+	const items = output.transacties.map((t): CheckedListItem => {
+		const date = checkDate(t.datum, now);
+
+		const nameFailures: CheckFailure[] = [];
+		const counterparty = build(
+			t.tegenpartij,
+			readText(t.tegenpartij.waarde, nameFailures),
+			nameFailures
+		);
+
+		// Bedrag: aanwezig, leesbaar en niet nul; het teken blijft staan
+		const amountFailures: CheckFailure[] = [];
+		let amount: number | null = null;
+		const amountText = readText(t.bedrag.waarde, amountFailures);
+		if (amountText !== null) {
+			amount = parseModelAmount(amountText);
+			if (amount === null) amountFailures.push('ongeldig');
+			else if (amount === 0) amountFailures.push('nul');
+		}
+		const amountCents = build(t.bedrag, amount, amountFailures);
+
+		const currency = checkCurrency(t.valuta);
+		return {
+			date,
+			counterparty,
+			amountCents,
+			currency,
+			outcome: worst([date.status, counterparty.status, amountCents.status, currency.status])
+		};
+	});
+	return {
+		items,
+		outcome: items.length === 0 ? 'onzeker' : worst(items.map((i) => i.outcome))
 	};
 }
 

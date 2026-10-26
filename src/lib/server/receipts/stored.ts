@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { MAX_CENTS } from '../../money.ts';
-import type { CheckedReceipt, FieldStatus } from './checks.ts';
+import type { CheckedField, CheckedListItem, CheckedReceipt, FieldStatus } from './checks.ts';
 import { LINE_KINDS, MODEL_CONFIDENCE, PAYMENT_METHODS } from './schema.ts';
 
 // Wat de lezer in `receipts` bewaart (spec: Datamodel → receipts): de gecontroleerde velden en de
@@ -131,6 +131,68 @@ export function readStored(
 		fields: f.success ? f.data : emptyFields(),
 		confidence: c.success ? c.data : emptyConfidence()
 	};
+}
+
+// Een transactie op een screenshot (tabel `receipt_items`): de waarden staan in kolommen, de
+// zekerheid per veld als JSON, net als bij een bon.
+
+export const LIST_FIELDS = ['datum', 'tegenpartij', 'bedrag', 'valuta'] as const;
+export type ListField = (typeof LIST_FIELDS)[number];
+
+export const StoredItemConfidenceSchema = z.object({
+	datum: fieldConfidence,
+	tegenpartij: fieldConfidence,
+	bedrag: fieldConfidence,
+	valuta: fieldConfidence
+});
+export type StoredItemConfidence = z.infer<typeof StoredItemConfidenceSchema>;
+
+export interface StoredListItem {
+	date: string | null;
+	counterparty: string | null;
+	/** Met teken, in centen van `currency`. */
+	amountCents: number | null;
+	currency: string | null;
+	confidence: StoredItemConfidence;
+}
+
+function storedConfidence<T>(f: CheckedField<T>): StoredFieldConfidence {
+	return {
+		status: f.status,
+		model: f.modelConfidence,
+		note: f.note.slice(0, 300),
+		failures: f.failures,
+		corrected: false
+	};
+}
+
+export function toStoredItem(item: CheckedListItem): StoredListItem {
+	return {
+		date: item.date.value,
+		counterparty: item.counterparty.value?.slice(0, 100) ?? null,
+		amountCents: item.amountCents.value,
+		currency: item.currency.value,
+		confidence: {
+			datum: storedConfidence(item.date),
+			tegenpartij: storedConfidence(item.counterparty),
+			bedrag: storedConfidence(item.amountCents),
+			valuta: storedConfidence(item.currency)
+		}
+	};
+}
+
+/** Zekerheid van een transactie teruglezen; wat niet klopt telt als onzeker. */
+export function readItemConfidence(confidence: unknown): StoredItemConfidence {
+	const c = StoredItemConfidenceSchema.safeParse(confidence);
+	if (c.success) return c.data;
+	const one = (): StoredFieldConfidence => ({
+		status: 'onzeker',
+		model: null,
+		note: '',
+		failures: [],
+		corrected: false
+	});
+	return { datum: one(), tegenpartij: one(), bedrag: one(), valuta: one() };
 }
 
 /** Ruwe uitvoer zoals bewaard: de stopreden en de tekst van het model, ingekort. */
