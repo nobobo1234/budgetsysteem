@@ -2,6 +2,7 @@
 // van de melding, de open punten, de balk, de uitschieters, de vergelijking met de maanden
 // ervoor, de voorstellen voor limieten en het verschil sinds afsluiten.
 
+import { FIXED_GROUP } from './budget.ts';
 import { addDays, formatMonth, shiftMonth } from './dates.ts';
 import { formatCents } from './money.ts';
 
@@ -187,15 +188,10 @@ export interface ClosingSplit {
 /**
  * De maand als één balk, zoals op Budget, maar met de reserveringen apart: vaste lasten,
  * reserveringen, dagelijks en wat over bleef. Een afschrijving die uit een reservering komt
- * telt niet nog eens als vaste last; die maand telt alleen wat er opzij ging. `fixed`: de
- * categorie hoort bij de groep Vaste lasten. (Geen import uit budget.ts: dan splitst Vite
- * die in een eigen chunk en wordt de eerste bundel van het startscherm groter.)
+ * telt niet nog eens als vaste last; die maand telt alleen wat er opzij ging.
  */
 export function closingSplit(
-	lines: readonly (Pick<ClosingLine, 'spentCents'> & {
-		fixed: boolean;
-		plannedSpentCents: number;
-	})[],
+	lines: readonly (Pick<ClosingLine, 'group' | 'spentCents'> & { plannedSpentCents: number })[],
 	/** Opzij gezet in de maand (bruto, zonder wat eruit gehaald is) */
 	reservedCents: number,
 	uncategorizedCents: number,
@@ -204,7 +200,7 @@ export function closingSplit(
 	let planned = 0;
 	let dailyCents = Math.max(0, uncategorizedCents);
 	for (const l of lines) {
-		if (l.fixed) planned += Math.max(0, l.spentCents);
+		if (l.group === FIXED_GROUP) planned += Math.max(0, l.spentCents);
 		else {
 			planned += Math.max(0, l.plannedSpentCents);
 			dailyCents += Math.max(0, l.spentCents - l.plannedSpentCents);

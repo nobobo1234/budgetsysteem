@@ -223,13 +223,7 @@ describe('open punten', () => {
 	it('het signaalkaartje staat er tot je afsluit, en niet voor een maand zonder data', () => {
 		expect(closingSignal(db, '2026-10-01')).toBeNull();
 		spend('2026-09-05', 1000, 'Boodschappen');
-		expect(closingSignal(db, '2026-10-01')).toMatchObject({
-			month: '2026-09',
-			open: 1,
-			href: '/afsluiting/2026-09',
-			big: 'September',
-			small: 'afsluiten, nog 1 open punt'
-		});
+		expect(closingSignal(db, '2026-10-01')).toEqual({ month: '2026-09', open: 1 });
 		closeMonth(db, '2026-09', '2026-10-01');
 		expect(closingSignal(db, '2026-10-01')).toBeNull();
 	});

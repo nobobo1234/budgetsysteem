@@ -4,6 +4,7 @@
 	import { fly } from 'svelte/transition';
 	import { FIXED_GROUP, homeBars, monthStory, storySentence } from '#lib/budget.ts';
 	import { groupColor, groupHue } from '#lib/categoryColor.ts';
+	import { monthName } from '#lib/closing.ts';
 	import BudgetBar from '#lib/components/BudgetBar.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import ExpectedItem from '#lib/components/ExpectedItem.svelte';
@@ -86,8 +87,16 @@
 					'voorstellen voor vaste lasten'
 				)
 			},
-			// Kant-en-klaar van de server (closingSignal), zodat het hier geen code kost
-			data.closing ?? false
+			data.closing !== null && {
+				href: `/afsluiting/${data.closing.month}`,
+				icon: icons.afsluiting,
+				big: monthName(data.closing.month),
+				small:
+					data.closing.open > 0
+						? `afsluiten, nog ${data.closing.open} open ${plural(data.closing.open, 'punt', 'punten')}`
+						: 'afsluiten',
+				morph: 'titel'
+			}
 		];
 		return all.filter((s): s is Signal => s !== false);
 	});
