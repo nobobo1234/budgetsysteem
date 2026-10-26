@@ -32,6 +32,9 @@ describe('actieve tab', () => {
 		expect(activeTab('/instellingen/beveiliging')).toBe('/instellingen');
 		expect(activeTab('/transacties/0b7f3c52')).toBe('/transacties');
 		expect(activeTab('/te-controleren')).toBe('/');
+		expect(activeTab('/import')).toBe('/instellingen');
+		expect(activeTab('/analyses')).toBe('/analyses');
+		expect(activeTab('/analyses/trend')).toBe('/analyses');
 		// Geen voorvoegsel-fout: /te-krijgen is niet /te
 		expect(activeTab('/bestaat-niet')).toBe('');
 	});

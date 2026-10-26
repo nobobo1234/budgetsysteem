@@ -2,7 +2,7 @@
 	import { onMount, tick } from 'svelte';
 	import { page } from '$app/state';
 	import { afterNavigate, onNavigate, refreshAll } from '$app/navigation';
-	import { budget, importeren, meer, overzicht, transacties } from '#lib/icons.ts';
+	import { analyses, budget, meer, overzicht, transacties } from '#lib/icons.ts';
 	import { activeTab } from '#lib/nav.ts';
 	import { nav } from '#lib/nav.svelte.ts';
 	import { flush } from '#lib/offline/queue.ts';
@@ -17,7 +17,7 @@
 		{ href: '/', label: 'Overzicht', icon: overzicht },
 		{ href: '/transacties', label: 'Transacties', icon: transacties },
 		{ href: '/budget', label: 'Budget', icon: budget },
-		{ href: '/import', label: 'Import', icon: importeren },
+		{ href: '/analyses', label: 'Analyses', icon: analyses },
 		{ href: '/instellingen', label: 'Meer', icon: meer }
 	] as const;
 
