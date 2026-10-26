@@ -71,6 +71,12 @@ function details(): { tx: string; recurring: string; receipt: string; tag: strin
 	return { tx, recurring, receipt, tag };
 }
 
+function previousMonth(): string {
+	const now = new Date();
+	const d = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+	return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
 /** Alle schermen achter de login; subpagina's zonder eigen tab apart. */
 function routes(ids: { tx: string; recurring: string; receipt: string; tag: string }) {
 	const sub = [
@@ -80,7 +86,9 @@ function routes(ids: { tx: string; recurring: string; receipt: string; tag: stri
 		`/vaste-lasten/${ids.recurring}`,
 		`/bonnen/${ids.receipt}`,
 		`/tags/${ids.tag}`,
-		'/analyses/boodschappen'
+		'/analyses/boodschappen',
+		'/afsluiting',
+		`/afsluiting/${previousMonth()}`
 	] as string[];
 	return { tabs: [...TABS] as string[], sub };
 }

@@ -99,6 +99,13 @@
       "when": 1793033638036,
       "tag": "0013_tags",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1793048754912,
+      "tag": "0014_maandafsluiting",
+      "breakpoints": true
     }
   ]
 }

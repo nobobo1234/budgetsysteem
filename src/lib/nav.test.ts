@@ -35,6 +35,9 @@ describe('actieve tab', () => {
 		expect(activeTab('/import')).toBe('/instellingen');
 		expect(activeTab('/analyses')).toBe('/analyses');
 		expect(activeTab('/analyses/trend')).toBe('/analyses');
+		// De afsluiting en de lijst afgesloten maanden horen bij Analyses
+		expect(activeTab('/afsluiting')).toBe('/analyses');
+		expect(activeTab('/afsluiting/2026-09')).toBe('/analyses');
 		// Geen voorvoegsel-fout: /te-krijgen is niet /te
 		expect(activeTab('/bestaat-niet')).toBe('');
 	});
@@ -67,5 +70,11 @@ describe('meeschuiven tussen pagina’s', () => {
 		expect(morphPlan(detail, '/vaste-lasten')?.source).toBe('/vaste-lasten');
 		expect(morphPlan('/budget', detail)).toBeNull();
 		expect(morphPlan('/', '/vaste-lasten/niet-een-id')).toBeNull();
+	});
+
+	it('de maand schuift van het signaalkaartje of de lijst naar de kop van de afsluiting', () => {
+		expect(morphPlan('/', '/afsluiting/2026-09')?.parts).toEqual(['titel']);
+		expect(morphPlan('/afsluiting/2026-09', '/afsluiting')?.source).toBe('/afsluiting');
+		expect(morphPlan('/budget', '/afsluiting/2026-09')).toBeNull();
 	});
 });

@@ -698,3 +698,22 @@ export const transactionTags = sqliteTable(
 		check('transaction_tags_auto_active', sql`${t.source} = 'handmatig' OR ${t.active} = 1`)
 	]
 );
+
+// Maandafsluiting (spec: Analyses → Maandafsluiting). Eén per maand: een momentopname van de
+// cijfers bij het afsluiten en de open punten van dat moment, allebei als JSON zonder IBANs of
+// omschrijvingen. De transacties blijven de waarheid; afsluiten zet niets op slot.
+export const monthClosings = sqliteTable(
+	'month_closings',
+	{
+		id: id(),
+		month: text('month').notNull().unique(),
+		closedAt: text('closed_at')
+			.notNull()
+			.default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+		snapshot: text('snapshot', { mode: 'json' }).notNull(),
+		openItems: text('open_items', { mode: 'json' }).notNull()
+	},
+	(t) => [
+		check('month_closings_month_format', sql`${t.month} GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]'`)
+	]
+);

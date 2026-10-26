@@ -13,6 +13,7 @@ import {
 	unauthorized
 } from '#lib/server/guard.ts';
 import { budgetCheckSoon, startBudgetNotifications } from '#lib/server/budget-notify.ts';
+import { scheduleClosingNotifications } from '#lib/server/closing-notify.ts';
 import { startJobs } from '#lib/server/jobs.ts';
 import { log } from '#lib/server/log.ts';
 import { requestLimiter } from '#lib/server/ratelimit.ts';
@@ -39,6 +40,8 @@ export const init: ServerInit = () => {
 	startRecurringNotifications(db);
 	// Pushmelding als een categorie op 90% komt, kort na een wijziging
 	startBudgetNotifications(db);
+	// Pushmelding om 9:00 als de afsluiting van de vorige maand klaarstaat
+	scheduleClosingNotifications(db());
 	// Bonnen lezen met Haiku; zonder API-sleutel blijven ze wachten tot die er is
 	const apiKey = config().ANTHROPIC_API_KEY;
 	if (apiKey) {

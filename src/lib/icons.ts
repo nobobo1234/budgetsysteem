@@ -119,3 +119,9 @@ export const boodschappen: IconDef = {
 
 // Een vlag: een tag markeert een periode, zoals een reis
 export const tags: IconDef = { hue: 235, path: 'M5.5 21V3.5 M5.5 4.5h12l-2.5 4.25 2.5 4.25h-12' };
+
+// Een kalenderblad met een vink: de maand afsluiten
+export const afsluiting: IconDef = {
+	hue: 345,
+	path: 'M4 5.5h16V20H4z M4 9.5h16 M8.5 3.5v4 M15.5 3.5v4 M9 14.5l2.2 2.2 4-4.2'
+};

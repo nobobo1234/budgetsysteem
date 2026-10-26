@@ -133,7 +133,8 @@ for (const path of [
 	'/instellingen/beveiliging',
 	'/instellingen/apparaten',
 	'/instellingen/rekeningen',
-	'/analyses/boodschappen'
+	'/analyses/boodschappen',
+	'/afsluiting'
 ]) {
 	test(`${path} past op een telefoonscherm`, async ({ page }) => {
 		await page.goto(path);

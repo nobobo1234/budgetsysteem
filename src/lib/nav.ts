@@ -44,6 +44,8 @@ export const TABS = ['/', '/transacties', '/budget', '/analyses', '/instellingen
 
 /** Pagina's met een vaste tab: een subpagina laat de tab van haar ouder actief. */
 const TAB_OF: [prefix: string, tab: string][] = [
+	// De afsluiting hoort bij Analyses (spec: Analyses → Maandafsluiting)
+	['/afsluiting', '/analyses'],
 	['/te-controleren', '/'],
 	['/vaste-lasten', '/budget'],
 	['/categorieen', '/budget'],
