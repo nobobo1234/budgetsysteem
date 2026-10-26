@@ -1,4 +1,3 @@
-import { FIXED_GROUP } from '#lib/budget.ts';
 import { shiftMonth, toIsoDate } from '#lib/dates.ts';
 import { monthAnalysis } from '#lib/server/analyses.ts';
 import { db } from '#lib/server/db/index.ts';
@@ -14,8 +13,6 @@ export const load: PageServerLoad = ({ url }) => {
 	const month = asked && MONTH.test(asked) && asked <= current ? asked : current;
 	return {
 		analysis: monthAnalysis(db(), month, today),
-		// Hier en niet in de pagina: budget.ts zou anders een eigen chunk op het startscherm worden
-		fixedGroup: FIXED_GROUP,
 		previous: shiftMonth(month, -1),
 		next: month < current ? shiftMonth(month, 1) : null
 	};

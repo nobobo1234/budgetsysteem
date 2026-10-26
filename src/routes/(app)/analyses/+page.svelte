@@ -8,6 +8,7 @@
 	import StackedBar, { type Segment } from '#lib/components/StackedBar.svelte';
 	import Tile from '#lib/components/Tile.svelte';
 	import { percent, ratio } from '#lib/analyses.ts';
+	import { FIXED_GROUP } from '#lib/budget.ts';
 	import { groupColor } from '#lib/categoryColor.ts';
 	import { formatDayMonth, formatMonth } from '#lib/dates.ts';
 	import { formatCents } from '#lib/money.ts';
@@ -73,7 +74,7 @@
 							key: 'vast',
 							label: 'Vaste lasten die nog komen',
 							cents: f.plannedLeftCents,
-							color: groupColor(data.fixedGroup) ?? undefined,
+							color: groupColor(FIXED_GROUP) ?? undefined,
 							hatched: true
 						}
 					]
@@ -254,7 +255,7 @@
 							<span class="meter" aria-hidden="true">
 								<span
 									class="fill"
-									style:--c={groupColor(data.fixedGroup)}
+									style:--c={groupColor(FIXED_GROUP)}
 									style:--len={Math.min(1, ratio(r.reservedCents, r.expectedCents))}
 								></span>
 							</span>
@@ -286,7 +287,7 @@
 						key: 'vast',
 						label: 'Vaste lasten',
 						cents: a.fixedCents,
-						color: groupColor(data.fixedGroup) ?? undefined
+						color: groupColor(FIXED_GROUP) ?? undefined
 					},
 					...(a.forecast && a.plannedLeftCents > 0
 						? [
@@ -294,7 +295,7 @@
 									key: 'komt',
 									label: 'Komt nog',
 									cents: a.plannedLeftCents,
-									color: groupColor(data.fixedGroup) ?? undefined,
+									color: groupColor(FIXED_GROUP) ?? undefined,
 									hatched: true
 								}
 							]

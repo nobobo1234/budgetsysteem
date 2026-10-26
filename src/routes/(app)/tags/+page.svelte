@@ -3,12 +3,13 @@
 	import { page } from '$app/state';
 	import BackLink from '#lib/components/BackLink.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
+	import IconBadge from '#lib/components/IconBadge.svelte';
 	import Sheet from '#lib/components/Sheet.svelte';
 	import StackedBar from '#lib/components/StackedBar.svelte';
 	import TagFields from '#lib/components/TagFields.svelte';
 	import Toast from '#lib/components/Toast.svelte';
 	import { groupColor } from '#lib/categoryColor.ts';
-	import * as icons from '#lib/icons-extra.ts';
+	import * as icons from '#lib/icons.ts';
 	import { formatCents } from '#lib/money.ts';
 	import { formatPeriod, tagSegments, type TagState } from '#lib/tags.ts';
 
@@ -53,18 +54,7 @@
 				<li>
 					<article class="card tag" aria-labelledby="tag-{t.id}">
 						<div class="head">
-							<span class="icon-badge hue" style:--h={t.hue} aria-hidden="true">
-								<svg viewBox="0 0 24 24"
-									><path
-										d={icons.tags.path}
-										fill="none"
-										stroke="currentColor"
-										stroke-width="1.7"
-										stroke-linecap="round"
-										stroke-linejoin="round"
-									/></svg
-								>
-							</span>
+							<IconBadge icon={icons.tags} hue={t.hue} />
 							<h2 id="tag-{t.id}">
 								<a href="/tags/{t.id}" class="stretch">{t.name}</a>
 							</h2>
