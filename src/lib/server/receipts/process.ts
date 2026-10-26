@@ -14,6 +14,7 @@ import { telemetryDb } from '../telemetry/index.ts';
 import { deleteTransaction, updateTransaction } from '../transactions.ts';
 import { dateInRange } from '../validation.ts';
 import type { FieldStatus } from './checks.ts';
+import { clearLines, storeLines } from './lines.ts';
 import {
 	isComplete,
 	matchQueryFor,
@@ -272,8 +273,9 @@ export function saveReading(
 	return db.transaction((tx) => {
 		const receipt = tx.select().from(receipts).where(eq(receipts.id, receiptId)).get();
 		if (!receipt || receipt.status !== 'wordt_gelezen') return null;
-		// Opnieuw gelezen: wat er van een eerdere lezing als lijst stond, telt niet meer
+		// Opnieuw gelezen: wat er van een eerdere lezing als lijst of als regels stond, telt niet meer
 		tx.delete(receiptItems).where(eq(receiptItems.receiptId, receiptId)).run();
+		clearLines(tx, receiptId);
 		if (!result.ok) {
 			const fields = emptyFields();
 			tx.update(receipts)
@@ -327,6 +329,8 @@ export function saveReading(
 		} else {
 			plan = planReceipt(result.outcome, result.fields, receiptCandidates(tx, result.fields));
 			applyPlan(tx, receiptId, plan, result.fields, now);
+			// Zeker of controleren is verwerkt; een onzekere bon pas na de review-inbox
+			if (result.outcome !== 'onzeker') storeLines(tx, receiptId, result.fields);
 		}
 		const after = tx
 			.select({ transactionId: receipts.transactionId, handledAt: receipts.handledAt })
@@ -487,6 +491,7 @@ export function settleReceipt(db: DB, id: string, choice: SettleChoice, now = ne
 			.set({ transactionId, handledAt: now.toISOString() })
 			.where(eq(receipts.id, id))
 			.run();
+		storeLines(tx, id, receipt.fields);
 		recordChange(
 			tx,
 			'verwerkt',
@@ -509,6 +514,7 @@ export function confirmReceipt(db: DB, id: string, now = new Date()): void {
 	if (receipt.handledAt) throw new ValidationError('Deze bon is al nagekeken');
 	db.transaction((tx) => {
 		tx.update(receipts).set({ handledAt: now.toISOString() }).where(eq(receipts.id, id)).run();
+		storeLines(tx, id, receipt.fields);
 		const own = ownTransaction(tx, receipt);
 		if (own) {
 			const before = tx.select().from(transactions).where(eq(transactions.id, own)).get();
@@ -533,7 +539,10 @@ export interface FieldPatch {
 	currency: string;
 }
 
-const CORRECTABLE: [keyof FieldPatch, CorrectableField][] = [
+/** De velden van de bon zelf; een productgroep pas je aan per regel (`lines.ts`). */
+type FieldName = Exclude<CorrectableField, 'productgroep'>;
+
+const CORRECTABLE: [keyof FieldPatch, FieldName][] = [
 	['store', 'winkel'],
 	['date', 'datum'],
 	['totalCents', 'totaal'],
@@ -545,12 +554,12 @@ const CORRECTABLE: [keyof FieldPatch, CorrectableField][] = [
  * dan telt het als correctie in de telemetrie (en als "zeker maar fout" als hij zeker heette).
  * Hoort er een transactie bij die uit deze bon ontstond, dan verandert die mee.
  */
-export function correctReceipt(db: DB, id: string, patch: FieldPatch): CorrectableField[] {
+export function correctReceipt(db: DB, id: string, patch: FieldPatch): FieldName[] {
 	const receipt = requireBon(db, id);
 	if (!dateInRange(patch.date)) throw new ValidationError('Datum ligt te ver weg');
 	const fields: StoredFields = { ...receipt.fields };
 	const confidence: StoredConfidence = structuredClone(receipt.confidence);
-	const corrected: CorrectableField[] = [];
+	const corrected: FieldName[] = [];
 	let sure = false;
 	let changed = false;
 	for (const [key, name] of CORRECTABLE) {
@@ -605,6 +614,7 @@ export function rereadReceipt(db: DB, id: string, now = new Date()): void {
 			})
 			.where(eq(receipts.id, id))
 			.run();
+		clearLines(tx, id);
 		enqueue(tx, READ_RECEIPT_JOB, now, { receiptId: id } satisfies ReadReceiptPayload);
 	});
 	runJobsSoon();

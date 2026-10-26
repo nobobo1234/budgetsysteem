@@ -22,6 +22,8 @@ const closed = [
 	['GET', '/bonnen/0b7f3c52-6a2e-4c8e-9a43-1f2d3e4c5b6a'],
 	['POST', '/bonnen/0b7f3c52-6a2e-4c8e-9a43-1f2d3e4c5b6a?/settle'],
 	['POST', '/bonnen/0b7f3c52-6a2e-4c8e-9a43-1f2d3e4c5b6a?/delete'],
+	['POST', '/bonnen/0b7f3c52-6a2e-4c8e-9a43-1f2d3e4c5b6a?/group'],
+	['GET', '/analyses/boodschappen'],
 	['GET', '/api/receipts/0b7f3c52-6a2e-4c8e-9a43-1f2d3e4c5b6a/image'],
 	['POST', '/terugbetalingen?/received'],
 	['POST', '/vaste-lasten/0b7f3c52-6a2e-4c8e-9a43-1f2d3e4c5b6a?/addShare'],
