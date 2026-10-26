@@ -47,3 +47,10 @@ export const bonnen: IconDef = {
 	hue: 185,
 	path: 'M6 3h12v18l-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5L6 21z M9 8h6 M9 12h6 M9 16h3'
 };
+
+// Een kalenderblad met een vink: de maand afsluiten. Ook op het signaalkaartje, maar dat
+// krijgt het icoon van de server mee (closingSignal), zodat het niet in de eerste bundel zit.
+export const afsluiting: IconDef = {
+	hue: 345,
+	path: 'M4 5.5h16V20H4z M4 9.5h16 M8.5 3.5v4 M15.5 3.5v4 M9 14.5l2.2 2.2 4-4.2'
+};

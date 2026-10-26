@@ -5,11 +5,10 @@
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import StackedBar from '#lib/components/StackedBar.svelte';
 	import Toast from '#lib/components/Toast.svelte';
-	import { FIXED_GROUP } from '#lib/budget.ts';
 	import { groupColor } from '#lib/categoryColor.ts';
 	import { lastDayOf, monthName, outcomeWords, type OpenItem } from '#lib/closing.ts';
 	import { formatDayMonth, formatShortDate, shiftMonth } from '#lib/dates.ts';
-	import { afsluiting } from '#lib/icons.ts';
+	import { afsluiting } from '#lib/icons-extra.ts';
 	import { formatCents } from '#lib/money.ts';
 	import { displayName } from '#lib/text.ts';
 
@@ -85,13 +84,13 @@
 				key: 'vast',
 				label: 'Vaste lasten',
 				cents: c.split.fixedCents,
-				color: groupColor(FIXED_GROUP) ?? undefined
+				color: groupColor(p.fixedGroup) ?? undefined
 			},
 			{
 				key: 'reserveringen',
 				label: 'Reserveringen',
 				cents: c.split.reservedCents,
-				color: groupColor(FIXED_GROUP) ?? undefined,
+				color: groupColor(p.fixedGroup) ?? undefined,
 				hatched: true
 			},
 			{

@@ -1,5 +1,6 @@
 import { and, asc, desc, eq, gte, inArray, lte, max, min, sql } from 'drizzle-orm';
 import { z } from 'zod';
+import { FIXED_GROUP } from '../budget.ts';
 import {
 	changedSince,
 	closingSplit,
@@ -7,6 +8,7 @@ import {
 	extremes,
 	lastDayOf,
 	limitProposals,
+	monthName,
 	openItemsFor,
 	outcomeOf,
 	type Change,
@@ -18,6 +20,7 @@ import {
 	type OpenSources
 } from '../closing.ts';
 import { shiftMonth } from '../dates.ts';
+import { afsluiting } from '../icons-extra.ts';
 import { recordChange } from './audit.ts';
 import { monthOverview, setBudget, spendingByCategory } from './budgets.ts';
 import type { Conn, DB } from './db/index.ts';
@@ -238,6 +241,7 @@ export function monthContent(db: DB, month: string, today: string): ClosingSnaps
 	const reservedCents = res.reduce((s, r) => s + r.amountCents, 0);
 	const lines = overview.lines.map((l) => ({
 		...l,
+		fixed: l.group === FIXED_GROUP,
 		plannedSpentCents: planned.get(l.categoryId)?.plannedSpentCents ?? 0
 	}));
 
@@ -410,6 +414,8 @@ export interface ClosingPage {
 	/** `loopt`: de maand is nog niet voorbij; `klaar`: klaar om af te sluiten */
 	status: 'loopt' | 'klaar' | 'afgesloten';
 	hasData: boolean;
+	/** De groep van de vaste lasten, voor de kleur in de balk */
+	fixedGroup: string;
 	/** Bij een afgesloten maand de momentopname, anders de cijfers van nu */
 	content: ClosingSnapshot;
 	extremes: ReturnType<typeof extremes>;
@@ -444,6 +450,7 @@ export function closingPage(db: DB, month: string, today: string): ClosingPage {
 		month,
 		status: running ? 'loopt' : closing ? 'afgesloten' : 'klaar',
 		hasData: hasMonthData(db, month),
+		fixedGroup: FIXED_GROUP,
 		content,
 		extremes: extremes(content.categories),
 		open: running ? [] : openItems(db, month, today),
@@ -456,16 +463,24 @@ export function closingPage(db: DB, month: string, today: string): ClosingPage {
 
 /**
  * Het signaalkaartje op het startscherm: vanaf de eerste staat de vorige maand klaar tot je hem
- * afsluit. Niet voor een maand waar niets over bekend is, zoals vóór de eerste import.
+ * afsluit. Niet voor een maand waar niets over bekend is, zoals vóór de eerste import. Het
+ * kaartje komt kant-en-klaar van de server, met icoon: zo blijft de eerste JS-bundel van het
+ * startscherm klein (spec: Performance-budget).
  */
-export function closingSignal(
-	db: DB,
-	today: string,
-	inbox?: ReviewInbox
-): { month: string; open: number } | null {
+export function closingSignal(db: DB, today: string, inbox?: ReviewInbox) {
 	const month = shiftMonth(today.slice(0, 7), -1);
 	if (getClosing(db, month) || !hasMonthData(db, month)) return null;
-	return { month, open: openItems(db, month, today, inbox).length };
+	const open = openItems(db, month, today, inbox).length;
+	return {
+		month,
+		open,
+		href: `/afsluiting/${month}`,
+		icon: afsluiting,
+		big: monthName(month),
+		small:
+			open === 0 ? 'afsluiten' : `afsluiten, nog ${open} open ${open === 1 ? 'punt' : 'punten'}`,
+		morph: 'titel' as const
+	};
 }
 
 /** Voor de lijst: de laatste maand die nog niet afgesloten is, als die er is. */

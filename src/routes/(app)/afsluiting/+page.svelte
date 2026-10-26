@@ -3,7 +3,7 @@
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import { monthName, outcomeSentence } from '#lib/closing.ts';
 	import { formatDayMonth } from '#lib/dates.ts';
-	import { afsluiting } from '#lib/icons.ts';
+	import { afsluiting } from '#lib/icons-extra.ts';
 
 	// Afgesloten maanden (spec: Analyses → Maandafsluiting, Terugkijken): per maand de uitkomst,
 	// elke afsluiting blijft te openen. Bovenaan de maand die nog klaarstaat, als die er is.

@@ -186,11 +186,11 @@ describe('balk en uitschieters', () => {
 		const split = closingSplit(
 			[
 				// Huur: bevestigde vaste last in de groep Vaste lasten
-				{ group: 'Vaste lasten', spentCents: 90000, plannedSpentCents: 90000 },
+				{ fixed: true, spentCents: 90000, plannedSpentCents: 90000 },
 				// Contributie, halfjaarlijks uitgesmeerd: afgeschreven (9000) uit de reservering
 				// (1500 deze maand opzij, 9000 eruit), dus netto 1500 uitgegeven
-				{ group: 'Vrije tijd', spentCents: 1500 + 4000, plannedSpentCents: 1500 },
-				{ group: 'Dagelijks', spentCents: 30000, plannedSpentCents: 0 }
+				{ fixed: false, spentCents: 1500 + 4000, plannedSpentCents: 1500 },
+				{ fixed: false, spentCents: 30000, plannedSpentCents: 0 }
 			],
 			1500,
 			2500,
