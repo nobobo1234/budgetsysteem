@@ -166,6 +166,7 @@ Bedragen staan altijd als hele centen (integer) in euro; een vreemde valuta is e
 | sessions, passkeys | apparaat, laatst gebruikt, ingetrokken |
 | balance\_anchors | rekening (uniek), datum, bedrag\_cent, bron (import / handmatig), import — het startsaldo voor de saldocheck: het saldo aan het eind van die dag |
 | balance\_checks | rekening, datum (samen uniek), bedrag\_cent — het echte saldo volgens de bank; het verschil rekent de app steeds opnieuw uit |
+| month\_closings (fase 4) | maand (uniek), afgesloten op, momentopname (totalen per categorie, vaste lasten, reserveringen, te krijgen; als JSON, zonder IBANs of omschrijvingen), open punten bij het afsluiten |
 | jobs, audit\_log | achtergrondtaken; wijzigingen met ongedaan maken |
 
 ### Startcategorieën
@@ -220,7 +221,7 @@ Het startscherm toont één getal, wat je deze maand nog vrij hebt, met daaronde
 - Bovenaan: nog vrij deze maand (som van de limieten min de uitgaven en reserveringen in budgetcategorieën).
 - Per categorie een balk met tempo: uitgegeven als deel van de limiet tegenover het deel van de maand dat voorbij is. Boodschappen op 70% bij dag 19 van 31 kleurt oranje. Geplande vaste lasten en reserveringen tellen niet mee in het tempo (zie Vaste lasten). Op het startscherm staan de categorieën uit de groep Vaste lasten samen als één balk, en daarnaast de vier categorieën die het dichtst bij hun limiet zitten; alle balken staan op Budget.
 - Onder het getal een maandlijn: uitgegeven, de vaste lasten die nog komen en wat vrij is, met een streepje voor vandaag. Daaronder één zin, zoals "Nog 7 dagen, ongeveer € 68 per dag. Je ligt op schema." Per dag is wat vrij is min de vaste lasten die deze maand nog komen, gedeeld door de resterende dagen (vandaag telt mee).
-- Daaronder signaalkaartjes voor wat op je wacht: te krijgen, te controleren (de review-inbox), de saldocheck en voorstellen voor vaste lasten. Een kaartje staat er alleen als er iets is.
+- Daaronder signaalkaartjes voor wat op je wacht: te krijgen, te controleren (de review-inbox), de saldocheck, voorstellen voor vaste lasten en de maandafsluiting. Een kaartje staat er alleen als er iets is.
 - Dan verwachte vaste lasten die op bevestiging wachten, maximaal drie tegelijk, en wat later deze maand nog komt.
 
 **Snelinvoer** — één veld, lokaal geparsed, zonder AI:
@@ -267,7 +268,7 @@ Het startscherm toont één getal, wat je deze maand nog vrij hebt, met daaronde
 - een categorie zit op 90% van de limiet (gemeten op het deel buiten geplande vaste lasten en reserveringen);
 - een Tikkie staat 14 dagen open;
 - een aandeel in een gedeelde vaste last is een week na de ontvangstdag niet volledig binnen;
-- de maand is voorbij en de afsluiting staat klaar.
+- de maand is voorbij en de afsluiting staat klaar (zie Analyses → Maandafsluiting).
 
 Op het vergrendelscherm staan standaard geen bedragen of namen, tenzij je dat aanzet.
 
@@ -491,6 +492,24 @@ Doel: zien waar het boodschappengeld heen gaat, niet elk product volgen. Daarom 
 - **Privacy.** Bonregels blijven op de server. Latere AI-analyses krijgen hooguit totalen per productgroep, nooit losse regels of bonfoto's.
 - **Bewust niet.** Geen productentabel, normalisatie van productnamen, prijsverloop per product of aantal per regel. De regels staan in de tabel, dus dat kan later alsnog als de groepen te grof blijken.
 
+**Maandafsluiting**
+
+Eén moment per maand om terug te kijken en de volgende maand bij te stellen. Hij vervangt geen analyse, maar bundelt wat er over die maand te zeggen is, en laat zien wat nog openstaat voordat de cijfers kloppen.
+
+- **Wanneer.** Vanaf de eerste van de nieuwe maand staat de afsluiting van de vorige klaar, als signaalkaartje op het startscherm ("September afsluiten") tot je hem afsluit. De pushmelding (soort Maandafsluiting) komt om 9:00 op de eerste dag dat de maand voorbij is en er niets meer openstaat; staat er op de 5e nog iets open, dan toch, met hoeveel er openstaat. Eén melding per maand.
+- **Open punten.** Bovenaan staat wat de cijfers nog onzeker maakt, elk met een link: verwachte posten uit die maand die nog op bevestiging wachten, items uit die maand in de review-inbox, en een rekening zonder saldocheck na de laatste dag van de maand. Afsluiten kan ook met open punten; ze worden dan bij de afsluiting bewaard en blijven zichtbaar.
+- **Inhoud.**
+  - Kop met de maand en één zin in Fraunces italic over de uitkomst: "Je hield € 142 over" of "Je ging € 38 over je budget".
+  - Limiet tegenover uitgegeven als één balk, met vaste lasten, reserveringen en dagelijks apart, zoals op Budget.
+  - De drie categorieën die het meest over hun limiet gingen en de drie met het meeste over.
+  - Vergelijking met het gemiddelde van de drie maanden ervoor: totaal, en de grootste stijger en daler per categorie.
+  - Wat er aan het eind van de maand nog te krijgen was, en wat er opzij ging voor reserveringen.
+  - Als er data voor is: de boodschappen per productgroep van die maand en de tags die in die maand liepen, elk als Meer-link.
+- **Volgende maand.** Een categorie die drie maanden achter elkaar over de limiet ging, of drie maanden onder 70% bleef, krijgt een voorstel voor een nieuwe limiet (het gemiddelde van die drie maanden, afgerond op hele euro's). Eén tik neemt het voorstel over voor de nieuwe maand; anders blijven de limieten zoals ze waren.
+- **Afsluiten.** De knop "Maand afsluiten" legt een momentopname vast in `month_closings`. De transacties blijven de waarheid: een late import of correctie in die maand blijft mogelijk, en de afsluiting toont dan "sinds afsluiten veranderd: € 12" naast de momentopname. Afsluiten zet niets op slot en verandert geen bedragen.
+- **Terugkijken.** Afgesloten maanden staan als lijst onder Analyses, met per maand de uitkomst; elke afsluiting blijft te openen.
+- **Testen.** Unit-tests voor het moment van de melding (inclusief de 5e en tijdzones), de open punten, de voorstellen voor limieten en het verschil sinds afsluiten; integratie voor afsluiten met een late import; e2e voor de flow vanaf het signaalkaartje.
+
 **Met AI** (later)
 
 - Maandsamenvatting: wat viel op tegenover vorige maanden. Het model krijgt alleen totalen per categorie en tegenpartij, geen IBANs.
@@ -524,12 +543,13 @@ Elk scherm staat in deze tabel. Een nieuw scherm krijgt eerst een regel hier, in
 
 | Scherm | Route | Bovenaan | Hoofdactie | Verder |
 | --- | --- | --- | --- | --- |
-| Overzicht | `/` | Nog vrij deze maand met de maandlijn en één zin over het tempo (Fraunces italic), daaronder de snelinvoer | Uitgave invoeren | Signaalkaartjes (te krijgen, te controleren, saldocheck, voorstellen voor vaste lasten), alleen als er iets is; te bevestigen: vaste lasten en terugbetalingen op hun ontvangstdag (één tik "ontvangen"), met monogram, de eerste drie en de rest via "Nog … meer", met "gemist of opgezegd?" (na 7 dagen) als eigen ingeklapte groep; binnenkort: verwachte posten later deze maand, elk een rij naar zijn vaste last; Recent (8 posten, zonder verwachte posten, met monogram en nette naam); per categorie de vaste lasten als één balk en de vier categorieën die het dichtst bij hun limiet zitten, in de kleur van hun groep, met een Meer-link naar Budget |
+| Overzicht | `/` | Nog vrij deze maand met de maandlijn en één zin over het tempo (Fraunces italic), daaronder de snelinvoer | Uitgave invoeren | Signaalkaartjes (te krijgen, te controleren, saldocheck, voorstellen voor vaste lasten, maandafsluiting), alleen als er iets is; te bevestigen: vaste lasten en terugbetalingen op hun ontvangstdag (één tik "ontvangen"), met monogram, de eerste drie en de rest via "Nog … meer", met "gemist of opgezegd?" (na 7 dagen) als eigen ingeklapte groep; binnenkort: verwachte posten later deze maand, elk een rij naar zijn vaste last; Recent (8 posten, zonder verwachte posten, met monogram en nette naam); per categorie de vaste lasten als één balk en de vier categorieën die het dichtst bij hun limiet zitten, in de kleur van hun groep, met een Meer-link naar Budget |
 | Transacties | `/transacties` | Zoekveld met filters op maand en categorie, die direct filteren; daaronder een staafdiagram met de uitgaven per dag in de gekozen maand (of deze maand), waarin een tik op een dag op die dag filtert | Zoeken | Lijst per dag met dagsaldo en de grootste uitgave van die dag, aantal en totalen voor het hele filter, pagina's van 50; per rij een monogram en de nette naam; vegen naar rechts bevestigt (te controleren of een verwachte vaste last), naar links opent een sheet met de categorieën |
 | Transactie | `/transacties/[id]` | Tegenpartij (nette naam, met de naam op het afschrift eronder als die anders is) en bedrag, groot | Opslaan (na "Bewerken") | Eerst lezen: Gegevens (categorie, datum, notitie) met "Bewerken", dat het formulier opent (bedrag, richting, datum, categorie, tegenpartij, notitie); een post zonder eurobedrag opent meteen in het formulier; voorgeschoten als gestapelde balk per persoon (open gearceerd) met de posten eronder, elk met monogram; bij een betaling de koppellijst met open posten; bij een bon een Meer-link "Bon bekijken"; verwijderen met bevestiging |
 | Budget | `/budget` | Maand met vorige en volgende; één gestapelde balk met vast (en wat daarvan nog komt), dagelijks en vrij | Limiet instellen | Per groep een kaart met een balk per categorie in de kleur van de groep; een tik op een balk opent een sheet om de limiet aan te passen (of weg te halen); categorieën zonder limiet ingeklapt ("8 zonder limiet"); op desktop twee kolommen; Meer-link naar categorieën en regels |
 | Vaste lasten | `/vaste-lasten` | Deze maand als strook van dag 1 tot het eind, met een stip per afschrijving (gevuld als hij al is afgeschreven) en een streep voor vandaag, plus "€ X van € Y al afgeschreven"; daaronder totaal per maand en per jaar | Voorstel bevestigen | Voorstellen ("Is Vattenfall een vaste last?") met volgende datum, categorie en uitsmeren; lijst met monogram, bedrag per maand, ritme, stand van de reservering, signalen en bij een gedeelde last jouw deel; gestopt ingeklapt. Bereikbaar via Budget en Meer; de tab Budget blijft actief |
 | Vaste last | `/vaste-lasten/[id]` | Tegenpartij en bedrag per keer, groot | Opslaan (na "Bewerken") | Afschrijvingen: staafdiagram van de laatste 12 (ook uit de import, ingezoomd op het verschil), waarin een prijsverhoging oranje is met het verschil erboven, en de laatste vier als lijst; eerst lezen: Gegevens (bedrag, ritme, volgende afschrijving, categorie, uitsmeren) met "Bewerken", dat het formulier opent (naam, verwacht bedrag, vast of wisselend, ritme, volgende afschrijving, categorie, uitsmeren); Gedeeld: aandelen per persoon (vast of percentage, ontvangstdag, van en tot), jouw deel, een ander bedrag vanaf een maand, bij een prijsverhoging een voorstel per persoon, onderaan "Aandeel toevoegen"; stoppen met bevestiging |
+| Maandafsluiting | `/afsluiting/[maand]` | De maand en één zin over de uitkomst (Fraunces italic), met de kop via SplitText | Maand afsluiten | Open punten met links; limiet tegenover uitgegeven als balk; drie categorieën over en drie met het meeste over; vergelijking met de drie maanden ervoor; te krijgen en reserveringen; voorstellen voor limieten van de nieuwe maand (één tik); Meer-links naar boodschappen en tags. Bereikbaar via het signaalkaartje, de melding en de lijst afgesloten maanden onder Analyses |
 | Categorieën | `/categorieen` | Tabs Categorieën en Regels | Nieuwe categorie | Per groep een kaart; bewerken in de rij (naam, groep, telt mee); gearchiveerd ingeklapt |
 | Regels | `/regels` | Tabs Categorieën en Regels | Nieuwe regel | Lijst als zin ("Tegenpartij bevat … → categorie") met filter; nieuwe regel als "Als … dan …", prioriteit ingeklapt; onderaan "Regels opnieuw toepassen" |
 | Import | `/import` | Sleepvak voor het bankbestand | Importeren | Na de import een verslag: oplopende tellers (nieuw, al bekend), de periode als tijdlijn met een streepje per maand, en kaartjes voor wat er gevonden is ("N vaste lasten gevonden", gekoppelde terugbetalingen, storno's te controleren); tegenpartijen zonder categorie met voorgestelde categorieën als chips (één tik maakt de regel) en een Select voor de rest; eerdere imports |
@@ -624,8 +644,9 @@ Beweging vertelt waar je bent en wat er net gebeurde. Elke beweging hieronder du
 | Saldocheck klopt | Het punt tussen app en bank veert in met een vink | CSS, 420 ms |
 | Vegen op een transactie | De rij volgt je vinger; achter de rij verschijnt de actie, die bij de drempel opveert | Pointer events, `transform`; terug met een veer, 260 ms |
 | Een bon wordt gelezen | Grijze balken op de plek van de velden ademen rustig; zodra Haiku klaar is, vervagen de herkende velden erin | CSS-animatie op `opacity`, 1,6 s heen en weer; de velden met een Svelte-fade van 240 ms; bij `prefers-reduced-motion` stilstaand |
+| Maandafsluiting | De kop komt per woord omhoog, daarna lopen de getallen op en vult de balk | GSAP SplitText en een timeline, samen hooguit 900 ms; bij `prefers-reduced-motion` direct het eindbeeld |
 
-Uit latere fasen: grote grafieken die zich opbouwen (fase 4) en SplitText voor koppen bij de maandafsluiting. Swipen op een transactie en de vink-animatie bij een verwachte post zijn er al.
+Uit latere fasen: grote grafieken die zich opbouwen (fase 4). Swipen op een transactie en de vink-animatie bij een verwachte post zijn er al.
 
 Bij `prefers-reduced-motion` vallen de View Transitions weg en worden alle andere animaties direct; niets hangt ervan af dat een animatie afspeelt.
 
@@ -783,7 +804,8 @@ Bij elke fase hoort naast "Klaar als" ook Klaar voor UI (zie Design en interacti
    - Daarna, als laatste blok van deze fase: **gedeelde vaste lasten** (personen, aandelen, terugbetalingen koppelen en het overzicht). Het bouwt direct op vaste lasten en Te krijgen, en levert elke maand iets op; het hoort niet in het klaar-criterium hierboven, zodat dat niet wacht. Tot dan telt de wifi bruto mee. Klaar als: twee maanden lang per huisgenoot klopt wat er binnen is, met alleen bevestigen als handwerk.
 3. **Bonnetjes.** Eerst het testplan op je eigen bonnen, dan de verwerking, de review-inbox, de koppellijst en de opdracht voor het deelmenu. Telemetrie: per Haiku-aanroep tokens, kosten, duur, uitkomst en of je velden achteraf corrigeerde.
    - Klaar als: de test het doel haalt, of we bewust kiezen voor altijd reviewen.
-4. **Analyses.** Grafieken, trends, verwachting einde maand, jaaroverzicht, tags, en boodschappen per productgroep uit bonregels (zie Analyses → Boodschappen per productgroep). Telemetrie: je eigen gebruik (dagen met invoer, tijd van openen tot opslaan).
+4. **Analyses.** Grafieken, trends, verwachting einde maand, jaaroverzicht, tags, en boodschappen per productgroep uit bonregels (zie Analyses → Boodschappen per productgroep), en de maandafsluiting (zie Analyses → Maandafsluiting). Telemetrie: je eigen gebruik (dagen met invoer, tijd van openen tot opslaan).
+   - Klaar als: drie maanden achter elkaar afgesloten met de maandafsluiting, waarbij je zonder export of spreadsheet ziet waar het geld heen ging, wat een tag kostte en hoe je boodschappen verdeeld zijn; en de Haiku-eval met productgroep haalt bij gevulde regels minstens 90% juiste groep.
 5. **AI en extra's.** Maandsamenvatting, vraagveld, MCP-server, garantie-herinneringen.
 
 Het testplan voor de bonnetjes kan parallel met fase 1: je verzamelt de bonnen toch al.
