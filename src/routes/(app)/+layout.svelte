@@ -8,6 +8,7 @@
 	import { flush } from '#lib/offline/queue.ts';
 	import { sync } from '#lib/offline/sync.svelte.ts';
 	import { refreshSubscription } from '#lib/push.ts';
+	import { startUsage } from '#lib/usage.ts';
 
 	let { children, data } = $props();
 
@@ -58,6 +59,7 @@
 
 	// Web-vitals pas laden als de browser even niets te doen heeft, buiten de eerste bundel
 	onMount(() => {
+		startUsage();
 		const start = () => void import('#lib/vitals.ts').then((m) => m.startVitals());
 		if ('requestIdleCallback' in window) requestIdleCallback(start, { timeout: 3000 });
 		else setTimeout(start, 1000);

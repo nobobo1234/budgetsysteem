@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { SvelteSet } from 'svelte/reactivity';
+	import { recordEntry } from '#lib/usage.ts';
 	import Select from '#lib/components/Select.svelte';
 	import { groupColor } from '#lib/categoryColor.ts';
 	import { formatShortDate, toIsoDate } from '#lib/dates.ts';
@@ -196,6 +197,7 @@
 		};
 		try {
 			await enqueue(item);
+			recordEntry('snelinvoer');
 			flashDone();
 			onsaved(item);
 			reset();

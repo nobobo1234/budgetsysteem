@@ -1,5 +1,6 @@
 <script lang="ts">
 	import * as icons from '#lib/icons.ts';
+	import { recordEntry } from '#lib/usage.ts';
 	import { tick } from 'svelte';
 	import { deserialize } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
@@ -210,7 +211,9 @@
 	}
 
 	async function confirmRow(tx: (typeof data.transactions)[number]) {
-		if (await act('confirm', { id: tx.id })) notify(`${displayName(tx.counterparty)} bevestigd.`);
+		if (!(await act('confirm', { id: tx.id }))) return;
+		if (tx.status === 'verwacht') recordEntry('verwacht');
+		notify(`${displayName(tx.counterparty)} bevestigd.`);
 	}
 
 	function pickCategory(tx: (typeof data.transactions)[number]) {

@@ -96,6 +96,12 @@ export const beveiliging: IconDef = {
 
 export const status: IconDef = { hue: 270, path: 'M3 12h4l2.5-6 5 12 2.5-6h4' };
 
+// Een vlammetje: je reeks, dagen op rij met invoer (volhouden)
+export const gebruik: IconDef = {
+	hue: 345,
+	path: 'M12 21c-3.9 0-6.5-2.6-6.5-6 0-3.6 2.7-5.6 3.7-9 1.9 1.3 3 3.2 3 5 1-.6 1.7-1.7 2-3 2.4 1.7 4.3 4.3 4.3 7 0 3.4-2.6 6-6.5 6z M12 21c-1.6 0-2.7-1.1-2.7-2.6 0-1.6 1.2-2.5 2.7-4.4 1.5 1.9 2.7 2.8 2.7 4.4 0 1.5-1.1 2.6-2.7 2.6z'
+};
+
 export const apparaten: IconDef = {
 	hue: 115,
 	path: 'M7 3h10v18H7z M10.5 18h3 M12 14V7 M9.5 9.5 12 7l2.5 2.5'

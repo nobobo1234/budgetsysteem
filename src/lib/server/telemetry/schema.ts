@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { index, integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { ENTRY_KINDS } from '../../usage.ts';
 
 // Telemetrie staat in een aparte database (spec: Telemetrie en monitoring) en wordt na
 // 90 dagen opgeruimd. Nooit persoonsgegevens: geen foutmeldingen, geen invoer, alleen soort
@@ -96,4 +97,25 @@ export const receiptReads = sqliteTable(
 		index('receipt_reads_at_idx').on(t.at),
 		index('receipt_reads_receipt_idx').on(t.receiptId)
 	]
+);
+
+/**
+ * Je eigen gebruik (spec: Telemetrie en monitoring, Volhouden): één rij per invoer, met de dag
+ * waarop je hem invoerde, de soort en hoe lang het duurde van het openen van de app tot het
+ * opslaan. Nooit een bedrag, tegenpartij of welke transactie het was.
+ */
+
+export const usageEntries = sqliteTable(
+	'usage_entries',
+	{
+		// Willekeurig ID van de client: opnieuw versturen telt niet dubbel
+		id: text('id').primaryKey(),
+		at: at(),
+		// Dag van invoeren in lokale tijd (`YYYY-MM-DD`), ook als hij pas later synchroniseert
+		day: text('day').notNull(),
+		kind: text('kind', { enum: ENTRY_KINDS }).notNull(),
+		// Van openen of terugkeren naar de voorgrond tot opslaan; leeg na de eerste invoer
+		durationMs: integer('duration_ms')
+	},
+	(t) => [index('usage_entries_at_idx').on(t.at), index('usage_entries_day_idx').on(t.day)]
 );

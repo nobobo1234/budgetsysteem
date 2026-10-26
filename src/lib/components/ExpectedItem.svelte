@@ -2,6 +2,7 @@
 	// Een verwachte vaste last op het startscherm. Eén tik bevestigt; bij een wisselende last
 	// vul je eerst het echte bedrag in. Een week na de verwachte dag: gemist of opgezegd?
 	import { enhance, type SubmitFunction } from '$app/forms';
+	import { recordEntry } from '#lib/usage.ts';
 	import { groupColor, groupHue } from '#lib/categoryColor.ts';
 	import { formatShortDate } from '#lib/dates.ts';
 	import { centsToInput, formatCents } from '#lib/money.ts';
@@ -47,6 +48,7 @@
 		return async ({ result, update }) => {
 			busy = false;
 			if (result.type === 'success') {
+				if (reason === null) recordEntry('verwacht');
 				ondone(
 					reason === null
 						? `${name} bevestigd.`

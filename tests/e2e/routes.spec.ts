@@ -55,6 +55,8 @@ const closed = [
 	['POST', '/transacties?/confirm'],
 	['POST', '/transacties?/category'],
 	['POST', '/api/vitals'],
+	['POST', '/api/usage'],
+	['GET', '/instellingen/gebruik'],
 	['POST', '/?/confirmExpected'],
 	['POST', '/vaste-lasten?/confirm'],
 	['POST', '/api/auth/passkeys/options'],

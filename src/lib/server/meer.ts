@@ -17,9 +17,19 @@ import { tagsTile } from './tags.ts';
 import { collectHealth, healthPaths } from './telemetry/health.ts';
 import { telemetryDb } from './telemetry/index.ts';
 import { attention } from './telemetry/status.ts';
+import { usageSummary } from './telemetry/usage.ts';
 
 // Wat de tegels op Meer laten zien, en of de tab Meer een stip krijgt (spec: Schermen, Navigatie).
 // Alleen tellingen en totalen; geen IBANs of omschrijvingen.
+
+/** Je eigen gebruik deze week, voor de tegel Gebruik. */
+function usageTile(today: string) {
+	const usage = usageSummary(telemetryDb(), today);
+	const week = usage.weeks[0];
+	return week
+		? { streak: usage.streak, days: week.daysWithEntry, daysSoFar: week.daysSoFar }
+		: null;
+}
 
 function statusAttention(): number {
 	const health = collectHealth({
@@ -91,6 +101,7 @@ export function meerTiles(db: DB, today = toIsoDate(new Date())) {
 		},
 		tags: tagsTile(db, today),
 		recoveryCode: hasRecoveryCode(db),
-		statusAttention: statusAttention()
+		statusAttention: statusAttention(),
+		usage: usageTile(today)
 	};
 }
