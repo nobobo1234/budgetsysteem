@@ -5,6 +5,7 @@ import { parseAmount } from '#lib/money.ts';
 import { monthOverview, setBudget } from '#lib/server/budgets.ts';
 import { db } from '#lib/server/db/index.ts';
 import { recurringOverview } from '#lib/server/recurring.ts';
+import { hasEnoughHistory } from '#lib/server/startLimits.ts';
 import type { Actions, PageServerLoad } from './$types';
 
 const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
@@ -18,6 +19,7 @@ export const load: PageServerLoad = ({ url }) => {
 	const month = monthFrom(url.searchParams.get('maand'));
 	const today = toIsoDate(new Date());
 	const fixed = recurringOverview(db(), today);
+	const isCurrent = month === today.slice(0, 7);
 	return {
 		overview: monthOverview(db(), month, today),
 		fixed: {
@@ -27,7 +29,9 @@ export const load: PageServerLoad = ({ url }) => {
 		},
 		previous: shiftMonth(month, -1),
 		next: shiftMonth(month, 1),
-		isCurrent: month === today.slice(0, 7)
+		isCurrent,
+		// Voorstel uit historie: alleen voor de lopende maand (spec: Startlimieten uit historie)
+		startLimits: isCurrent && hasEnoughHistory(db(), today)
 	};
 };
 
