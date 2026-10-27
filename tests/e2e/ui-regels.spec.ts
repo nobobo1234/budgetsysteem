@@ -87,6 +87,7 @@ function routes(ids: { tx: string; recurring: string; receipt: string; tag: stri
 		`/bonnen/${ids.receipt}`,
 		`/tags/${ids.tag}`,
 		'/analyses/boodschappen',
+		'/budget/startlimieten',
 		'/afsluiting',
 		`/afsluiting/${previousMonth()}`
 	] as string[];

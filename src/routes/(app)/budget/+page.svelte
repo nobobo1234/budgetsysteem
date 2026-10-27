@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { enhance, type SubmitFunction } from '$app/forms';
 	import BudgetBar from '#lib/components/BudgetBar.svelte';
+	import EmptyState from '#lib/components/EmptyState.svelte';
 	import Sheet from '#lib/components/Sheet.svelte';
 	import StackedBar from '#lib/components/StackedBar.svelte';
 	import Toast from '#lib/components/Toast.svelte';
@@ -9,6 +10,7 @@
 	import { groupColor } from '#lib/categoryColor.ts';
 	import { formatDayMonth, formatMonth } from '#lib/dates.ts';
 	import { GROCERIES, groceriesHref } from '#lib/groceries.ts';
+	import { budget } from '#lib/icons.ts';
 	import { centsToInput, formatCents } from '#lib/money.ts';
 	import { displayName } from '#lib/text.ts';
 
@@ -21,6 +23,8 @@
 	const groups = $derived(Map.groupBy(shown, (l) => l.group));
 	const split = $derived(budgetSplit(o.lines, o.freeCents, o.uncategorizedCents));
 	let showHidden = $state(false);
+	// Nog geen enkele limiet deze maand: de lege staat met het voorstel uit historie
+	const noLimits = $derived(data.isCurrent && o.totalLimitCents === 0);
 
 	// Tik op een balk: een sheet om de limiet aan te passen (spec: Budget)
 	let editing = $state(false);
@@ -87,54 +91,71 @@
 	</div>
 
 	<div class="top">
-		<section class="split card" aria-labelledby="split-title">
-			<div class="split-head">
-				<h2 id="split-title">Deze maand</h2>
-				<p class="muted num">
-					{formatCents(o.totalLimitCents, { whole: true })} aan limieten
-				</p>
+		{#if noLimits}
+			<div class="card">
+				<EmptyState
+					icon={budget}
+					text={data.startLimits
+						? 'Nog geen limieten. Je historie weet wat je per categorie uitgeeft; daaruit komt een eerste voorstel.'
+						: 'Nog geen limieten. Met drie volle maanden historie stelt de app ze voor; tot dan stel je ze per categorie zelf in.'}
+				>
+					{#if data.startLimits}
+						<a class="button" href="/budget/startlimieten">Voorstel uit historie</a>
+					{:else}
+						<a class="button secondary" href="/import">Historie importeren</a>
+					{/if}
+				</EmptyState>
 			</div>
-			<StackedBar
-				label="Verdeling van je limieten"
-				total={o.totalLimitCents}
-				segments={[
-					{
-						key: 'vast',
-						label: 'Vaste lasten',
-						cents: split.fixedCents - split.fixedLeftCents,
-						color: groupColor(FIXED_GROUP) ?? undefined
-					},
-					...(split.fixedLeftCents > 0
-						? [
-								{
-									key: 'komt',
-									label: 'Komt nog',
-									cents: split.fixedLeftCents,
-									color: groupColor(FIXED_GROUP) ?? undefined,
-									hatched: true
-								}
-							]
-						: []),
-					{
-						key: 'dagelijks',
-						label: 'Dagelijks',
-						cents: split.dailyCents,
-						color: groupColor('Dagelijks') ?? undefined
-					},
-					{
-						key: 'vrij',
-						label: 'Vrij',
-						cents: split.freeCents,
-						color: 'color-mix(in oklch, var(--accent) 28%, var(--surface-2))'
-					}
-				]}
-			/>
-			{#if o.freeCents < 0}
-				<p class="over">
-					Je zit <span class="num">{formatCents(-o.freeCents, { whole: true })}</span> boven je limieten.
-				</p>
-			{/if}
-		</section>
+		{:else}
+			<section class="split card" aria-labelledby="split-title">
+				<div class="split-head">
+					<h2 id="split-title">Deze maand</h2>
+					<p class="muted num">
+						{formatCents(o.totalLimitCents, { whole: true })} aan limieten
+					</p>
+				</div>
+				<StackedBar
+					label="Verdeling van je limieten"
+					total={o.totalLimitCents}
+					segments={[
+						{
+							key: 'vast',
+							label: 'Vaste lasten',
+							cents: split.fixedCents - split.fixedLeftCents,
+							color: groupColor(FIXED_GROUP) ?? undefined
+						},
+						...(split.fixedLeftCents > 0
+							? [
+									{
+										key: 'komt',
+										label: 'Komt nog',
+										cents: split.fixedLeftCents,
+										color: groupColor(FIXED_GROUP) ?? undefined,
+										hatched: true
+									}
+								]
+							: []),
+						{
+							key: 'dagelijks',
+							label: 'Dagelijks',
+							cents: split.dailyCents,
+							color: groupColor('Dagelijks') ?? undefined
+						},
+						{
+							key: 'vrij',
+							label: 'Vrij',
+							cents: split.freeCents,
+							color: 'color-mix(in oklch, var(--accent) 28%, var(--surface-2))'
+						}
+					]}
+				/>
+				{#if o.freeCents < 0}
+					<p class="over">
+						Je zit <span class="num">{formatCents(-o.freeCents, { whole: true })}</span> boven je limieten.
+					</p>
+				{/if}
+			</section>
+		{/if}
 
 		<a class="fixed card" href="/vaste-lasten">
 			<span>
@@ -261,6 +282,9 @@
 						><path d="M5.5 7.5 10 12l4.5-4.5" /></svg
 					>
 				</button>
+				{#if data.startLimits && !noLimits}
+					<a class="more-link from-history" href="/budget/startlimieten">Voorstel uit historie</a>
+				{/if}
 				{#if showHidden}
 					<ul id="nolimit-list" class="plain">
 						{#each hidden as l (l.categoryId)}
@@ -671,6 +695,11 @@
 		height: 8px;
 		border-radius: 50%;
 		background: var(--dot);
+	}
+
+	.from-history {
+		justify-self: start;
+		margin: 2px 0 6px -12px;
 	}
 
 	.manage,
