@@ -86,19 +86,22 @@
 		}))
 	]);
 
-	// Per dag, met het saldo van die dag ernaast en de grootste uitgave
+	// Per dag, met het saldo van die dag ernaast en de grootste uitgave. Een interne overboeking
+	// staat er als één rij en verandert het saldo niet.
 	const days = $derived.by(() => {
 		const out: { date: string; net: number; items: typeof data.transactions }[] = [];
 		for (const tx of data.transactions) {
+			const cents = tx.transfer ? 0 : tx.amountCents;
 			const last = out.at(-1);
 			if (last && last.date === tx.date) {
 				last.items.push(tx);
-				last.net += tx.amountCents;
-			} else out.push({ date: tx.date, net: tx.amountCents, items: [tx] });
+				last.net += cents;
+			} else out.push({ date: tx.date, net: cents, items: [tx] });
 		}
 		return out.map((d) => {
 			const biggest = d.items.reduce<(typeof d.items)[number] | null>(
-				(max, t) => (t.amountCents < 0 && (!max || t.amountCents < max.amountCents) ? t : max),
+				(max, t) =>
+					!t.transfer && t.amountCents < 0 && (!max || t.amountCents < max.amountCents) ? t : max,
 				null
 			);
 			return { ...d, biggest: d.items.length > 1 ? biggest : null };
@@ -429,16 +432,19 @@
 								>
 							{/if}
 						</span>
-						<span class={['num', 'net', day.net > 0 && 'in']}>
-							{formatCents(day.net, { sign: true })}
-						</span>
+						{#if day.items.some((t) => !t.transfer)}
+							<span class={['num', 'net', day.net > 0 && 'in']}>
+								{formatCents(day.net, { sign: true })}
+							</span>
+						{/if}
 					</header>
 					<ul>
 						{#each day.items as tx (tx.id)}
 							<li data-tx-row={tx.id}>
+								<!-- Een overboeking als paar heeft geen eigen categorie om te kiezen -->
 								<SwipeRow
 									onright={canConfirm(tx) ? () => confirmRow(tx) : undefined}
-									onleft={() => pickCategory(tx)}
+									onleft={tx.transfer ? undefined : () => pickCategory(tx)}
 								>
 									<TransactionItem {tx} href="/transacties/{tx.id}" showDate={false} />
 								</SwipeRow>

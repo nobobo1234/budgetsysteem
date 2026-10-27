@@ -31,7 +31,12 @@ import { mergeInfo, ownMatchesFor } from '#lib/server/import/koppellijst.ts';
 import { findOrCreatePerson, listPeople, personByIban } from '#lib/server/people.ts';
 import { addIban } from '#lib/server/shares.ts';
 import { setTransactionTag, transactionTagChips } from '#lib/server/tags.ts';
-import { deleteTransaction, updateTransaction, ValidationError } from '#lib/server/transactions.ts';
+import {
+	deleteTransaction,
+	transferCounterpart,
+	updateTransaction,
+	ValidationError
+} from '#lib/server/transactions.ts';
 import { personName, transactionPatchSchema } from '#lib/server/validation.ts';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -117,6 +122,8 @@ export const load: PageServerLoad = ({ params }) => {
 			tx.amountCents !== 0 && !tx.correctionOf ? correctionCandidates(db(), tx.id) : null,
 		// Koppellijst bij een import: samengevoegd met je invoer, of wacht er nog op
 		merged: mergeInfo(db(), tx.id),
+		// Een interne overboeking: de boeking op je andere rekening
+		transfer: transferCounterpart(db(), tx.id),
 		awaitsMatch: ownMatchesFor(db(), tx.id) !== null,
 		people: listPeople(db()).filter((p) => p.active),
 		ibanSuggestion: ibanSuggestion(tx.id, tx.counterIban),

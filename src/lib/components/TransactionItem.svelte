@@ -19,6 +19,8 @@
 		origCurrency: string | null;
 		/** Een gekoppelde terugbetaling: dan staat hier waar hij voor was, niet de categorie */
 		refund?: RefundInfo | null;
+		/** Een interne overboeking: deze afschrijving en de bijschrijving samen als één rij */
+		transfer?: { from: string; to: string; date: string } | null;
 	}
 
 	let {
@@ -50,13 +52,36 @@
 </script>
 
 <svelte:element this={href ? 'a' : 'div'} {href} class={['item', href && 'link']}>
-	<span class={['monogram', monoHue !== null && 'hue']} style:--h={monoHue} aria-hidden="true"
-		>{initials(tx.counterparty || '?')}</span
-	>
-	<div class="main">
-		<span class="who" data-tx-name={href ? tx.id : undefined}
-			>{displayName(tx.counterparty) || 'Zonder naam'}</span
+	{#if tx.transfer}
+		<!-- Twee rekeningen over elkaar: het geld gaat van de ene naar de andere -->
+		<span class="pair" aria-hidden="true">
+			<span class="monogram">{initials(tx.transfer.from)}</span>
+			<span class="monogram">{initials(tx.transfer.to)}</span>
+		</span>
+	{:else}
+		<span class={['monogram', monoHue !== null && 'hue']} style:--h={monoHue} aria-hidden="true"
+			>{initials(tx.counterparty || '?')}</span
 		>
+	{/if}
+	<div class="main">
+		{#if tx.transfer}
+			<span class="who route" data-tx-name={href ? tx.id : undefined}
+				>{tx.transfer.from}<svg viewBox="0 0 16 16" aria-hidden="true"
+					><path
+						d="M2.5 8h10M9 4.5 12.5 8 9 11.5"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="1.6"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					/></svg
+				><span class="visually-hidden">naar</span>{tx.transfer.to}</span
+			>
+		{:else}
+			<span class="who" data-tx-name={href ? tx.id : undefined}
+				>{displayName(tx.counterparty) || 'Zonder naam'}</span
+			>
+		{/if}
 		<span class="meta">
 			{#if refund}
 				<svg class="hook" viewBox="0 0 12 12" aria-hidden="true">
@@ -70,6 +95,13 @@
 					/>
 				</svg>
 				<span class="cat refund" data-refund>{refund}</span>
+			{:else if tx.transfer}
+				<!-- Herkend aan de eigen IBAN heeft hij soms geen categorie; het is altijd een overboeking -->
+				<span class="cat"
+					>{tx.transfer.date === tx.date
+						? (tx.categoryName ?? 'Interne overboeking')
+						: 'Intern'}</span
+				>
 			{:else}
 				<span class={['dot', !color && 'none']} style:--dot={color} aria-hidden="true"></span>
 				<span class={['cat', !tx.categoryName && 'uncat']}
@@ -77,7 +109,11 @@
 				>
 			{/if}
 			{#if showDate}<span class="sep" aria-hidden="true">·</span>{formatShortDate(tx.date)}{/if}
-			{#if tx.accountAlias}<span class="sep" aria-hidden="true">·</span><span
+			{#if tx.transfer}
+				{#if tx.transfer.date !== tx.date}<span class="sep" aria-hidden="true">·</span><span
+						>binnen {formatShortDate(tx.transfer.date)}</span
+					>{/if}
+			{:else if tx.accountAlias}<span class="sep" aria-hidden="true">·</span><span
 					>{tx.accountAlias}</span
 				>{/if}
 		</span>
@@ -92,10 +128,19 @@
 		{/if}
 	</div>
 	<div
-		class={['amount', 'num', tx.amountCents > 0 && 'in', tx.status === 'verwacht' && 'planned']}
+		class={[
+			'amount',
+			'num',
+			tx.transfer ? 'moved' : tx.amountCents > 0 && 'in',
+			tx.status === 'verwacht' && 'planned'
+		]}
 		data-tx-amount={href ? tx.id : undefined}
 	>
-		{#if tx.amountCents === 0 && orig}
+		{#if tx.transfer}
+			<!-- Geen uitgave en geen inkomen: het bedrag zonder teken -->
+			<span>{formatCents(Math.abs(tx.amountCents))}</span>
+			<span class="orig">overgeboekt</span>
+		{:else if tx.amountCents === 0 && orig}
 			<span>{orig}</span>
 			<span class="orig">eurobedrag nog invullen</span>
 		{:else}
@@ -146,6 +191,40 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+	}
+
+	.route svg {
+		width: 14px;
+		height: 14px;
+		margin-inline: 5px;
+		vertical-align: -2px;
+		color: var(--muted);
+	}
+
+	/* Twee kleinere monogrammen schuin over elkaar, samen even groot als één */
+	.pair {
+		position: relative;
+		flex: none;
+		width: 40px;
+		height: 40px;
+	}
+
+	.pair .monogram {
+		--size: 24px;
+		position: absolute;
+		top: 0;
+		left: 0;
+	}
+
+	/* De rekening waar het geld binnenkomt in de accentkleur, met een rand in de achtergrond */
+	.pair .monogram + .monogram {
+		--wash: color-mix(in srgb, var(--accent) 24%, var(--bg));
+		--ink: var(--accent-strong);
+		top: auto;
+		left: auto;
+		right: 0;
+		bottom: 0;
+		box-shadow: 0 0 0 2px var(--bg);
 	}
 
 	.meta {
@@ -234,6 +313,10 @@
 
 	.in {
 		color: var(--accent-strong);
+	}
+
+	.moved {
+		color: var(--muted);
 	}
 
 	.orig {

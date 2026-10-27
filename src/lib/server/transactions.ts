@@ -1,9 +1,25 @@
-import { and, asc, desc, eq, gte, isNull, lte, ne, or, sql, type SQL } from 'drizzle-orm';
+import {
+	and,
+	asc,
+	desc,
+	eq,
+	gte,
+	inArray,
+	isNull,
+	lte,
+	ne,
+	notInArray,
+	or,
+	sql,
+	type SQL
+} from 'drizzle-orm';
 import { addDays } from '../dates.ts';
 import { advancePast } from '../recurring.ts';
+import { pairTransfers, TRANSFER_DAYS } from '../transfers.ts';
 import { recordChange } from './audit.ts';
 import { correctedCents, linkCorrection, releaseCorrectionsOf } from './corrections.ts';
 import type { Conn, DB } from './db/index.ts';
+import { INTERNAL_TRANSFER } from './db/seed.ts';
 import {
 	accounts,
 	categories,
@@ -330,6 +346,8 @@ export interface ListFilter {
 	/** Datums `YYYY-MM-DD`, beide inclusief */
 	from?: string;
 	to?: string;
+	/** Bijschrijvingen die als deel van een interne overboeking al bij hun afschrijving staan */
+	excludeIds?: string[];
 	limit?: number;
 	offset?: number;
 }
@@ -364,6 +382,7 @@ function filterWhere(filter: ListFilter): SQL | undefined {
 	if (filter.accountId) where.push(eq(transactions.accountId, filter.accountId));
 	if (filter.from) where.push(gte(transactions.date, filter.from));
 	if (filter.to) where.push(lte(transactions.date, filter.to));
+	if (filter.excludeIds?.length) where.push(notInArray(transactions.id, filter.excludeIds));
 	return and(...where);
 }
 
@@ -420,6 +439,109 @@ export function summarizeTransactions(db: DB, filter: Omit<ListFilter, 'limit' |
 	return { count: row?.count ?? 0, inCents: row?.inCents ?? 0, outCents: row?.outCents ?? 0 };
 }
 
+/**
+ * Een boeking tussen eigen rekeningen: herkend aan de eigen IBAN bij de import, of in de
+ * categorie Interne overboeking (zoals opwaarderen naar Revolut via de standaardregel).
+ */
+function internalLeg(db: Conn): SQL {
+	const internal = db
+		.select({ id: categories.id })
+		.from(categories)
+		.where(eq(categories.name, INTERNAL_TRANSFER))
+		.get()?.id;
+	return internal
+		? sql`coalesce(${transactions.categorySource} = 'intern' or ${transactions.categoryId} = ${internal}, 0)`
+		: sql`coalesce(${transactions.categorySource} = 'intern', 0)`;
+}
+
+function transferLegs(db: Conn, where: SQL | undefined) {
+	return db
+		.select({
+			id: transactions.id,
+			amountCents: transactions.amountCents,
+			date: transactions.date,
+			accountId: transactions.accountId,
+			accountName: accounts.name
+		})
+		.from(transactions)
+		.innerJoin(accounts, eq(accounts.id, transactions.accountId))
+		.where(and(where, ne(transactions.status, 'verwacht'), internalLeg(db)))
+		.all();
+}
+
+export interface TransferInfo {
+	/** De andere boeking van het paar */
+	id: string;
+	amountCents: number;
+	date: string;
+	/** Namen van de rekeningen: waar het geld afging en waar het binnenkwam */
+	from: string;
+	to: string;
+}
+
+/**
+ * Interne overboekingen binnen het filter, als paar (spec: Transacties): de afschrijving staat in
+ * de lijst met de bijschrijving erbij, de bijschrijving zelf niet. Alleen als beide boekingen
+ * binnen het filter vallen; bij één rekening of één dag blijft elke boeking een eigen rij.
+ */
+export function transferPairs(db: DB, filter: Omit<ListFilter, 'limit' | 'offset' | 'excludeIds'>) {
+	const legs = transferLegs(db, filterWhere(filter));
+	const byId = new Map(legs.map((l) => [l.id, l]));
+	const pairs = new Map<string, TransferInfo>();
+	for (const [outId, inId] of pairTransfers(legs)) {
+		const inc = byId.get(inId)!;
+		pairs.set(outId, {
+			id: inc.id,
+			amountCents: inc.amountCents,
+			date: inc.date,
+			from: byId.get(outId)!.accountName,
+			to: inc.accountName
+		});
+	}
+	return {
+		pairs,
+		/** De bijschrijvingen, die in de lijst bij hun afschrijving staan */
+		hidden: [...pairs.values()].map((p) => p.id),
+		/** Beide boekingen van elk paar: samen geen uitgave en geen inkomen */
+		paired: [...pairs.keys(), ...[...pairs.values()].map((p) => p.id)]
+	};
+}
+
+/** Rijen voor een lijst, met bij de afschrijving van een interne overboeking de bijschrijving. */
+export function withTransfers<T extends { id: string }>(
+	rows: T[],
+	pairs: Map<string, TransferInfo>
+): (T & { transfer: TransferInfo | null })[] {
+	return rows.map((r) => ({ ...r, transfer: pairs.get(r.id) ?? null }));
+}
+
+/** De andere boeking van een interne overboeking, voor de detailpagina. */
+export function transferCounterpart(db: DB, id: string): TransferInfo | null {
+	const tx = transferLegs(db, eq(transactions.id, id))[0];
+	if (!tx) return null;
+	// Ruim om de datum, zodat het paar hetzelfde is als in de lijst
+	const legs = transferLegs(
+		db,
+		and(
+			gte(transactions.date, addDays(tx.date, -2 * TRANSFER_DAYS)),
+			lte(transactions.date, addDays(tx.date, 2 * TRANSFER_DAYS)),
+			inArray(transactions.amountCents, [tx.amountCents, -tx.amountCents])
+		)
+	);
+	const pairs = pairTransfers(legs);
+	const otherId = pairs.get(id) ?? [...pairs].find(([, inId]) => inId === id)?.[0];
+	const other = legs.find((l) => l.id === otherId);
+	if (!other) return null;
+	const [out, inc] = tx.amountCents < 0 ? [tx, other] : [other, tx];
+	return {
+		id: other.id,
+		amountCents: other.amountCents,
+		date: other.date,
+		from: out.accountName,
+		to: inc.accountName
+	};
+}
+
 /** Maanden (`YYYY-MM`) waarin transacties staan, de nieuwste eerst. */
 /**
  * Uitgaven per dag voor het staafdiagram boven Transacties: alleen uitgaand, zonder verwachte
@@ -439,8 +561,8 @@ export function spendingPerDay(
 			and(
 				filterWhere({ ...filter, withoutExpected: true }),
 				sql`${transactions.amountCents} < 0`,
-				// Een overboeking naar je eigen rekening is geen uitgave
-				or(isNull(transactions.categorySource), ne(transactions.categorySource, 'intern'))
+				// Een overboeking naar je eigen rekening is geen uitgave, ook niet via een regel
+				sql`not ${internalLeg(db)}`
 			)
 		)
 		.groupBy(transactions.date)
