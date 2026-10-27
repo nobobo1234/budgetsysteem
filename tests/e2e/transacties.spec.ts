@@ -89,3 +89,72 @@ test('transacties: tik op een dag in het staafdiagram filtert op die dag', async
 	await bar.click();
 	await expect(page).not.toHaveURL(/dag=/);
 });
+
+test('staafdiagram: elke staaf even breed en op dezelfde lijn, ook met een label', async ({
+	page
+}) => {
+	const month = day(0).slice(0, 7);
+	const db = new Database('.e2e/budget.db', { fileMustExist: true });
+	db.pragma('busy_timeout = 5000');
+	const account = (
+		db.prepare("SELECT id FROM accounts WHERE alias = 'sns'").get() as { id: string }
+	).id;
+	// Uitgaven op dagen met een label (1, 15, 22) en zonder (2, 16)
+	for (const d of ['01', '02', '15', '16', '22'])
+		db.prepare(
+			`INSERT INTO transactions (id, amount_cents, date, counterparty, account_id, source)
+			 VALUES (?, -1500, ?, 'Staaf', ?, 'handmatig')`
+		).run(randomUUID(), `${month}-${d}`, account);
+	db.close();
+
+	await page.goto(`/transacties?maand=${month}`);
+	await page.waitForLoadState('networkidle');
+	const tracks = await page
+		.getByRole('group', { name: /Uitgaven per dag/ })
+		.locator('.track')
+		.evaluateAll((els) =>
+			els.map((el) => {
+				const r = el.getBoundingClientRect();
+				return { width: Math.round(r.width * 10) / 10, bottom: Math.round(r.bottom * 10) / 10 };
+			})
+		);
+	expect(tracks.length).toBeGreaterThanOrEqual(28);
+	expect(new Set(tracks.map((t) => t.width)).size).toBe(1);
+	expect(new Set(tracks.map((t) => t.bottom)).size).toBe(1);
+});
+
+test('transacties: een interne overboeking staat als één rij', async ({ page }) => {
+	const date = day(-1);
+	const db = new Database('.e2e/budget.db', { fileMustExist: true });
+	db.pragma('busy_timeout = 5000');
+	const account = (alias: string) =>
+		(db.prepare('SELECT id FROM accounts WHERE alias = ?').get(alias) as { id: string }).id;
+	// Een eigen bedrag per project en poging, zodat paren van eerdere runs niet meedoen
+	const cents = 10_000 + Math.floor(Math.random() * 89_999);
+	const out = randomUUID();
+	const inc = randomUUID();
+	const insert = db.prepare(
+		`INSERT INTO transactions (id, amount_cents, date, counterparty, account_id, source, category_source)
+		 VALUES (?, ?, ?, ?, ?, 'import', 'intern')`
+	);
+	insert.run(out, -cents, date, 'Revolut', account('sns'));
+	insert.run(inc, cents, date, 'Geld toevoegen', account('rev'));
+	db.close();
+
+	await page.goto(`/transacties?van=${date}&tot=${date}`);
+	await page.waitForLoadState('networkidle');
+	const row = page.locator(`[data-tx-row="${out}"]`);
+	await expect(row).toContainText('SNS');
+	await expect(row).toContainText('Revolut');
+	await expect(row).toContainText('overgeboekt');
+	await expect(page.locator(`[data-tx-row="${inc}"]`)).toHaveCount(0);
+
+	// De detailpagina wijst naar de andere kant
+	await row.getByRole('link').click();
+	await expect(page).toHaveURL(new RegExp(`/transacties/${out}`));
+	const section = page.getByRole('region', { name: 'Overgeboekt' });
+	await expect(section.getByRole('link', { name: /Binnen op Revolut/ })).toHaveAttribute(
+		'href',
+		`/transacties/${inc}`
+	);
+});

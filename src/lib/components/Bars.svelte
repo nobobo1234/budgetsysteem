@@ -85,8 +85,12 @@
 		gap: 3px;
 	}
 
+	/* Eén kolom zo breed als de staaf ernaast: een label als "15" mag uitsteken, maar maakt de
+	   staaf niet breder. Label- en notitierij hebben een vaste hoogte, zodat een staaf met label
+	   op dezelfde lijn staat als een zonder. */
 	.col {
 		display: grid;
+		grid-template-columns: minmax(0, 1fr);
 		grid-template-rows: var(--h) auto;
 		align-items: end;
 		justify-items: center;
@@ -151,7 +155,8 @@
 	}
 
 	.note {
-		min-height: 1.1em;
+		height: 1.2em;
+		line-height: 1.2;
 		font-size: 0.72rem;
 		font-weight: 650;
 		color: color-mix(in oklch, var(--warn) 65%, var(--text));
@@ -159,7 +164,8 @@
 	}
 
 	.label {
-		min-height: 1.2em;
+		height: 1.2em;
+		line-height: 1.2;
 		color: var(--muted);
 		font-size: 0.72rem;
 		white-space: nowrap;

@@ -11,9 +11,11 @@ import {
 	summarizeTransactions,
 	type ListFilter,
 	transactionMonths,
+	transferPairs,
 	updateTransaction,
 	ValidationError,
-	withRefunds
+	withRefunds,
+	withTransfers
 } from '#lib/server/transactions.ts';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -56,7 +58,16 @@ export const load: PageServerLoad = ({ url }) => {
 		from: day || from || undefined,
 		to: day || to || undefined
 	};
-	const rows = listTransactions(db(), { ...filter, limit: PAGE + 1, offset: page * PAGE });
+	// Interne overboekingen als één rij: de bijschrijving staat bij de afschrijving, en het paar
+	// telt niet als uitgave of inkomen
+	const transfers = transferPairs(db(), filter);
+	const rows = listTransactions(db(), {
+		...filter,
+		excludeIds: transfers.hidden,
+		limit: PAGE + 1,
+		offset: page * PAGE
+	});
+	const summary = summarizeTransactions(db(), { ...filter, excludeIds: transfers.paired });
 
 	return {
 		filter: { q, month, categoryId, status, accountId, from, to, day },
@@ -75,8 +86,8 @@ export const load: PageServerLoad = ({ url }) => {
 			: null,
 		page,
 		hasMore: rows.length > PAGE,
-		transactions: withRefunds(db(), rows.slice(0, PAGE)),
-		summary: summarizeTransactions(db(), filter),
+		transactions: withTransfers(withRefunds(db(), rows.slice(0, PAGE)), transfers.pairs),
+		summary: { ...summary, count: summary.count + transfers.pairs.size },
 		months: transactionMonths(db()),
 		today,
 		categories: db()

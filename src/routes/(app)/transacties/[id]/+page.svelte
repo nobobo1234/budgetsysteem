@@ -536,6 +536,30 @@
 		</section>
 	{/if}
 
+	{#if data.transfer}
+		{@const t = data.transfer}
+		<section class="card section" aria-labelledby="transfer-title">
+			<h2 id="transfer-title">Overgeboekt</h2>
+			<ul class="lines">
+				<li>
+					<a class="row-link" href={`/transacties/${t.id}`}>
+						<span>
+							{t.amountCents < 0 ? `Af van ${t.from}` : `Binnen op ${t.to}`}
+							<span class="muted small">{formatShortDate(t.date)}</span>
+						</span>
+						<span class={['num', t.amountCents > 0 && 'in']}
+							>{formatCents(t.amountCents, { sign: true })}</span
+						>
+					</a>
+				</li>
+			</ul>
+			<p class="muted small">
+				Van {t.from} naar {t.to}. Samen één beweging tussen je eigen rekeningen: geen uitgave en
+				geen inkomen, en in de lijst één rij.
+			</p>
+		</section>
+	{/if}
+
 	{#if original}
 		<section class="card section" aria-labelledby="correction-title">
 			<h2 id="correction-title">Verrekend met</h2>
