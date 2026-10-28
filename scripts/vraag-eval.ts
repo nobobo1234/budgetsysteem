@@ -90,7 +90,18 @@ if (values.droog) {
 	process.exit(0);
 }
 
-const client = new Anthropic() as unknown as AiClient;
+const anthropic = new Anthropic();
+// Eerst één gratis aanroep: zonder sleutel of met een verkeerde sleutel stopt het script meteen,
+// in plaats van elke vraag als mislukt te tellen. De melding van de SDK tonen we niet.
+try {
+	await anthropic.models.list({ limit: 1 });
+} catch (e) {
+	const status = e instanceof Anthropic.APIError && e.status ? ` (HTTP ${e.status})` : '';
+	fail(
+		`kan de API niet bereiken${status}. Zet ANTHROPIC_API_KEY in je omgeving of log in met \`ant auth login\`, en probeer opnieuw.`
+	);
+}
+const client = anthropic as unknown as AiClient;
 
 /** Wat code uitrekent bij het vraagformaat van het model, zoals in het vraagveld. */
 function outcomeOf(format: QuestionFormat): EvalOutcome {
