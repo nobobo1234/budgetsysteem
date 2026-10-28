@@ -17,6 +17,11 @@ updates:
     groups:
       dev:
         dependency-type: development
+      # Security-updates in één PR; de cooldown geldt hier niet, `minimumReleaseAge` in
+      # pnpm-workspace.yaml wel (zie claude-review.yml voor `minimumReleaseAgeExclude`)
+      security:
+        applies-to: security-updates
+        patterns: ['*']
   - package-ecosystem: github-actions
     directory: /
     schedule:
