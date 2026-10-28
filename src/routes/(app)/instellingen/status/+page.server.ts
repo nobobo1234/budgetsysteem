@@ -3,12 +3,13 @@ import { db } from '#lib/server/db/index.ts';
 import { telemetryDb } from '#lib/server/telemetry/index.ts';
 import { collectHealth, healthPaths } from '#lib/server/telemetry/health.ts';
 import { attention } from '#lib/server/telemetry/status.ts';
+import { aiBudget, aiCallSummary } from '#lib/server/telemetry/ai.ts';
 import { receiptReadSummary } from '#lib/server/telemetry/receipts.ts';
 import { recentVitals } from '#lib/server/telemetry/vitals.ts';
 import type { PageServerLoad } from './$types';
 
-// Statuspagina achter de login: de uitgebreide health check, web-vitals p75 per week en hoe
-// Haiku de bonnen leest.
+// Statuspagina achter de login: de uitgebreide health check, web-vitals p75 per week, hoe
+// Haiku de bonnen leest en de samenvattingen schrijft, en de AI-kosten tegenover het maandbudget.
 // Alleen cijfers en tijden, geen persoonsgegevens.
 export const load: PageServerLoad = () => {
 	const telemetry = telemetryDb();
@@ -18,6 +19,8 @@ export const load: PageServerLoad = () => {
 		health,
 		attention: attention(health),
 		vitals: recentVitals(telemetry),
-		receipts: receiptReadSummary(telemetry)
+		receipts: receiptReadSummary(telemetry),
+		summaries: aiCallSummary(telemetry, 'samenvatting'),
+		aiBudget: aiBudget(telemetry)
 	};
 };

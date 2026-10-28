@@ -68,7 +68,9 @@ const closed = [
 	['GET', '/afsluiting'],
 	['GET', '/afsluiting/2026-09'],
 	['POST', '/afsluiting/2026-09?/close'],
-	['POST', '/afsluiting/2026-09?/proposal']
+	['POST', '/afsluiting/2026-09?/proposal'],
+	['POST', '/afsluiting/2026-09?/summaryAgain'],
+	['POST', '/afsluiting/2026-09?/summaryWrong']
 ] as const;
 
 for (const [method, path] of closed) {

@@ -41,6 +41,10 @@ const schema = z.object({
 	// blijven bonnen op "wordt gelezen" staan. De SDK leest ANTHROPIC_BASE_URL zelf (e2e-tests
 	// wijzen die naar een nagebootste Haiku).
 	ANTHROPIC_API_KEY: z.string().min(1).optional(),
+	// Maandbudget voor alle AI-aanroepen samen (bonnen, samenvatting, later het vraagveld), in
+	// dollarcent; standaard $ 5 (spec: LLM06). Is het op, dan valt de samenvatting terug op de
+	// vaste tekst; bonnen gaan voor en lopen door. Daarnaast een bestedingslimiet in de Console.
+	AI_MONTHLY_BUDGET_USD_CENTS: z.coerce.number().int().min(0).max(100_000).default(500),
 	LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info')
 });
 

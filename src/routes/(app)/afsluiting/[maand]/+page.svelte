@@ -4,6 +4,7 @@
 	import BackLink from '#lib/components/BackLink.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import StackedBar from '#lib/components/StackedBar.svelte';
+	import SummaryCard from '#lib/components/SummaryCard.svelte';
 	import Toast from '#lib/components/Toast.svelte';
 	import { FIXED_GROUP } from '#lib/budget.ts';
 	import { groupColor } from '#lib/categoryColor.ts';
@@ -251,6 +252,24 @@
 				</ul>
 			</section>
 		{/if}
+
+		{#await data.summary}
+			<section class="card waiting" aria-labelledby="summary-title" aria-busy="true">
+				<h2 id="summary-title">Wat opviel</h2>
+				<p class="muted">Haiku zet de cijfers in een paar zinnen.</p>
+				<span class="line" aria-hidden="true"></span>
+				<span class="line short" aria-hidden="true"></span>
+			</section>
+		{:then summary}
+			{#if summary}<SummaryCard {summary} {busy} {act} />{/if}
+		{:catch}
+			<section class="card" aria-labelledby="summary-title">
+				<h2 id="summary-title">Wat opviel</h2>
+				<p class="muted">
+					Dit lukte nu niet. Open de maand later nog eens; de cijfers hieronder kloppen wel.
+				</p>
+			</section>
+		{/await}
 
 		<section class="card" aria-labelledby="split-title">
 			<div class="section-head">
@@ -694,9 +713,35 @@
 		justify-items: start;
 	}
 
+	/* Laadstaat van Wat opviel: twee rustige regels, alleen `opacity` beweegt */
+	.waiting .line {
+		display: block;
+		height: 12px;
+		border-radius: 999px;
+		background: var(--surface-2);
+		animation: breathe 1.6s var(--ease-out) infinite alternate;
+	}
+
+	.waiting .short {
+		width: 60%;
+	}
+
+	@keyframes breathe {
+		from {
+			opacity: 1;
+		}
+		to {
+			opacity: 0.45;
+		}
+	}
+
 	@media (prefers-reduced-motion: reduce) {
 		.compare .track span {
 			transition: none;
+		}
+
+		.waiting .line {
+			animation: none;
 		}
 	}
 </style>

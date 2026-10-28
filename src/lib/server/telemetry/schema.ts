@@ -119,3 +119,49 @@ export const usageEntries = sqliteTable(
 	},
 	(t) => [index('usage_entries_at_idx').on(t.at), index('usage_entries_day_idx').on(t.day)]
 );
+
+/**
+ * Eén aanroep voor een samenvatting of (later) een vraag (spec: Telemetrie en monitoring, AI):
+ * tokens, kosten, duur, uitkomst en hoe vaak je "klopt niet" tikte. Uitkomsten van de
+ * samenvatting: `geschreven` of waarom de vaste tekst er staat (`controle`, `weigering`,
+ * `afgekapt`, `ongeldig`, `fout`). Het vraagveld voegt `beantwoord`, `verduidelijken` en
+ * `kan_niet` toe. Nooit de vraag, de feiten of de zinnen zelf; `ref` is een willekeurig ID dat
+ * alleen de samenvatting zelf kent, voor "klopt niet".
+ */
+export const AI_FEATURES = ['samenvatting', 'vraag'] as const;
+export type AiFeature = (typeof AI_FEATURES)[number];
+
+export const AI_OUTCOMES = [
+	'geschreven',
+	'beantwoord',
+	'verduidelijken',
+	'kan_niet',
+	'controle',
+	'weigering',
+	'afgekapt',
+	'ongeldig',
+	'fout'
+] as const;
+export type AiOutcome = (typeof AI_OUTCOMES)[number];
+
+export const aiCalls = sqliteTable(
+	'ai_calls',
+	{
+		id: integer('id').primaryKey({ autoIncrement: true }),
+		at: at(),
+		ref: text('ref').notNull().unique(),
+		feature: text('feature', { enum: AI_FEATURES }).notNull(),
+		model: text('model').notNull(),
+		inputTokens: integer('input_tokens').notNull(),
+		outputTokens: integer('output_tokens').notNull(),
+		// Nano-dollars, zodat er nooit afgerond hoeft te worden
+		costNanoUsd: integer('cost_nano_usd').notNull(),
+		durationMs: integer('duration_ms').notNull(),
+		outcome: text('outcome', { enum: AI_OUTCOMES }).notNull(),
+		// Welke controle faalde, zoals `cijfer`; alleen de soort, nooit de tekst
+		failure: text('failure'),
+		// Hoe vaak je "klopt niet" tikte op een zin of antwoord van deze aanroep
+		wrong: integer('wrong').notNull().default(0)
+	},
+	(t) => [index('ai_calls_at_idx').on(t.at)]
+);

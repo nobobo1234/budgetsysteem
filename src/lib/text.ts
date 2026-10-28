@@ -154,3 +154,31 @@ export function initials(name: string): string {
 	if (words.length === 1) return first(words[0]!);
 	return first(words[0]!) + first(words.at(-1)!);
 }
+
+/** Hoe lang een naam hoogstens is als hij naar een model gaat of in een AI-tekst staat. */
+export const MODEL_NAME_MAX = 40;
+
+// Iets dat op een URL of e-mailadres lijkt: een woord met `://`, `www.`, `@` of een `/`.
+const URLISH = /(?:^|\s)\S*(?::\/\/|www\.|@|\/)\S*/giu;
+// Een kale domeinnaam (`Thuisbezorgd.nl`, `bol.com`): alleen het eerste deel blijft, zonder punt
+const DOMAIN = /([\p{L}\d-]+)(?:\.[\p{L}\d-]+)*\.[\p{L}]{2,}\b/gu;
+
+/**
+ * Een naam van een tegenpartij (of categorie) zoals hij naar een model mag (spec: Vragen en
+ * samenvattingen met AI): wie je geld stuurt kiest zelf de naam op het afschrift. Een URL of
+ * e-mailadres gaat er helemaal uit, van een kale domeinnaam blijft het eerste deel zonder punt
+ * ("Thuisbezorgd.nl" wordt "Thuisbezorgd"), daarna blijven alleen letters, cijfers, spaties en
+ * `&.'-` over, ingekort tot 40 tekens. Dit haalt tekens weg, geen woorden: het houdt het kanaal
+ * klein, maar is geen bescherming tegen een instructie in gewone taal.
+ */
+export function modelName(raw: string): string {
+	return raw
+		.normalize('NFC')
+		.replace(URLISH, ' ')
+		.replace(DOMAIN, '$1')
+		.replace(/[^\p{L}\p{N} &.'-]/gu, ' ')
+		.replace(/\s+/g, ' ')
+		.trim()
+		.slice(0, MODEL_NAME_MAX)
+		.trim();
+}

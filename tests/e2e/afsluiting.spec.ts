@@ -134,3 +134,58 @@ test('maandafsluiting: een lopende maand en een onbekende maand', async ({ page 
 	const response = await page.goto('/afsluiting/2026-13');
 	expect(response?.status()).toBe(404);
 });
+
+/** `YYYY-MM` plus of min een aantal maanden. */
+function shift(month: string, delta: number): string {
+	const d = new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)) - 1 + delta, 1);
+	return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+/**
+ * Drie rustige maanden Cadeaus en dan een vorige maand die er ver boven zit, zodat er iets
+ * opvalt. Een eerdere samenvatting van die maand gaat weg, zodat Haiku (nagebootst) schrijft.
+ */
+function prepareSummary(month: string): void {
+	const db = new Database('.e2e/budget.db', { fileMustExist: true });
+	db.pragma('busy_timeout = 5000');
+	db.prepare('DELETE FROM month_summaries WHERE month = ?').run(month);
+	const account = (
+		db.prepare("SELECT id FROM accounts WHERE alias = 'sns'").get() as { id: string }
+	).id;
+	const category = (
+		db.prepare("SELECT id FROM categories WHERE name = 'Cadeaus'").get() as { id: string }
+	).id;
+	const insert = db.prepare(
+		`INSERT INTO transactions (id, amount_cents, date, counterparty, category_id, account_id, source, status)
+		 VALUES (?, ?, ?, 'Cadeauwinkel e2e', ?, ?, 'handmatig', 'bevestigd')`
+	);
+	for (const m of [shift(month, -3), shift(month, -2), shift(month, -1)])
+		insert.run(randomUUID(), -2_000, `${m}-14`, category, account);
+	insert.run(randomUUID(), -40_000, `${month}-14`, category, account);
+	db.close();
+}
+
+test('maandafsluiting: wat opviel, met de cijfers en klopt niet', async ({ page }) => {
+	const month = previousMonth();
+	prepareSummary(month);
+	await page.goto(`/afsluiting/${month}`);
+
+	const card = page.getByRole('region', { name: 'Wat opviel' });
+	await expect(card).toBeVisible();
+	// Eerst de laadstaat, dan de zinnen van de nagebootste Haiku
+	await expect(card.getByText('Geschreven door Haiku uit de cijfers hieronder.')).toBeVisible();
+	const sentence = card.locator('button.sentence').first();
+	await expect(sentence).toContainText(/kostte\s+€/);
+
+	// Een tik toont de cijfers achter de zin
+	await sentence.click();
+	await expect(sentence).toHaveAttribute('aria-expanded', 'true');
+	await expect(card.locator('dl.facts')).toContainText(/deze maand, gemiddeld/);
+
+	// Klopt niet: met één tik, daarna gemeld
+	await card.getByRole('button', { name: 'Zin 1 klopt niet' }).click();
+	await expect(
+		page.getByRole('status').filter({ hasText: 'Gemeld: deze zin klopt niet.' })
+	).toBeVisible();
+	await expect(card.getByText('Gemeld als niet kloppend')).toHaveCount(1);
+});
