@@ -7,3 +7,14 @@ allowBuilds:
   better-sqlite3: true
   # esbuild controleert in zijn postinstall alleen de platform-binary; die komt al via optionalDependencies
   esbuild: false
+
+# Overrides voor kwetsbare transitieve devDependencies (Dependabot). Haal ze weg zodra het
+# ouder-package zelf een veilige versie meeneemt.
+overrides:
+  # drizzle-kit 0.31 haalt via het verouderde @esbuild-kit/esm-loader esbuild 0.18 binnen
+  # (GHSA-67mh-4wv8-2f99, opgelost in 0.25.0). drizzle-kit zelf gebruikt al 0.25.
+  '@esbuild-kit/core-utils>esbuild': ^0.25.0
+  # Vanaf 25.13.0 hangt puppeteer-core aan chromium-bidi 157.x, gepubliceerd zonder het
+  # trusted-publisher-bewijs dat eerdere versies hadden; trustPolicy weigert dat terecht.
+  # 25.12.0 (chromium-bidi 17.0.2) valt binnen lighthouse' bereik ^25.9.0.
+  'lighthouse>puppeteer-core': 25.12.0
