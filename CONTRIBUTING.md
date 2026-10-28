@@ -6,6 +6,10 @@ Dit is een persoonlijke budgetapp van één persoon, gebouwd voor één gebruike
 - **Pull requests graag pas na overleg in een issue.** Zo voorkom je werk dat niet in de spec past.
 - **Beveiligingsproblemen** meld je privé, zie [SECURITY.md](SECURITY.md).
 
+## In English
+
+This is a personal budgeting app built by one person for one user; you are free to use and self-host it, but its direction follows [docs/SPEC.md](docs/SPEC.md). Issues (bugs, self-hosting questions, ideas) are welcome in English or Dutch. Please open an issue to discuss a change before sending a pull request. Report security problems privately, see [SECURITY.md](SECURITY.md#english). The commands and rules below apply to every contribution.
+
 ## Lokaal ontwikkelen
 
 Node-versie staat in [`.nvmrc`](.nvmrc); gebruik alleen pnpm.
