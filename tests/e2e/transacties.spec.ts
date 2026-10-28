@@ -206,7 +206,10 @@ test('transacties: laadt per 50 bij en houdt dat vast bij vegen en terug', async
 	const target = page.locator(`[data-tx-row="${ids[55]}"]`);
 	await target.getByRole('link').click();
 	await expect(page).toHaveURL(new RegExp(`/transacties/${ids[55]}`));
+	// Eerst de detailpagina helemaal laten staan; WebKit slaat een terug tijdens de overgang over
+	await expect(page.getByRole('heading', { level: 1, name: `${prefix} 055` })).toBeVisible();
 	await page.goBack();
+	await expect(page).toHaveURL(/aantal=100/);
 	await expect(rows).toHaveCount(100);
 	await expect(target).toBeInViewport();
 
