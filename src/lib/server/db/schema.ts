@@ -10,6 +10,7 @@ import {
 	uniqueIndex
 } from 'drizzle-orm/sqlite-core';
 import { PRODUCT_GROUPS } from '../../productGroups.ts';
+import { SUMMARY_REASONS, SUMMARY_SOURCES } from '../../summary.ts';
 import { LINE_KINDS } from '../receipts/schema.ts';
 
 // Alle ID's zijn willekeurige UUID's; bedragen altijd hele centen in euro.
@@ -718,6 +719,34 @@ export const monthClosings = sqliteTable(
 	},
 	(t) => [
 		check('month_closings_month_format', sql`${t.month} GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]'`)
+	]
+);
+
+// Maandsamenvatting (spec: Vragen en samenvattingen met AI → Maandsamenvatting). Eén per maand,
+// bewaard na het openen van de afsluiting. `facts_key` is een hash van de feiten: verandert die
+// (een late import), dan komt er een nieuwe. `facts` en `sentences` zijn JSON met totalen en
+// namen, nooit IBANs, omschrijvingen of bonregels; de zinnen zijn al door code ingevuld.
+// `source`: `haiku` (zinnen van het model), `vast` (vaste tekst, met de reden) of `leeg` (niets
+// viel op). `calls` telt de aanroepen voor deze maand (hooguit vijf); `telemetry_ref` koppelt
+// "klopt niet" aan de telemetrie zonder de inhoud daarheen te sturen.
+export const monthSummaries = sqliteTable(
+	'month_summaries',
+	{
+		id: id(),
+		month: text('month').notNull().unique(),
+		factsKey: text('facts_key').notNull(),
+		facts: text('facts', { mode: 'json' }).notNull(),
+		sentences: text('sentences', { mode: 'json' }).notNull(),
+		source: text('source', { enum: SUMMARY_SOURCES }).notNull(),
+		reason: text('reason', { enum: SUMMARY_REASONS }),
+		calls: integer('calls').notNull().default(0),
+		telemetryRef: text('telemetry_ref'),
+		createdAt: createdAt(),
+		updatedAt: text('updated_at')
+	},
+	(t) => [
+		check('month_summaries_month_format', sql`${t.month} GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]'`),
+		check('month_summaries_calls', sql`${t.calls} >= 0`)
 	]
 );
 

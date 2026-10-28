@@ -12,6 +12,7 @@ import {
 	isSafeMethod,
 	unauthorized
 } from '#lib/server/guard.ts';
+import { useAiClient } from '#lib/server/ai/client.ts';
 import { budgetCheckSoon, startBudgetNotifications } from '#lib/server/budget-notify.ts';
 import { scheduleClosingNotifications } from '#lib/server/closing-notify.ts';
 import { startJobs } from '#lib/server/jobs.ts';
@@ -49,8 +50,14 @@ export const init: ServerInit = () => {
 	const apiKey = config().ANTHROPIC_API_KEY;
 	if (apiKey) {
 		let client: Anthropic | undefined;
-		registerReceiptReader(() => (client ??= new Anthropic({ apiKey })));
-	} else log.warn('geen ANTHROPIC_API_KEY: bonnen blijven wachten');
+		const shared = () => (client ??= new Anthropic({ apiKey }));
+		registerReceiptReader(shared);
+		// Dezelfde client voor de maandsamenvatting
+		useAiClient(shared);
+	} else
+		log.warn(
+			'geen ANTHROPIC_API_KEY: bonnen blijven wachten, samenvattingen krijgen de vaste tekst'
+		);
 	startJobs(db);
 	log.info('gestart');
 };

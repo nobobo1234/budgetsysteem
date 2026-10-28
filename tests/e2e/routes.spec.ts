@@ -69,6 +69,8 @@ const closed = [
 	['GET', '/afsluiting/2026-09'],
 	['POST', '/afsluiting/2026-09?/close'],
 	['POST', '/afsluiting/2026-09?/proposal'],
+	['POST', '/afsluiting/2026-09?/summaryAgain'],
+	['POST', '/afsluiting/2026-09?/summaryWrong'],
 	['GET', '/garantie'],
 	['GET', '/garantie/0b7f3c52-6a2e-4c8e-9a43-1f2d3e4c5b6a'],
 	['POST', '/garantie/0b7f3c52-6a2e-4c8e-9a43-1f2d3e4c5b6a?/save'],

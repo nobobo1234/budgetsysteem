@@ -2,7 +2,8 @@
 // nooit een echte API-aanroep gaat. Elke bon wordt "gelezen" als een verzonnen winkel met een
 // onleesbaar totaal (onzeker), zodat hij in de review-inbox komt. Na een korte pauze, zodat de
 // laadstaat te zien is. Een test die een screenshot met transacties wil, zet dat vooraf met
-// `POST /volgende` (body `lijst`); alleen het eerstvolgende antwoord is dan een lijst.
+// `POST /volgende` (body `lijst`); alleen het eerstvolgende antwoord is dan een lijst. Een verzoek
+// voor de maandsamenvatting (het schema heeft `zinnen`) krijgt één zin over het eerste feit.
 import { createServer } from 'node:http';
 
 const PORT = Number(process.env.HAIKU_MOCK_PORT ?? 4199);
@@ -76,6 +77,13 @@ function output() {
 	};
 }
 
+/** De maandsamenvatting: één zin met placeholders, die de app zelf invult en controleert. */
+function sentences() {
+	return {
+		zinnen: [{ tekst: '{f1.naam} kostte {f1.nu}, tegenover gemiddeld {f1.gem3}.', feiten: ['f1'] }]
+	};
+}
+
 createServer((req, res) => {
 	if (req.method === 'GET' && req.url === '/healthz') {
 		res.end('ok');
@@ -94,17 +102,24 @@ createServer((req, res) => {
 		res.writeHead(404).end();
 		return;
 	}
-	req.resume();
+	let body = '';
+	req.on('data', (chunk) => (body += chunk));
 	req.on('end', () => {
 		setTimeout(() => {
 			res.writeHead(200, { 'content-type': 'application/json' });
+			let summary = false;
+			try {
+				summary = 'zinnen' in (JSON.parse(body).output_config?.format?.schema?.properties ?? {});
+			} catch {
+				// geen JSON: gewoon een bon
+			}
 			res.end(
 				JSON.stringify({
 					id: `msg_e2e_${count}`,
 					type: 'message',
 					role: 'assistant',
 					model: 'claude-haiku-5-5',
-					content: [{ type: 'text', text: JSON.stringify(output()) }],
+					content: [{ type: 'text', text: JSON.stringify(summary ? sentences() : output()) }],
 					stop_reason: 'end_turn',
 					stop_sequence: null,
 					usage: { input_tokens: 2100, output_tokens: 180 }

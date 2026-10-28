@@ -1,5 +1,6 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import { toIsoDate } from '../../dates.ts';
+import { costNanoUsd, jsonOf, type AiClient, type Effort } from '../ai/client.ts';
 import {
 	checkList,
 	checkReceipt,
@@ -30,18 +31,7 @@ export const MAX_PARTS = 10;
 /** De API weigert beelden boven 10 MB base64, dus zo'n 7,5 MB ruw. */
 const MAX_PART_BYTES = 7 * 1024 * 1024;
 
-/**
- * Prijzen van Claude Haiku 5.5 in nano-dollar per token: $0,10 / $0,50 per miljoen tokens tot
- * 100K tokens prompt, $0,50 / $2,50 daarboven. Gehele getallen, zodat er nooit afgerond hoeft
- * te worden. Bron: https://platform.claude.com/docs/en/about-claude/pricing
- */
-const PRICE_NANO_USD = {
-	small: { input: 100, output: 500 },
-	large: { input: 500, output: 2500 }
-} as const;
-const LARGE_PROMPT_TOKENS = 100_000;
-
-export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+export { costNanoUsd, type Effort };
 
 export interface ReceiptPart {
 	data: Buffer;
@@ -49,9 +39,7 @@ export interface ReceiptPart {
 }
 
 /** Alleen wat deze module van de SDK-client gebruikt; in tests een nagebootste versie. */
-export interface ReceiptClient {
-	messages: { create: Anthropic['messages']['create'] };
-}
+export type ReceiptClient = AiClient;
 
 export interface ReadOptions {
 	model?: string;
@@ -77,11 +65,6 @@ export type ReadFailure = 'weigering' | 'afgekapt' | 'ongeldig';
 export type ReadResult =
 	| { ok: true; output: ReceiptOutput; usage: ReadUsage }
 	| { ok: false; reason: ReadFailure; usage: ReadUsage };
-
-export function costNanoUsd(inputTokens: number, outputTokens: number): number {
-	const price = inputTokens > LARGE_PROMPT_TOKENS ? PRICE_NANO_USD.large : PRICE_NANO_USD.small;
-	return inputTokens * price.input + outputTokens * price.output;
-}
 
 /** Het verzoek zelf, los gebouwd zodat tests kunnen nagaan wat er naar de API gaat. */
 export function buildRequest(
@@ -150,14 +133,8 @@ export async function readReceipt(
 
 /** Haalt de JSON uit het antwoord en valideert hem; alles wat afwijkt is `null`. */
 export function parseOutput(content: Anthropic.ContentBlock[]): ReceiptOutput | null {
-	const text = content.find((b): b is Anthropic.TextBlock => b.type === 'text')?.text;
-	if (text === undefined) return null;
-	let json: unknown;
-	try {
-		json = JSON.parse(text);
-	} catch {
-		return null;
-	}
+	const json = jsonOf(content);
+	if (json === undefined) return null;
 	const parsed = ReceiptOutputSchema.safeParse(lowerEnums(json));
 	return parsed.success ? parsed.data : null;
 }
