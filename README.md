@@ -7,6 +7,8 @@
 
 Persoonlijke budgetapp voor één gebruiker, op een eigen server. Snel uitgaven invoeren (ook offline), eenmalig de bankhistorie importeren (CAMT.053 of CSV), budgetten per categorie en vaste lasten als verwachte posten. Bonnetjes kunnen optioneel worden gelezen met Claude Haiku.
 
+**In English:** a personal budgeting app for a single user, self-hosted on your own server. Quick expense entry (also offline), a one-time import of your bank history (CAMT.053 or CSV), budgets per category and recurring costs as expected transactions, with optional receipt reading by Claude Haiku. The app and its documentation are in Dutch, as it targets Dutch banks, but issues and comments in English are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md#in-english) to contribute and [SECURITY.md](SECURITY.md#english) to report a vulnerability.
+
 ## Stack
 
 - SvelteKit (Node-adapter) als PWA, met GSAP voor animaties
