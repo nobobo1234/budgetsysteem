@@ -46,7 +46,7 @@ test('een vraag stellen en de aannames zien', async ({ page }) => {
 		.fill('Hoeveel gaf ik deze maand uit aan boodschappen?');
 	await page.getByRole('button', { name: 'Vragen' }).click();
 	// Laadstaat zolang Haiku denkt
-	await expect(page.getByText('Haiku vertaalt je vraag')).toBeVisible();
+	await expect(page.getByText(/vertaalt je vraag/)).toBeVisible();
 
 	const answer = page.getByRole('region', { name: 'Antwoord' });
 	await expect(answer.getByText(/ aan Boodschappen, 1 /)).toBeVisible();

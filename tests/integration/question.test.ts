@@ -74,7 +74,7 @@ function reply(out: Partial<QuestionOutput> | string): Anthropic.Message {
 		id: 'msg_test',
 		type: 'message',
 		role: 'assistant',
-		model: 'claude-haiku-5-5',
+		model: 'claude-sonnet-5-5',
 		content: [
 			{
 				type: 'text',
@@ -138,10 +138,11 @@ describe('een vraag stellen', () => {
 			expect.objectContaining({
 				feature: 'vraag',
 				outcome: 'beantwoord',
-				model: 'claude-haiku-5-5',
+				// Het vraagveld vertaalt met Sonnet 5.5 (de keuze van de vraag-eval)
+				model: 'claude-sonnet-5-5',
 				inputTokens: 2000,
 				outputTokens: 160,
-				costNanoUsd: 2000 * 100 + 160 * 500,
+				costNanoUsd: 2000 * 2000 + 160 * 10_000,
 				failure: null,
 				ref: row.telemetryRef
 			})

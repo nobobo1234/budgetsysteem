@@ -144,7 +144,7 @@ export function refusalText(refusal: Refusal, detail: string | null = null): str
 export const CAN_DO_EXAMPLES: Record<'standaard' | Measure, string> = {
 	standaard: 'Hoeveel gaf ik vorige maand uit aan boodschappen?',
 	uitgegeven: 'Hoeveel gaf ik dit jaar uit aan uit eten?',
-	aantal: 'Hoe vaak betaalde ik deze maand bij de supermarkt?',
+	aantal: 'Hoe vaak betaalde ik deze maand bij Albert Heijn?',
 	gemiddeld_per_maand: 'Wat geef ik gemiddeld per maand uit aan vervoer?',
 	vaste_lasten: 'Hoeveel gingen er vorige maand naar vaste lasten?',
 	limiet: 'Wat is mijn limiet voor boodschappen deze maand?',

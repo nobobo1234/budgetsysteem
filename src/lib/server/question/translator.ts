@@ -35,23 +35,26 @@ import { describeError } from '../telemetry/errors.ts';
  */
 export interface QuestionVariant {
 	name: string;
+	/** Hoe het model in beeld heet: "Claude Sonnet 5.5 vertaalt je vraag" */
+	label: string;
 	model: string;
 	effort: Effort | null;
 }
 
 export const QUESTION_VARIANTS = [
-	{ name: 'haiku', model: 'claude-haiku-5-5', effort: null },
-	{ name: 'haiku-high', model: 'claude-haiku-5-5', effort: 'high' },
-	{ name: 'sonnet', model: 'claude-sonnet-5-5', effort: null }
+	{ name: 'haiku', label: 'Claude Haiku 5.5', model: 'claude-haiku-5-5', effort: null },
+	{ name: 'haiku-high', label: 'Claude Haiku 5.5', model: 'claude-haiku-5-5', effort: 'high' },
+	{ name: 'sonnet', label: 'Claude Sonnet 5.5', model: 'claude-sonnet-5-5', effort: null }
 ] as const satisfies readonly QuestionVariant[];
 
 /**
- * Het model van het vraagveld: de snelste variant die de vraag-eval haalt. VOORLOPIG Haiku 5.5
- * op de standaard-effort, de snelste van de drie: de eval (scripts/vraag-eval.ts) is nog niet
- * tegen de echte API gedraaid. Haalt deze variant het doel niet, dan wordt het de snelste die
- * het wel haalt.
+ * Het model van het vraagveld: de snelste variant die de vraag-eval haalt (spec: Vraagveld,
+ * Model). Meting van 28 oktober 2026 op de goudset van 49 vragen: Sonnet 5.5 37/38 juist (97,4%),
+ * mediaan 1,9 s; Haiku 5.5 29/38 (2,4 s) en Haiku 5.5 op high 34/38 (3,0 s) haalden de 95% niet.
+ * Alle drie gaven geen getal bij een vraag die niet past. Na elke wijziging aan de prompt of de
+ * semantische laag opnieuw meten op alle varianten.
  */
-export const QUESTION_VARIANT: QuestionVariant = QUESTION_VARIANTS[0];
+export const QUESTION_VARIANT: QuestionVariant = QUESTION_VARIANTS[2];
 /** Ruimte voor het denken plus een klein JSON-object; begrenst ook de kosten per vraag. */
 export const QUESTION_MAX_TOKENS = 8000;
 

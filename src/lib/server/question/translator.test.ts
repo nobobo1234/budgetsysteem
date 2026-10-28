@@ -57,7 +57,7 @@ function message(
 		id: 'msg_test',
 		type: 'message',
 		role: 'assistant',
-		model: QUESTION_VARIANT.model,
+		model: 'claude-haiku-5-5',
 		content: [
 			{ type: 'thinking', thinking: '', signature: 'sig' },
 			{ type: 'text', text, citations: null }
@@ -104,6 +104,11 @@ describe('verzoek voor een vraag', () => {
 		const schema = JSON.stringify(buildQuestionRequest('x', CATALOG, TODAY).output_config);
 		expect(schema).toContain('"json_schema"');
 		expect(schema).not.toMatch(/"(minimum|maximum|maxLength|maxItems|\$schema)"/);
+	});
+
+	it('het vraagveld gebruikt de variant die de eval koos: Sonnet 5.5', () => {
+		expect(QUESTION_VARIANT).toEqual(QUESTION_VARIANTS[2]);
+		expect(buildQuestionRequest('x', CATALOG, TODAY).model).toBe('claude-sonnet-5-5');
 	});
 
 	it('elke variant van de eval: model en effort', () => {
@@ -221,6 +226,7 @@ describe('vertalen met een nagebootst model', () => {
 			message(JSON.stringify({ ...EMPTY, categorieen: ['Boodschappen'] }))
 		);
 		const r = await translateQuestion(c, 'Hoeveel aan boodschappen?', CATALOG, TODAY, {
+			variant: QUESTION_VARIANTS[0],
 			clock: clock()
 		});
 		expect(r.ok).toBe(true);

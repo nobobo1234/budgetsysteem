@@ -117,7 +117,7 @@
 	<div class="result" aria-live="polite">
 		{#if thinking}
 			<section class="card waiting" aria-busy="true" aria-label="Antwoord">
-				<p class="muted">Haiku vertaalt je vraag; daarna rekent de app.</p>
+				<p class="muted">{data.model} vertaalt je vraag; daarna rekent de app.</p>
 				<span class="line" aria-hidden="true"></span>
 				<span class="line short" aria-hidden="true"></span>
 			</section>
@@ -183,7 +183,9 @@
 				</details>
 
 				<div class="foot">
-					<p class="muted note">Uitgerekend door de app; Haiku vertaalde alleen je vraag.</p>
+					<p class="muted note">
+						Uitgerekend door de app; {data.model} vertaalde alleen je vraag.
+					</p>
 					{#if result.wrong}
 						<span class="flag marked">Gemeld als niet kloppend</span>
 					{:else}

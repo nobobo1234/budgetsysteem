@@ -12,6 +12,7 @@ import {
 	questionHistory,
 	unavailable
 } from '#lib/server/question/index.ts';
+import { QUESTION_VARIANT } from '#lib/server/question/translator.ts';
 import type { Actions, PageServerLoad } from './$types';
 
 // Vraag (spec: Vraagveld, Schermen): het vraagveld onder Analyses. Het model vertaalt de vraag,
@@ -19,7 +20,9 @@ import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = () => ({
 	history: questionHistory(db()),
-	unavailable: unavailable()
+	unavailable: unavailable(),
+	/** Welk model de vraag vertaalt, voor de laadstaat en de regel onder het antwoord */
+	model: QUESTION_VARIANT.label
 });
 
 const askSchema = z.object({ vraag: z.string().max(MAX_QUESTION_CHARS * 2) });
