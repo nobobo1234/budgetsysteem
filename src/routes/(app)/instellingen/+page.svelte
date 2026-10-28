@@ -79,6 +79,17 @@
 					icon: icons.tags
 				},
 				{
+					href: '/garantie',
+					title: 'Garantie',
+					value:
+						t.warranty.soon > 0
+							? `${plural(t.warranty.soon, 'product', 'producten')} binnenkort`
+							: t.warranty.active > 0
+								? plural(t.warranty.active, 'product', 'producten')
+								: 'Bewijs en herinneringen',
+					icon: icons.garantie
+				},
+				{
 					href: '/saldocheck',
 					title: 'Saldocheck',
 					value:

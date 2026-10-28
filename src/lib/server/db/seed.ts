@@ -42,6 +42,9 @@ export const START_CATEGORIES: { group: string; names: string[]; countsForBudget
 
 export const INTERNAL_TRANSFER = 'Interne overboeking';
 
+/** Houdt standaard garantie bij (spec: Datamodel, categories). */
+export const WARRANTY_CATEGORY = 'Elektronica';
+
 /** Vult een lege database met startcategorieën, de twee rekeningen en de Revolut-regel. */
 export function seed(db: BetterSQLite3Database<typeof schema>): void {
 	db.transaction((tx) => {
@@ -60,6 +63,7 @@ export function seed(db: BetterSQLite3Database<typeof schema>): void {
 						name,
 						group: group.group,
 						countsForBudget: group.countsForBudget,
+						tracksWarranty: name === WARRANTY_CATEGORY,
 						sortOrder: order++
 					})
 					.run();

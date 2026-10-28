@@ -14,6 +14,7 @@ import { listDevices } from './push/subscriptions.ts';
 import { recurringOverview } from './recurring.ts';
 import { sharesOverview } from './shares.ts';
 import { tagsTile } from './tags.ts';
+import { warrantyTile } from './warranty.ts';
 import { collectHealth, healthPaths } from './telemetry/health.ts';
 import { telemetryDb } from './telemetry/index.ts';
 import { attention } from './telemetry/status.ts';
@@ -100,6 +101,7 @@ export function meerTiles(db: DB, today = toIsoDate(new Date())) {
 					.get()?.n ?? 0
 		},
 		tags: tagsTile(db, today),
+		warranty: warrantyTile(db, today),
 		recoveryCode: hasRecoveryCode(db),
 		statusAttention: statusAttention(),
 		usage: usageTile(today)

@@ -112,6 +112,20 @@
 				<span class="muted small">Uit voor inkomen, sparen en overboekingen</span>
 			</span>
 		</label>
+		<label class="switch">
+			<input
+				type="checkbox"
+				role="switch"
+				name="tracksWarranty"
+				checked={c ? c.tracksWarranty : false}
+			/>
+			<span class="track" aria-hidden="true"></span>
+			<span>
+				Garantie bijhouden
+				<span class="muted small">Een uitgave vanaf € 50 wordt een voorstel bij Te controleren</span
+				>
+			</span>
+		</label>
 		<div class="actions">
 			<button class="button">{c ? 'Opslaan' : 'Toevoegen'}</button>
 			<button type="button" class="button secondary" onclick={() => (editing = null)}
@@ -171,6 +185,7 @@
 								<button class="row" onclick={() => edit(c)} aria-label="{c.name} wijzigen">
 									<span class="name">{c.name}</span>
 									{#if !c.countsForBudget}<span class="badge">Buiten budget</span>{/if}
+									{#if c.tracksWarranty}<span class="badge">Garantie</span>{/if}
 									<svg class="pencil" viewBox="0 0 20 20" aria-hidden="true">
 										<path
 											d="M13.5 3.5l3 3L7 16H4v-3z"

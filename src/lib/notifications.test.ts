@@ -18,6 +18,7 @@ describe('soorten meldingen', () => {
 				'bon',
 				'budget_90',
 				'fout',
+				'garantie',
 				'maand',
 				'schijf',
 				'terugbetaling',

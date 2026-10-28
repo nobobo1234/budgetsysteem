@@ -1,4 +1,4 @@
-import { fail } from '@sveltejs/kit';
+import { fail, redirect } from '@sveltejs/kit';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { toIsoDate } from '#lib/dates.ts';
@@ -12,6 +12,13 @@ import { inboxCount, leaveInInbox, reviewInbox } from '#lib/server/review.ts';
 import { confirmReceipt } from '#lib/server/receipts/process.ts';
 import { confirmReceived, creditToPayable } from '#lib/server/shares.ts';
 import { updateTransaction } from '#lib/server/transactions.ts';
+import {
+	createWarranty,
+	discardWarranty,
+	keepRefunded,
+	rejectProposal
+} from '#lib/server/warranty.ts';
+import { startSchema } from '../garantie/form.ts';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = ({ setHeaders }) => {
@@ -126,6 +133,42 @@ export const actions: Actions = {
 		return guarded(() => {
 			confirmReceipt(db(), parsed.data.id);
 			return { receipt: parsed.data.id };
+		});
+	},
+	// Garantie bijhouden? Met de naam van het product naar zijn pagina, of afwijzen
+	warranty: async ({ request }) => {
+		const parsed = startSchema.safeParse(fromForm(await request.formData()));
+		if (!parsed.success) return fail(400, { message: 'Vul de naam van het product in.' });
+		const result = guarded(() => createWarranty(db(), parsed.data));
+		if (typeof result !== 'string') return result;
+		redirect(303, `/garantie/${result}`);
+	},
+	rejectWarranty: async ({ request }) => {
+		const parsed = z
+			.object({ transactionId: z.uuid() })
+			.safeParse(fromForm(await request.formData()));
+		if (!parsed.success) return fail(400, { message: 'Dit voorstel ken ik niet.' });
+		return guarded(() => {
+			rejectProposal(db(), parsed.data.transactionId, toIsoDate(new Date()));
+			return { rejected: parsed.data.transactionId };
+		});
+	},
+	// Na een retour: het product is weg (afdanken) of nog in huis (laten staan)
+	discardWarranty: async ({ request }) => {
+		const parsed = idSchema.safeParse(fromForm(await request.formData()));
+		if (!parsed.success) return fail(400, { message: 'Deze garantie ken ik niet.' });
+		return guarded(() => {
+			if (!discardWarranty(db(), parsed.data.id))
+				return fail(404, { message: 'Deze garantie bestaat niet meer.' });
+			return { discarded: parsed.data.id };
+		});
+	},
+	keepWarranty: async ({ request }) => {
+		const parsed = idSchema.safeParse(fromForm(await request.formData()));
+		if (!parsed.success) return fail(400, { message: 'Deze garantie ken ik niet.' });
+		return guarded(() => {
+			keepRefunded(db(), parsed.data.id);
+			return { kept: parsed.data.id };
 		});
 	},
 	leave: async ({ request }) => {

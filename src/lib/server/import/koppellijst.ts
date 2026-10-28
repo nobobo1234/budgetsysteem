@@ -27,6 +27,7 @@ import { ValidationError } from '../errors.ts';
 import { ADVANCED, MY_SHARE, settlePayment, syncShareSplits, unlinkPayment } from '../owed.ts';
 import { applySharedSplit, hasSharePosts } from '../shares.ts';
 import { moveManualTags, syncAutoTags } from '../tags.ts';
+import { moveWarranties } from '../warranty.ts';
 
 // Koppellijst bij een bankimport (spec: Import en Bonnetjes en koppelen → Koppellijst). Een
 // nieuwe boeking van de bank wordt tegen je eigen invoer gehouden: handmatig, van een bon, of een
@@ -391,6 +392,7 @@ export function mergeImported(
 			.where(eq(reservations.transactionId, importedId))
 			.run();
 		moveManualTags(tx, importedId, ownId);
+		moveWarranties(tx, importedId, ownId);
 		// Eerst weg, dan pas de bankreferentie op je invoer (die is uniek)
 		tx.delete(transactions).where(eq(transactions.id, importedId)).run();
 		const differenceCents = mergeIntoOwn(

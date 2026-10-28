@@ -15,7 +15,8 @@ const LABELS: Record<string, string> = {
 	'/saldocheck': 'Saldocheck',
 	'/regels': 'Regels',
 	'/instellingen/rekeningen': 'Rekeningen',
-	'/tags': 'Tags'
+	'/tags': 'Tags',
+	'/garantie': 'Garantie'
 };
 
 export interface BackTarget {
@@ -53,6 +54,7 @@ const TAB_OF: [prefix: string, tab: string][] = [
 	['/te-krijgen', '/instellingen'],
 	['/personen', '/instellingen'],
 	['/tags', '/instellingen'],
+	['/garantie', '/instellingen'],
 	['/terugbetalingen', '/instellingen'],
 	['/saldocheck', '/instellingen'],
 	['/bonnen', '/instellingen'],

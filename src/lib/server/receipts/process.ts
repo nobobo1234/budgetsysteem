@@ -13,6 +13,7 @@ import { recordCorrection, type CorrectableField } from '../telemetry/receipts.t
 import { telemetryDb } from '../telemetry/index.ts';
 import { deleteTransaction, updateTransaction } from '../transactions.ts';
 import { dateInRange } from '../validation.ts';
+import { assertNoActiveWarranty } from '../warranty.ts';
 import type { FieldStatus } from './checks.ts';
 import { clearLines, storeLines } from './lines.ts';
 import {
@@ -630,6 +631,8 @@ export async function deleteReceipt(db: DB, id: string): Promise<boolean> {
 	const receipt = loadReceipt(db, id);
 	if (!receipt) return false;
 	db.transaction((tx) => {
+		// Een bon bij een actieve garantie gooi je pas weg nadat je het product afdankt
+		assertNoActiveWarranty(tx, { receiptId: id });
 		tx.delete(receipts).where(eq(receipts.id, id)).run();
 		recordChange(tx, 'verwijderd', 'receipts', id, null, null);
 	});

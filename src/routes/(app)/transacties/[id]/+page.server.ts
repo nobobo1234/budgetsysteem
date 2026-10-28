@@ -38,6 +38,8 @@ import {
 	ValidationError
 } from '#lib/server/transactions.ts';
 import { personName, transactionPatchSchema } from '#lib/server/validation.ts';
+import { createWarranty, warrantiesOf } from '#lib/server/warranty.ts';
+import { productName } from '../../garantie/form.ts';
 import type { Actions, PageServerLoad } from './$types';
 
 const idSchema = z.uuid();
@@ -128,6 +130,9 @@ export const load: PageServerLoad = ({ params }) => {
 		people: listPeople(db()).filter((p) => p.active),
 		ibanSuggestion: ibanSuggestion(tx.id, tx.counterIban),
 		tags: transactionTagChips(db(), tx.id),
+		// Garantie: de producten bij deze uitgave, of zelf bijhouden
+		warranties: warrantiesOf(db(), [tx.id]),
+		canWarranty: tx.amountCents < 0 && !tx.correctionOf && tx.status !== 'verwacht',
 		categories: db()
 			.select({ id: categories.id, name: categories.name, group: categories.group })
 			.from(categories)
@@ -284,8 +289,26 @@ export const actions: Actions = {
 		}
 		return { tagged: true };
 	},
+	warranty: async ({ request, params }) => {
+		if (!idSchema.safeParse(params.id).success) error(404, 'Niet gevonden');
+		const product = productName.safeParse((await request.formData()).get('product'));
+		if (!product.success) return fail(400, { message: 'Vul de naam van het product in.' });
+		let id: string;
+		try {
+			id = createWarranty(db(), { transactionId: params.id, product: product.data });
+		} catch (e) {
+			if (e instanceof ValidationError) return fail(400, { message: `${e.message}.` });
+			throw e;
+		}
+		redirect(303, `/garantie/${id}`);
+	},
 	delete: async ({ params }) => {
-		deleteTransaction(db(), params.id);
+		try {
+			deleteTransaction(db(), params.id);
+		} catch (e) {
+			if (e instanceof ValidationError) return fail(400, { deleteMessage: `${e.message}.` });
+			throw e;
+		}
 		redirect(303, '/transacties');
 	}
 };

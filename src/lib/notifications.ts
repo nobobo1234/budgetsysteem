@@ -59,6 +59,13 @@ export const NOTIFICATION_KINDS = {
 		hint: 'De afsluiting van de vorige maand staat klaar',
 		switchable: true
 	},
+	garantie: {
+		group: 'geld',
+		title: 'Garantie',
+		label: 'Garantie loopt af',
+		hint: 'Dertig dagen voor het einde van het eerste jaar en van de fabrieksgarantie',
+		switchable: true
+	},
 	fout: {
 		group: 'server',
 		title: 'Server',

@@ -125,3 +125,9 @@ export const afsluiting: IconDef = {
 	hue: 345,
 	path: 'M4 5.5h16V20H4z M4 9.5h16 M8.5 3.5v4 M15.5 3.5v4 M9 14.5l2.2 2.2 4-4.2'
 };
+
+// Een rozet met een klokje: een garantie die een tijd loopt
+export const garantie: IconDef = {
+	hue: 45,
+	path: 'M12 3a6 6 0 1 0 0 12 6 6 0 0 0 0-12z M8.6 13.9 7 21l5-2.5 5 2.5-1.6-7.1 M12 6.5V9l1.8 1.2'
+};
