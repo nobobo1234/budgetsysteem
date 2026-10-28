@@ -38,6 +38,9 @@ export const categories = sqliteTable('categories', {
 	name: text('name').notNull().unique(),
 	group: text('group').notNull(),
 	countsForBudget: integer('counts_for_budget', { mode: 'boolean' }).notNull().default(true),
+	// Een uitgave vanaf de drempel in deze categorie wordt een voorstel "garantie bijhouden?"
+	// (spec: Garantie); standaard aan voor Elektronica
+	tracksWarranty: integer('tracks_warranty', { mode: 'boolean' }).notNull().default(false),
 	sortOrder: integer('sort_order').notNull().default(0),
 	archived: integer('archived', { mode: 'boolean' }).notNull().default(false),
 	createdAt: createdAt()
@@ -715,5 +718,47 @@ export const monthClosings = sqliteTable(
 	},
 	(t) => [
 		check('month_closings_month_format', sql`${t.month} GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]'`)
+	]
+);
+
+// Garantie (spec: Garantie). Een product dat je bijhoudt, bij de transactie waarmee je het kocht.
+// Een voorstel uit de regel staat hier niet: dat volgt live uit de transacties (zie
+// server/warranty.ts). Pas als je het bevestigt (actief) of afwijst (afgewezen, zonder product)
+// komt er een rij, zodat een afgewezen voorstel niet terugkomt. Afgedankt krijgt geen meldingen.
+export const warranties = sqliteTable(
+	'warranties',
+	{
+		id: id(),
+		// Je eigen naam voor het product; onbetrouwbare tekst, alleen als gewone tekst tonen
+		product: text('product').notNull().default(''),
+		transactionId: text('transaction_id')
+			.notNull()
+			.references(() => transactions.id, { onDelete: 'cascade' }),
+		receiptId: text('receipt_id').references(() => receipts.id, { onDelete: 'set null' }),
+		// De datum van de transactie bij het bijhouden
+		purchaseDate: text('purchase_date').notNull(),
+		// Standaard gelijk aan de aankoopdatum; het eerste jaar telt vanaf hier
+		deliveryDate: text('delivery_date').notNull(),
+		factoryUntil: text('factory_until'),
+		// Een schatting, standaard per soort (src/lib/warranty.ts)
+		lifetimeYears: integer('lifetime_years').notNull(),
+		status: text('status', { enum: ['actief', 'afgewezen', 'afgedankt'] })
+			.notNull()
+			.default('actief'),
+		note: text('note').notNull().default(''),
+		discardedAt: text('discarded_at'),
+		createdAt: createdAt(),
+		updatedAt: text('updated_at')
+	},
+	(t) => [
+		index('warranties_transaction_idx').on(t.transactionId),
+		index('warranties_receipt_idx').on(t.receiptId),
+		index('warranties_status_idx').on(t.status),
+		check(
+			'warranties_dates',
+			sql`${t.purchaseDate} GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND ${t.deliveryDate} GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND (${t.factoryUntil} IS NULL OR ${t.factoryUntil} GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]')`
+		),
+		check('warranties_lifetime', sql`${t.lifetimeYears} BETWEEN 1 AND 30`),
+		check('warranties_product', sql`${t.status} = 'afgewezen' OR length(trim(${t.product})) > 0`)
 	]
 );

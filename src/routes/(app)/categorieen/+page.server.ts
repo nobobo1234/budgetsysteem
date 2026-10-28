@@ -22,7 +22,8 @@ export const load: PageServerLoad = () => ({
 const categorySchema = z.object({
 	name: z.string().trim().min(1).max(60),
 	group: z.string().trim().min(1).max(40),
-	countsForBudget: z.literal('on').optional()
+	countsForBudget: z.literal('on').optional(),
+	tracksWarranty: z.literal('on').optional()
 });
 
 const idSchema = z.object({ id: z.uuid() });
@@ -47,6 +48,7 @@ export const actions: Actions = {
 					name: parsed.data.name,
 					group: parsed.data.group,
 					countsForBudget: parsed.data.countsForBudget === 'on',
+					tracksWarranty: parsed.data.tracksWarranty === 'on',
 					sortOrder: max + 1
 				})
 				.returning()
@@ -71,7 +73,8 @@ export const actions: Actions = {
 				.set({
 					name: parsed.data.name,
 					group: parsed.data.group,
-					countsForBudget: parsed.data.countsForBudget === 'on'
+					countsForBudget: parsed.data.countsForBudget === 'on',
+					tracksWarranty: parsed.data.tracksWarranty === 'on'
 				})
 				.where(eq(categories.id, id.data.id))
 				.returning()

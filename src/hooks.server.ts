@@ -21,6 +21,7 @@ import { verifyUploadToken } from '#lib/server/receipts/tokens.ts';
 import { registerReceiptReader } from '#lib/server/receipts/worker.ts';
 import { scheduleRecurringJobs } from '#lib/server/recurring.ts';
 import { startRecurringNotifications } from '#lib/server/recurring-notify.ts';
+import { scheduleWarrantyNotifications } from '#lib/server/warranty-notify.ts';
 import {
 	alertSoon,
 	describeError,
@@ -42,6 +43,8 @@ export const init: ServerInit = () => {
 	startBudgetNotifications(db);
 	// Pushmelding om 9:00 als de afsluiting van de vorige maand klaarstaat
 	scheduleClosingNotifications(db());
+	// Pushmelding om 9:00, 30 dagen voor het einde van het eerste jaar of de fabrieksgarantie
+	scheduleWarrantyNotifications(db());
 	// Bonnen lezen met Haiku; zonder API-sleutel blijven ze wachten tot die er is
 	const apiKey = config().ANTHROPIC_API_KEY;
 	if (apiKey) {

@@ -12,7 +12,13 @@ test.beforeEach(async ({ context }) => {
 });
 
 /** Een transactie, een vaste last, een bon en een tag, zodat ook de detailpagina's meedoen. */
-function details(): { tx: string; recurring: string; receipt: string; tag: string } {
+function details(): {
+	tx: string;
+	recurring: string;
+	receipt: string;
+	tag: string;
+	warranty: string;
+} {
 	const db = new Database('.e2e/budget.db', { fileMustExist: true });
 	db.pragma('busy_timeout = 5000');
 	const account = (
@@ -67,8 +73,15 @@ function details(): { tx: string; recurring: string; receipt: string; tag: strin
 		`INSERT INTO transaction_tags (id, transaction_id, tag_id, source, active)
 		 VALUES (?, ?, ?, 'handmatig', 1)`
 	).run(randomUUID(), tx, tag);
+	// Een product met garantie bij de transactie (met bon)
+	const warranty = randomUUID();
+	db.prepare(
+		`INSERT INTO warranties (id, product, transaction_id, receipt_id, purchase_date, delivery_date,
+			lifetime_years)
+		 VALUES (?, ?, ?, ?, date('now', '-3 days'), date('now', '-3 days'), 5)`
+	).run(warranty, name, tx, receipt);
 	db.close();
-	return { tx, recurring, receipt, tag };
+	return { tx, recurring, receipt, tag, warranty };
 }
 
 function previousMonth(): string {
@@ -78,7 +91,7 @@ function previousMonth(): string {
 }
 
 /** Alle schermen achter de login; subpagina's zonder eigen tab apart. */
-function routes(ids: { tx: string; recurring: string; receipt: string; tag: string }) {
+function routes(ids: ReturnType<typeof details>) {
 	const sub = [
 		...MEER_PAGES,
 		'/te-controleren',
@@ -86,6 +99,7 @@ function routes(ids: { tx: string; recurring: string; receipt: string; tag: stri
 		`/vaste-lasten/${ids.recurring}`,
 		`/bonnen/${ids.receipt}`,
 		`/tags/${ids.tag}`,
+		`/garantie/${ids.warranty}`,
 		'/analyses/boodschappen',
 		'/budget/startlimieten',
 		'/afsluiting',

@@ -44,6 +44,7 @@ import {
 import { applySharedSplit, hasSharePosts, removeSharedFor } from './shares.ts';
 import { syncAutoTags } from './tags.ts';
 import { dateInRange, type NewTransaction, type TransactionPatch } from './validation.ts';
+import { assertNoActiveWarranty } from './warranty.ts';
 
 export { ValidationError };
 
@@ -286,6 +287,8 @@ export function deleteTransaction(db: DB, id: string): boolean {
 	return db.transaction((tx) => {
 		const before = tx.select().from(transactions).where(eq(transactions.id, id)).get();
 		if (!before) return false;
+		// Het bewijs voor een actieve garantie blijft staan tot je het product afdankt
+		assertNoActiveWarranty(tx, { transactionId: id });
 		// Retouren op deze boeking worden gewone boekingen op te controleren, vóór het opruimen
 		// van de posten: hun deel staat als betaling op die posten
 		releaseCorrectionsOf(tx, id);

@@ -7,6 +7,7 @@
 	import Switch from '#lib/components/Switch.svelte';
 	import Toast from '#lib/components/Toast.svelte';
 	import TransactionTags from '#lib/components/TransactionTags.svelte';
+	import WarrantyStart from '#lib/components/WarrantyStart.svelte';
 	import { groupColor, groupHue } from '#lib/categoryColor.ts';
 	import { formatMonth, formatShortDate } from '#lib/dates.ts';
 	import { centsToInput, formatCents } from '#lib/money.ts';
@@ -652,6 +653,12 @@
 		</section>
 	{/if}
 
+	<WarrantyStart
+		warranties={data.warranties}
+		canStart={data.canWarranty}
+		fields={{ transactionId: tx.id }}
+	/>
+
 	{#if data.tags && (data.tags.chips.length > 0 || data.tags.others.length > 0 || data.tags.follows.length > 0)}
 		<TransactionTags
 			chips={data.tags.chips}
@@ -677,6 +684,9 @@
 			<button type="button" class="button danger" onclick={() => (confirmDelete = true)}
 				>Verwijderen</button
 			>
+		{/if}
+		{#if form && 'deleteMessage' in form && form.deleteMessage}
+			<p class="error-text" role="alert">{form.deleteMessage}</p>
 		{/if}
 	</form>
 </div>

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { enhance, type SubmitFunction } from '$app/forms';
+	import { applyAction, enhance, type SubmitFunction } from '$app/forms';
 	import { fly } from 'svelte/transition';
 	import { groupHue } from '#lib/categoryColor.ts';
 	import BackLink from '#lib/components/BackLink.svelte';
@@ -36,6 +36,11 @@
 				if (result.type === 'success') {
 					notify(typeof done === 'string' ? done : done(formData));
 					await update();
+					return;
+				}
+				// Garantie bijhouden gaat door naar de pagina van het product
+				if (result.type === 'redirect') {
+					await applyAction(result);
 					return;
 				}
 				const message = result.type === 'failure' ? result.data?.message : undefined;
@@ -528,6 +533,137 @@
 		</section>
 	{/if}
 
+	{#if inbox.warranties.length > 0}
+		<section class="group" aria-labelledby="warranty-title">
+			{@render groupHead(
+				'warranty-title',
+				'Garantie bijhouden?',
+				inbox.warranties.length,
+				'Dan bewaart de app het bewijs en krijg je een melding voordat het eerste jaar om is.'
+			)}
+			<ul class="card list">
+				{#each inbox.warranties as p (p.transactionId)}
+					{@const store = displayName(p.counterparty) || 'Deze aankoop'}
+					<li class="item" out:fly={{ x: 32, duration: motion(220) }}>
+						<div class="row">
+							<span
+								class="monogram sm hue"
+								style:--h={groupHue(p.categoryGroup ?? store)}
+								aria-hidden="true">{initials(store)}</span
+							>
+							<a class="who" href="/transacties/{p.transactionId}">
+								<span class="name">{store}</span>
+								<span class="muted small"
+									>{p.categoryName ? `${p.categoryName} · ` : ''}{formatShortDate(p.date)}</span
+								>
+							</a>
+							<span class="num amount">{formatCents(p.amountCents, { sign: true })}</span>
+						</div>
+						<div class="why">
+							<form
+								id="garantie-{p.transactionId}"
+								class="product"
+								method="POST"
+								action="?/warranty"
+								use:enhance={act(`garantie:${p.transactionId}`, 'Garantie bijgehouden.')}
+							>
+								<input type="hidden" name="transactionId" value={p.transactionId} />
+								<label class="field">
+									<span class="small">Welk product?</span>
+									<input
+										name="product"
+										maxlength="60"
+										required
+										autocomplete="off"
+										placeholder="Bijvoorbeeld laptop"
+										aria-label="Welk product kocht je bij {store}?"
+									/>
+								</label>
+							</form>
+							<div class="actions">
+								<button
+									form="garantie-{p.transactionId}"
+									class="button secondary small"
+									disabled={busy === `garantie:${p.transactionId}`}
+									aria-label="Garantie bijhouden voor {store}">Bijhouden</button
+								>
+								<form
+									method="POST"
+									action="?/rejectWarranty"
+									use:enhance={act(
+										`afwijzen:${p.transactionId}`,
+										'Afgewezen; dit voorstel komt niet terug.'
+									)}
+								>
+									<input type="hidden" name="transactionId" value={p.transactionId} />
+									<button
+										class="text-button muted"
+										disabled={busy === `afwijzen:${p.transactionId}`}
+										aria-label="Geen garantie bijhouden voor {store}">Afwijzen</button
+									>
+								</form>
+							</div>
+						</div>
+					</li>
+				{/each}
+			</ul>
+		</section>
+	{/if}
+
+	{#if inbox.warrantyRefunds.length > 0}
+		<section class="group" aria-labelledby="refund-title">
+			{@render groupHead(
+				'refund-title',
+				'Product weg?',
+				inbox.warrantyRefunds.length,
+				'Je kreeg de hele aankoop terug. Stuurde je het product terug, dank het dan af.'
+			)}
+			<ul class="card list">
+				{#each inbox.warrantyRefunds as w (w.id)}
+					{@const store = displayName(w.counterparty) || 'de winkel'}
+					<li class="item" out:fly={{ x: 32, duration: motion(220) }}>
+						<div class="row">
+							<span class="monogram sm hue" style:--h={groupHue(store)} aria-hidden="true"
+								>{initials(store)}</span
+							>
+							<a class="who" href="/garantie/{w.id}">
+								<span class="name">{w.product}</span>
+								<span class="muted small">{store} · {formatShortDate(w.date)}</span>
+							</a>
+							<span class="num amount">{formatCents(w.amountCents, { sign: true })}</span>
+						</div>
+						<div class="actions">
+							<form
+								method="POST"
+								action="?/discardWarranty"
+								use:enhance={act(`afdanken:${w.id}`, `${w.product} afgedankt.`)}
+							>
+								<input type="hidden" name="id" value={w.id} />
+								<button
+									class="button secondary small"
+									disabled={busy === `afdanken:${w.id}`}
+									aria-label="{w.product} afdanken">Afdanken</button
+								>
+							</form>
+							<form
+								method="POST"
+								action="?/keepWarranty"
+								use:enhance={act(`houden:${w.id}`, 'Laten staan; de garantie loopt door.')}
+							>
+								<input type="hidden" name="id" value={w.id} />
+								<button
+									class="text-button muted"
+									disabled={busy === `houden:${w.id}`}
+									aria-label="{w.product} is er nog">Is er nog</button
+								>
+							</form>
+						</div>
+					</li>
+				{/each}
+			</ul>
+		</section>
+	{/if}
+
 	{#if data.count === 0}
 		<div class="card">
 			<EmptyState
@@ -721,6 +857,12 @@
 		display: grid;
 		line-height: 1.3;
 		overflow-wrap: anywhere;
+	}
+
+	/* Garantie bijhouden: de naam van het product, met de knoppen eronder */
+	.product .field {
+		display: grid;
+		gap: 4px;
 	}
 
 	.diff {

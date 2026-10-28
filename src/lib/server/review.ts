@@ -25,6 +25,12 @@ import { receiptStage } from './receipts/outcome.ts';
 import { readStored, type ReceiptField } from './receipts/stored.ts';
 import { awaitingConfirmation, type Awaiting } from './recurring.ts';
 import { dueReceipts, type DueReceipt } from './shares.ts';
+import {
+	refundedWarranties,
+	warrantyProposals,
+	type RefundedWarranty,
+	type WarrantyProposal
+} from './warranty.ts';
 
 // Review-inbox "te controleren" (spec: Dagelijks gebruik, en elke plek die iets naar de
 // review-inbox stuurt). Eén verzameling uit de bronnen die er nu zijn, per soort een groep met
@@ -113,6 +119,10 @@ export interface ReviewInbox {
 	credit: ReviewCredit[];
 	/** Posten te krijgen die 14 dagen of langer openstaan */
 	reminders: ReviewReminder[];
+	/** Garantie bijhouden? Een uitgave vanaf de drempel in een categorie met garantie */
+	warranties: WarrantyProposal[];
+	/** Een actieve garantie waarvan de uitgave helemaal terugkwam: is het product weg? */
+	warrantyRefunds: RefundedWarranty[];
 }
 
 const keyOf = (kind: LeaveKind, id: string) => `${kind}:${id}`;
@@ -339,7 +349,9 @@ export function reviewInbox(db: DB, today = toIsoDate(new Date())): ReviewInbox 
 		// Een maandaandeel dat te laat is staat al bij te laat
 		reminders: owedReminders(db, today)
 			.filter((p) => !shareIds.has(p.id) && !left.has(keyOf('herinnering', p.id)))
-			.map((p) => ({ ...p, daysOpen: daysBetween(p.date, today) }))
+			.map((p) => ({ ...p, daysOpen: daysBetween(p.date, today) })),
+		warranties: warrantyProposals(db, today),
+		warrantyRefunds: refundedWarranties(db)
 	};
 }
 

@@ -7,6 +7,7 @@
 	import BackLink from '#lib/components/BackLink.svelte';
 	import Select, { type SelectOption } from '#lib/components/Select.svelte';
 	import Toast from '#lib/components/Toast.svelte';
+	import WarrantyStart from '#lib/components/WarrantyStart.svelte';
 	import { formatShortDate } from '#lib/dates.ts';
 	import { centsToInput, formatCents } from '#lib/money.ts';
 	import { motion } from '#lib/motion.ts';
@@ -655,6 +656,10 @@
 				>
 			</div>
 		</section>
+	{/if}
+
+	{#if !reading && data.linked && !formOpen && !showMatch}
+		<WarrantyStart warranties={data.warranties} canStart={data.canWarranty} fields={{}} />
 	{/if}
 
 	{#if !reading && data.lines.length > 0}

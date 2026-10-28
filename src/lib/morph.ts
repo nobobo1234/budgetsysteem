@@ -15,6 +15,7 @@ export const MEER_PAGES = [
 	'/import',
 	'/bonnen',
 	'/tags',
+	'/garantie',
 	'/categorieen',
 	'/regels',
 	'/personen',

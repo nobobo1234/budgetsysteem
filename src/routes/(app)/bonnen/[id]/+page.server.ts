@@ -29,6 +29,8 @@ import {
 } from '#lib/server/receipts/process.ts';
 import { MAX_LIST_ITEMS } from '#lib/server/receipts/schema.ts';
 import { receiptView } from '#lib/server/receipts/view.ts';
+import { createWarranty, warrantiesOf } from '#lib/server/warranty.ts';
+import { productName } from '../../garantie/form.ts';
 import type { Actions, PageServerLoad } from './$types';
 
 // Bon (spec: Schermen, Bonnetjes en koppelen): wat Haiku las met de zekerheid per veld, de
@@ -56,7 +58,8 @@ export const load: PageServerLoad = ({ params, depends, setHeaders }) => {
 					origAmountCents: transactions.origAmountCents,
 					origCurrency: transactions.origCurrency,
 					source: transactions.source,
-					status: transactions.status
+					status: transactions.status,
+					correctionOf: transactions.correctionOf
 				})
 				.from(transactions)
 				.where(eq(transactions.id, receipt.transactionId))
@@ -80,6 +83,14 @@ export const load: PageServerLoad = ({ params, depends, setHeaders }) => {
 		})),
 		preselect: match?.preselect ?? null,
 		linked,
+		// Garantie: de producten bij de transactie van deze bon, of zelf bijhouden
+		warranties: linked ? warrantiesOf(db(), [linked.id]) : [],
+		canWarranty:
+			receipt.kind === 'bon' &&
+			!!linked &&
+			linked.amountCents < 0 &&
+			!linked.correctionOf &&
+			linked.status !== 'verwacht',
 		accounts: db()
 			.select({ id: accounts.id, name: accounts.name })
 			.from(accounts)
@@ -254,9 +265,31 @@ export const actions: Actions = {
 			rereadReceipt(db(), params.id);
 			return { reread: true };
 		}),
+	warranty: async ({ params, request }) => {
+		if (!idSchema.safeParse(params.id).success) return fail(404, { message: 'Niet gevonden.' });
+		const product = productName.safeParse((await request.formData()).get('product'));
+		if (!product.success) return fail(400, { message: 'Vul de naam van het product in.' });
+		const receipt = loadReceipt(db(), params.id);
+		if (!receipt?.transactionId)
+			return fail(400, { message: 'Verwerk de bon eerst bij een transactie.' });
+		const id = guarded(() =>
+			createWarranty(db(), {
+				transactionId: receipt.transactionId!,
+				receiptId: receipt.id,
+				product: product.data
+			})
+		);
+		if (typeof id !== 'string') return id;
+		redirect(303, `/garantie/${id}`);
+	},
 	delete: async ({ params }) => {
 		if (!idSchema.safeParse(params.id).success) return fail(404, { message: 'Niet gevonden.' });
-		await deleteReceipt(db(), params.id);
+		try {
+			await deleteReceipt(db(), params.id);
+		} catch (e) {
+			if (e instanceof ValidationError) return fail(400, { message: `${e.message}.` });
+			throw e;
+		}
 		redirect(303, '/bonnen');
 	}
 };

@@ -113,7 +113,9 @@ describe('verzameling', () => {
 			transactions: 0,
 			late: 0,
 			credit: 0,
-			reminders: 0
+			reminders: 0,
+			warranties: 0,
+			warrantyRefunds: 0
 		});
 		expect(inboxCount(inbox)).toBe(0);
 	});
