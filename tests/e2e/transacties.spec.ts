@@ -285,8 +285,10 @@ test('transacties: laadt per 50 bij en houdt dat vast bij vegen en terug', async
 	await expect(rows).toHaveCount(100);
 	await expect(target).toBeInViewport();
 
-	// Een nieuwe zoekopdracht begint weer bij 50
+	// Een nieuwe zoekopdracht begint weer bij 50. Eerst terug naar het zoekveld, zoals een vinger
+	// dat moet: WebKit scrollt bij fill niet mee, en zoeken laat de scroll staan.
 	const search = page.getByRole('searchbox', { name: 'Zoeken' });
+	await search.scrollIntoViewIfNeeded();
 	await search.fill(prefix);
 	await search.press('Enter');
 	await expect(page).not.toHaveURL(/aantal=/);
