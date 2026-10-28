@@ -275,7 +275,7 @@ export const GOUDSET: GoldQuestion[] = [
 	},
 	{
 		id: 'aantal-vorige-maand',
-		vraag: 'Hoeveel uitgaven had ik vorige maand?',
+		vraag: 'Hoeveel betalingen deed ik vorige maand?',
 		verwacht: vraag(q('aantal', 'vorige_maand'), 14)
 	},
 	{
@@ -324,7 +324,7 @@ export const GOUDSET: GoldQuestion[] = [
 	},
 	{
 		id: 'thuisbezorgd',
-		vraag: 'Hoeveel bestelde ik dit jaar bij Thuisbezorgd?',
+		vraag: 'Hoeveel geld gaf ik dit jaar uit bij Thuisbezorgd?',
 		verwacht: vraag(q('uitgegeven', 'dit_jaar', { tegenpartij: 'Thuisbezorgd' }), 33500)
 	},
 	{

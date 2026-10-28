@@ -51,8 +51,9 @@ export const QUESTION_VARIANTS = [
  * Het model van het vraagveld: de snelste variant die de vraag-eval haalt (spec: Vraagveld,
  * Model). Meting van 28 oktober 2026 op de goudset van 49 vragen: Sonnet 5.5 37/38 juist (97,4%),
  * mediaan 1,9 s; Haiku 5.5 29/38 (2,4 s) en Haiku 5.5 op high 34/38 (3,0 s) haalden de 95% niet.
- * Alle drie gaven geen getal bij een vraag die niet past. Na elke wijziging aan de prompt of de
- * semantische laag opnieuw meten op alle varianten.
+ * Alle drie gaven geen getal bij een vraag die niet past. Daarna kwamen er twee promptregels bij
+ * (een soort winkel is een tegenpartij; een tag zonder periode is de hele tag): opnieuw meten.
+ * Na elke wijziging aan de prompt of de semantische laag opnieuw meten op alle varianten.
  */
 export const QUESTION_VARIANT: QuestionVariant = QUESTION_VARIANTS[2];
 /** Ruimte voor het denken plus een klein JSON-object; begrenst ook de kosten per vraag. */
@@ -172,11 +173,11 @@ Maten (maat):
 Periode: een woord uit de lijst, of eigen met van en tot als YYYY-MM (een hele maand) of YYYY-MM-DD.
 - deze_maand, vorige_maand, dit_jaar, vorig_jaar, laatste_3_maanden, laatste_6_maanden, laatste_12_maanden, sinds_de_zomer, alles.
 - Gebruik een woord als de vraag zo'n woord bedoelt; de app rekent het om met de datum van vandaag. Gebruik eigen voor een genoemde maand, een genoemd jaar of genoemde datums, bijvoorbeeld van 2026-03 tot 2026-03 voor maart.
-- Noemt de vraag geen periode, kies dan deze_maand en zet in aannames dat je de lopende maand nam. Bij gemiddeld_per_maand zonder periode kies je laatste_12_maanden.
+- Noemt de vraag geen periode, kies dan deze_maand en zet in aannames dat je de lopende maand nam. Bij gemiddeld_per_maand zonder periode kies je laatste_12_maanden. Bij een tag zonder periode kies je alles: een tag heeft zijn eigen periode.
 
 Filters (leeg laten als de vraag ze niet noemt):
 - categorieen en groepen: alleen namen precies zoals in de lijsten van de gebruiker. Kies de categorie die het beste past bij wat de vraag bedoelt, bijvoorbeeld uit eten bij een categorie voor uit eten. Passen er twee even goed, verduidelijk dan.
-- tegenpartij: een winkel, bedrijf of persoon zoals in de vraag geschreven, zonder iets toe te voegen. De app zoekt de naam zelf op.
+- tegenpartij: een winkel, bedrijf of persoon zoals in de vraag geschreven, zonder iets toe te voegen. De app zoekt de naam zelf op. Ook een soort winkel of dienst, zoals de kapper, de bakker of de garage, is een tegenpartij: zet dat woord in tegenpartij en kies er geen categorie voor.
 - tag: alleen een naam uit de lijst met tags, bijvoorbeeld een reis.
 - rekening: alleen een naam uit de lijst met rekeningen.
 - productgroep: alleen voor boodschappen per soort product, met een waarde uit de lijst; dan geen andere filters.
