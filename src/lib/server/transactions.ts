@@ -386,6 +386,10 @@ function filterWhere(filter: ListFilter): SQL | undefined {
 	return and(...where);
 }
 
+/** Hoogstens zoveel rijen per aanroep; de transactielijst laadt bij tot 500 plus een hele dag */
+const MAX_ROWS = 1000;
+
+/** Nieuwste eerst; het id als laatste, zodat rijen uit één import (zelfde createdAt) vast liggen */
 export function listTransactions(db: DB, filter: ListFilter = {}) {
 	return db
 		.select({
@@ -408,13 +412,32 @@ export function listTransactions(db: DB, filter: ListFilter = {}) {
 		.leftJoin(categories, eq(categories.id, transactions.categoryId))
 		.innerJoin(accounts, eq(accounts.id, transactions.accountId))
 		.where(filterWhere(filter))
-		.orderBy(desc(transactions.date), desc(transactions.createdAt))
-		.limit(Math.min(filter.limit ?? 50, 200))
+		.orderBy(desc(transactions.date), desc(transactions.createdAt), desc(transactions.id))
+		.limit(Math.min(filter.limit ?? 50, MAX_ROWS))
 		.offset(Math.max(0, filter.offset ?? 0))
 		.all();
 }
 
 export type TransactionRow = ReturnType<typeof listTransactions>[number];
+
+/**
+ * De nieuwste `count` rijen, aangevuld tot de laatste dag compleet is: een lijst per dag toont
+ * anders een half dagsaldo en mogelijk de verkeerde grootste uitgave.
+ */
+export function listWholeDays(
+	db: DB,
+	filter: Omit<ListFilter, 'limit' | 'offset'>,
+	count: number
+): { rows: TransactionRow[]; hasMore: boolean } {
+	const rows = listTransactions(db, { ...filter, limit: count + 1 });
+	if (rows.length <= count) return { rows, hasMore: false };
+	const last = rows[count - 1]!.date;
+	if (rows[count]!.date !== last) return { rows: rows.slice(0, count), hasMore: true };
+	// De laatste dag loopt door na de grens: die hele dag erbij, en kijken of er daarvoor nog iets is
+	const day = listTransactions(db, { ...filter, from: last, to: last, limit: MAX_ROWS });
+	const older = listTransactions(db, { ...filter, to: addDays(last, -1), limit: 1 });
+	return { rows: [...rows.filter((r) => r.date > last), ...day], hasMore: older.length > 0 };
+}
 
 /** Rijen voor een lijst, met bij een gekoppelde betaling waar hij voor was. */
 export function withRefunds<T extends { id: string }>(db: DB, rows: T[]) {

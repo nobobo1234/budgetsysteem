@@ -3,8 +3,8 @@
 	import { recordEntry } from '#lib/usage.ts';
 	import { tick } from 'svelte';
 	import { deserialize } from '$app/forms';
-	import { refreshAll } from '$app/navigation';
-	import { navigating } from '$app/state';
+	import { goto, refreshAll } from '$app/navigation';
+	import { navigating, page } from '$app/state';
 	import Bars from '#lib/components/Bars.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import LinkThreads, { threadGutter } from '#lib/components/LinkThreads.svelte';
@@ -45,7 +45,6 @@
 			.join(' · ')
 	);
 
-	const PAGE = 50;
 	const hasFilter = $derived(
 		!!(
 			data.filter.q ||
@@ -55,8 +54,18 @@
 			rangeFilter
 		)
 	);
-	const pages = $derived(Math.max(1, Math.ceil(data.summary.count / PAGE)));
-	const busy = $derived(navigating.to?.url.pathname === '/transacties');
+	// Bijladen dimt de lijst niet; alleen de knop laat zien dat hij bezig is
+	const withoutCount = (url: { search: string }) =>
+		[...new URLSearchParams(url.search)]
+			.filter(([k]) => k !== 'aantal')
+			.map(([k, v]) => `${k}=${v}`)
+			.sort()
+			.join('&');
+	const loadingMore = $derived(
+		navigating.to?.url.pathname === '/transacties' &&
+			withoutCount(navigating.to.url) === withoutCount(page.url)
+	);
+	const busy = $derived(navigating.to?.url.pathname === '/transacties' && !loadingMore);
 
 	const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
@@ -147,10 +156,13 @@
 		});
 	});
 
-	// Draden tussen terugbetalingen en hun uitgave op deze pagina
+	// Draden tussen terugbetalingen en hun uitgave in de lijst
 	const threads = $derived(threadLayout(data.transactions));
 
-	const pageHref = (p: number) => {
+	// Dezelfde lijst met een stap meer; voorbij het maximum laadt hij niet verder
+	const remaining = $derived(Math.max(0, data.summary.count - data.transactions.length));
+	const canLoadMore = $derived(data.list.hasMore && data.list.count < data.list.max);
+	const moreHref = $derived.by(() => {
 		const parts: [string, string][] = [
 			['q', data.filter.q],
 			['maand', data.filter.month],
@@ -160,14 +172,33 @@
 			['van', data.filter.from],
 			['tot', data.filter.to],
 			['dag', data.filter.day],
-			['pagina', p > 0 ? String(p) : '']
+			['aantal', String(data.list.count + data.list.step)]
 		];
 		const q = parts
 			.filter(([, v]) => v)
 			.map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
 			.join('&');
 		return `?${q}`;
-	};
+	});
+
+	// Automatisch bijladen als de knop binnen een schermhoogte komt. Tijdens een navigatie kijkt hij
+	// niet (anders kaapt hij een tik op een rij); daarna en na elke stap een nieuwe observer, die ook
+	// meldt als de knop al in beeld stond.
+	function autoLoad(href: string) {
+		return (link: HTMLAnchorElement) => {
+			if (navigating.to) return;
+			const observer = new IntersectionObserver(
+				(entries) => {
+					if (!entries.some((e) => e.isIntersecting)) return;
+					observer.disconnect();
+					void goto(href, { replace: true, reset: false });
+				},
+				{ rootMargin: '0px 0px 100% 0px' }
+			);
+			observer.observe(link);
+			return () => observer.disconnect();
+		};
+	}
 
 	// Zonder rekening en periode, met de rest van het filter
 	const rangeOffHref = $derived.by(() => {
@@ -454,20 +485,26 @@
 			{/each}
 		</div>
 
-		{#if pages > 1}
-			<nav class="pager" aria-label="Pagina's">
-				{#if data.page > 0}
-					<a class="button secondary" href={pageHref(data.page - 1)}>Nieuwer</a>
-				{:else}
-					<span></span>
+		{#if data.summary.count > data.list.step}
+			<div class="more">
+				<p class="muted small num" aria-live="polite">
+					{data.transactions.length} van {data.summary.count}
+				</p>
+				{#if canLoadMore}
+					<a
+						class="button secondary"
+						href={moreHref}
+						aria-busy={loadingMore}
+						data-sveltekit-replacestate
+						data-sveltekit-reset="false"
+						{@attach autoLoad(moreHref)}
+					>
+						{loadingMore ? 'Ouder laden…' : `Ouder · nog ${remaining}`}
+					</a>
+				{:else if data.list.hasMore}
+					<p class="tell">Verder terug? Kies een maand of zoek op een naam.</p>
 				{/if}
-				<span class="muted num">Pagina {data.page + 1} van {pages}</span>
-				{#if data.hasMore}
-					<a class="button secondary" href={pageHref(data.page + 1)}>Ouder</a>
-				{:else}
-					<span></span>
-				{/if}
-			</nav>
+			</div>
 		{/if}
 	{/if}
 
@@ -792,18 +829,14 @@
 		background: var(--dot);
 	}
 
-	.pager {
+	.more {
 		display: grid;
-		grid-template-columns: 1fr auto 1fr;
-		align-items: center;
-		gap: 12px;
+		justify-items: center;
+		gap: 8px;
+		text-align: center;
 	}
 
-	.pager > :last-child {
-		justify-self: end;
-	}
-
-	.pager > :first-child {
-		justify-self: start;
+	.more p {
+		margin: 0;
 	}
 </style>
