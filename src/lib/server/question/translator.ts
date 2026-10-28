@@ -49,11 +49,11 @@ export const QUESTION_VARIANTS = [
 
 /**
  * Het model van het vraagveld: de snelste variant die de vraag-eval haalt (spec: Vraagveld,
- * Model). Meting van 28 oktober 2026 op de goudset van 49 vragen: Sonnet 5.5 37/38 juist (97,4%),
- * mediaan 1,9 s; Haiku 5.5 29/38 (2,4 s) en Haiku 5.5 op high 34/38 (3,0 s) haalden de 95% niet.
- * Alle drie gaven geen getal bij een vraag die niet past. Daarna kwamen er twee promptregels bij
- * (een soort winkel is een tegenpartij; een tag zonder periode is de hele tag): opnieuw meten.
- * Na elke wijziging aan de prompt of de semantische laag opnieuw meten op alle varianten.
+ * Model). Meting van 28 oktober 2026 op de goudset van 49 vragen, met de huidige prompt: Sonnet
+ * 5.5 38/38 juist (100%), 2/2 terecht verduidelijkt, mediaan 1,9 s; Haiku 5.5 33/38 (2,3 s) en
+ * Haiku 5.5 op high 35/38 (3,0 s) haalden de 95% niet. Geen variant gaf een getal bij een vraag
+ * die niet past. Na elke wijziging aan de prompt of de semantische laag opnieuw meten op alle
+ * varianten.
  */
 export const QUESTION_VARIANT: QuestionVariant = QUESTION_VARIANTS[2];
 /** Ruimte voor het denken plus een klein JSON-object; begrenst ook de kosten per vraag. */
