@@ -12,24 +12,54 @@ export interface AiClient {
 
 export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
-/**
- * Prijzen van Claude Haiku 5.5 in nano-dollar per token: $0,10 / $0,50 per miljoen tokens tot
- * 100K tokens prompt, $0,50 / $2,50 daarboven. Gehele getallen, zodat er nooit afgerond hoeft
- * te worden. Bron: https://platform.claude.com/docs/en/about-claude/pricing
- */
-const PRICE_NANO_USD = {
-	small: { input: 100, output: 500 },
-	large: { input: 500, output: 2500 }
-} as const;
-const LARGE_PROMPT_TOKENS = 100_000;
+interface Price {
+	input: number;
+	output: number;
+	/** Boven zoveel tokens prompt geldt `long`, als het model zo'n tarief heeft */
+	longFrom?: number;
+	long?: { input: number; output: number };
+}
 
-export function costNanoUsd(inputTokens: number, outputTokens: number): number {
-	const price = inputTokens > LARGE_PROMPT_TOKENS ? PRICE_NANO_USD.large : PRICE_NANO_USD.small;
-	return inputTokens * price.input + outputTokens * price.output;
+/**
+ * Prijzen in nano-dollar per token, als gehele getallen, zodat er nooit afgerond hoeft te
+ * worden. Claude Haiku 5.5: $0,10 / $0,50 per miljoen tokens tot 100K tokens prompt, $0,50 /
+ * $2,50 daarboven; Claude Sonnet 5.5: $2 / $10; Claude Opus 5.5: $4 / $20. De vraag-eval meet
+ * Sonnet en Opus (spec: Vraagveld, Model). Bron: https://platform.claude.com/docs/en/about-claude/pricing
+ */
+const PRICES: Record<string, Price> = {
+	'claude-haiku-5-5': {
+		input: 100,
+		output: 500,
+		longFrom: 100_000,
+		long: { input: 500, output: 2500 }
+	},
+	'claude-sonnet-5-5': { input: 2000, output: 10_000 },
+	'claude-opus-5-5': { input: 4000, output: 20_000 }
+};
+const DEFAULT_MODEL = 'claude-haiku-5-5';
+/** Een model zonder bekende prijs telt als het duurste, zodat het maandbudget nooit te ruim is. */
+const UNKNOWN_PRICE = PRICES['claude-opus-5-5']!;
+
+export function costNanoUsd(
+	inputTokens: number,
+	outputTokens: number,
+	model = DEFAULT_MODEL
+): number {
+	const price = PRICES[model] ?? UNKNOWN_PRICE;
+	const rate = price.long && inputTokens > price.longFrom! ? price.long : price;
+	return inputTokens * rate.input + outputTokens * rate.output;
 }
 
 /** Sleutelwoorden die structured outputs weigert; de grenzen zelf controleert `safeParse`. */
-const UNSUPPORTED = new Set(['$schema', 'maxLength', 'minLength', 'maxItems', 'default']);
+const UNSUPPORTED = new Set([
+	'$schema',
+	'maxLength',
+	'minLength',
+	'maxItems',
+	'minimum',
+	'maximum',
+	'default'
+]);
 
 function strip(node: unknown): unknown {
 	if (Array.isArray(node)) return node.map(strip);

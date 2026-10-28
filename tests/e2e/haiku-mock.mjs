@@ -3,7 +3,8 @@
 // onleesbaar totaal (onzeker), zodat hij in de review-inbox komt. Na een korte pauze, zodat de
 // laadstaat te zien is. Een test die een screenshot met transacties wil, zet dat vooraf met
 // `POST /volgende` (body `lijst`); alleen het eerstvolgende antwoord is dan een lijst. Een verzoek
-// voor de maandsamenvatting (het schema heeft `zinnen`) krijgt één zin over het eerste feit.
+// voor de maandsamenvatting (het schema heeft `zinnen`) krijgt één zin over het eerste feit; een
+// vraag uit het vraagveld (het schema heeft `maat`) wordt "uitgegeven aan Boodschappen, deze maand".
 import { createServer } from 'node:http';
 
 const PORT = Number(process.env.HAIKU_MOCK_PORT ?? 4199);
@@ -84,6 +85,30 @@ function sentences() {
 	};
 }
 
+/** Het vraagveld: altijd dezelfde vraag, met één aanname van het "model". */
+function question() {
+	return {
+		soort: 'vraag',
+		maat: 'uitgegeven',
+		periode: 'deze_maand',
+		van: '',
+		tot: '',
+		categorieen: ['Boodschappen'],
+		groepen: [],
+		tegenpartij: '',
+		tag: '',
+		rekening: '',
+		productgroep: 'geen',
+		groeperen: 'geen',
+		sorteren: 'bedrag_aflopend',
+		limiet: 0,
+		aannames: ['boodschappen = de categorie Boodschappen'],
+		verduidelijking: '',
+		keuzes: [],
+		reden: ''
+	};
+}
+
 createServer((req, res) => {
 	if (req.method === 'GET' && req.url === '/healthz') {
 		res.end('ok');
@@ -107,19 +132,22 @@ createServer((req, res) => {
 	req.on('end', () => {
 		setTimeout(() => {
 			res.writeHead(200, { 'content-type': 'application/json' });
-			let summary = false;
+			let kind = 'bon';
 			try {
-				summary = 'zinnen' in (JSON.parse(body).output_config?.format?.schema?.properties ?? {});
+				const properties = JSON.parse(body).output_config?.format?.schema?.properties ?? {};
+				if ('zinnen' in properties) kind = 'samenvatting';
+				else if ('maat' in properties) kind = 'vraag';
 			} catch {
 				// geen JSON: gewoon een bon
 			}
+			const out = kind === 'samenvatting' ? sentences() : kind === 'vraag' ? question() : output();
 			res.end(
 				JSON.stringify({
 					id: `msg_e2e_${count}`,
 					type: 'message',
 					role: 'assistant',
 					model: 'claude-haiku-5-5',
-					content: [{ type: 'text', text: JSON.stringify(summary ? sentences() : output()) }],
+					content: [{ type: 'text', text: JSON.stringify(out) }],
 					stop_reason: 'end_turn',
 					stop_sequence: null,
 					usage: { input_tokens: 2100, output_tokens: 180 }

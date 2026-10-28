@@ -22,6 +22,8 @@
 		bon.outcomes.weigering + bon.outcomes.afgekapt + bon.outcomes.ongeldig + bon.outcomes.fout
 	);
 	const sum = $derived(data.summaries);
+	const ask = $derived(data.questions);
+	const askFailed = $derived(ask.fallback);
 	const budget = $derived(data.aiBudget);
 	const budgetShare = $derived(
 		budget.budgetNanoUsd > 0 ? Math.min(1, budget.spentNanoUsd / budget.budgetNanoUsd) : 1
@@ -193,7 +195,7 @@
 		<h2 id="ai-kosten">AI-kosten deze maand</h2>
 		<p class="muted">
 			Bonnen, samenvattingen en vragen samen, tegenover het maandbudget. Is het op, dan krijgt de
-			samenvatting de vaste tekst; bonnen gaan voor.
+			samenvatting de vaste tekst en zegt het vraagveld dat; bonnen gaan voor.
 		</p>
 		<div class="card budget">
 			<p>
@@ -256,6 +258,58 @@
 				<div>
 					<dt>Duur (mediaan)</dt>
 					<dd class="num">{sum.medianMs === null ? '–' : formatCallDuration(sum.medianMs)}</dd>
+				</div>
+			</dl>
+		{/if}
+	</section>
+
+	<section aria-labelledby="vragen">
+		<h2 id="vragen">Vragen</h2>
+		<p class="muted">
+			Elke vraag in het vraagveld in de laatste {ask.days} dagen: wat het model ervan maakte, zonder de
+			vraag of het antwoord zelf. Klopt niet hoort bij nul te blijven.
+		</p>
+		{#if ask.calls === 0}
+			<p class="card empty">Nog geen vragen gesteld.</p>
+		{:else}
+			<dl class="card">
+				<div>
+					<dt>Gesteld</dt>
+					<dd class="num">{ask.calls} keer</dd>
+				</div>
+				<div>
+					<dt>Soort</dt>
+					<dd class="num">
+						{ask.outcomes.beantwoord} beantwoord · {ask.outcomes.verduidelijken} verduidelijkt · {ask
+							.outcomes.kan_niet} kan niet{#if askFailed > 0}
+							<span class="muted">({askFailed} niet te lezen)</span>{/if}
+					</dd>
+				</div>
+				<div>
+					<dt>Klopt niet</dt>
+					<dd class="num">
+						{#if ask.wrongTaps > 0}
+							<span class="warn-text"
+								>{ask.wrongCalls} {ask.wrongCalls === 1 ? 'antwoord' : 'antwoorden'}</span
+							>
+						{:else}
+							0
+						{/if}
+					</dd>
+				</div>
+				<div>
+					<dt>Kosten</dt>
+					<dd class="num">{formatUsd(ask.costNanoUsd)}</dd>
+				</div>
+				<div>
+					<dt>Tokens</dt>
+					<dd class="num">
+						{formatTokens(ask.inputTokens)} in · {formatTokens(ask.outputTokens)} uit
+					</dd>
+				</div>
+				<div>
+					<dt>Duur (mediaan)</dt>
+					<dd class="num">{ask.medianMs === null ? '–' : formatCallDuration(ask.medianMs)}</dd>
 				</div>
 			</dl>
 		{/if}

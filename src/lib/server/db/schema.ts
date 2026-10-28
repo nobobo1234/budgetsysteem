@@ -10,6 +10,7 @@ import {
 	uniqueIndex
 } from 'drizzle-orm/sqlite-core';
 import { PRODUCT_GROUPS } from '../../productGroups.ts';
+import { QUESTION_OUTCOMES, VERDICTS } from '../../question.ts';
 import { SUMMARY_REASONS, SUMMARY_SOURCES } from '../../summary.ts';
 import { LINE_KINDS } from '../receipts/schema.ts';
 
@@ -789,5 +790,32 @@ export const warranties = sqliteTable(
 		),
 		check('warranties_lifetime', sql`${t.lifetimeYears} BETWEEN 1 AND 30`),
 		check('warranties_product', sql`${t.status} = 'afgewezen' OR length(trim(${t.product})) > 0`)
+	]
+);
+
+// Vraagveld (spec: Vragen en samenvattingen met AI → Vraagveld, Geen vrije SQL). Elke gestelde
+// vraag met haar soort, het vraagformaat en de aannames, zodat de lijst laat zien welke maten of
+// filters er nog ontbreken en een eerdere vraag opnieuw uit te rekenen is. Nooit de resultaten:
+// die rekent code steeds opnieuw uit. `reason` is de soort weigering of fout (`categorie`,
+// `controle` ...), nooit tekst van het model. De laatste 100 blijven bewaard.
+export const questions = sqliteTable(
+	'questions',
+	{
+		id: id(),
+		question: text('question').notNull(),
+		kind: text('kind', { enum: QUESTION_OUTCOMES }).notNull(),
+		// Het vraagformaat (gevalideerd); leeg als het model niets bruikbaars gaf
+		format: text('format', { mode: 'json' }),
+		reason: text('reason'),
+		assumptions: text('assumptions', { mode: 'json' }).notNull(),
+		rowCount: integer('row_count'),
+		durationMs: integer('duration_ms').notNull(),
+		verdict: text('verdict', { enum: VERDICTS }),
+		telemetryRef: text('telemetry_ref'),
+		createdAt: createdAt()
+	},
+	(t) => [
+		index('questions_created_idx').on(t.createdAt),
+		check('questions_question_length', sql`length(${t.question}) <= 400`)
 	]
 );

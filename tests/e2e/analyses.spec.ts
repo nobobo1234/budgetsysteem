@@ -4,7 +4,7 @@ import { login } from './helpers.ts';
 
 // Analyses als vierde tab (spec: Schermen, Analyses); Import staat sindsdien als tegel op Meer.
 
-const PAGES = ['/analyses', '/analyses/trend', '/analyses/jaar'];
+const PAGES = ['/analyses', '/analyses/trend', '/analyses/jaar', '/analyses/vraag'];
 
 /**
  * Uitgaven deze maand en de twee maanden ervoor, zodat er iets te analyseren is. Eén keer per

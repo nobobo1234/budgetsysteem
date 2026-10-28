@@ -118,6 +118,7 @@ for (const path of [
 	'/analyses',
 	'/analyses/trend',
 	'/analyses/jaar',
+	'/analyses/vraag',
 	'/import',
 	'/categorieen',
 	'/regels',
