@@ -919,7 +919,7 @@ De evals draaien niet bij elke PR, omdat ze API-tegoed kosten en de Haiku-eval e
 1. **Elke push:** lint (ESLint, Prettier), typecheck (`svelte-check`) en unit-tests.
 2. **Elke pull request:** daarnaast integratie- en e2e-tests, Docker-build, dependency-audit, image-scan (Trivy), geheimen-scan (gitleaks), statische analyse (Semgrep), workflow-check (zizmor), een check op verwijderde tests en onzichtbare tekens, een SBOM (CycloneDX) en het performance-budget (Lighthouse CI).
 3. **Review door Claude:** de Claude Code GitHub Action reviewt een PR op beveiliging, testdekking en de afspraken uit deze spec, zodra je het label `claude-review` zet. Geen `@claude` in issues of reacties: die trigger (`issue_comment`) ziet zizmor als fundamenteel onveilig. Instellen vanuit Claude Code met `/install-github-app`. De spec en de werkafspraken staan in `CLAUDE.md` in de repo.
-4. **Merge naar main:** image naar GitHub Container Registry, backup van de database, deploy via SSH over Tailscale (een tijdelijke Tailscale-node in de action), migraties, health check, en bij een fout terug naar de vorige image.
+4. **Merge naar main:** na een groene push start CI de uitrol in de privé ops-repo (zie Uitrol); daar image naar GitHub Container Registry, backup van de database, deploy via SSH over Tailscale (een tijdelijke Tailscale-node in de action), migraties, health check, en bij een fout terug naar de vorige image.
 
 ### Afspraken
 
@@ -931,13 +931,15 @@ De evals draaien niet bij elke PR, omdat ze API-tegoed kosten en de Haiku-eval e
 
 Er zit continuous deployment in: elke merge naar `main` staat binnen een paar minuten live, zonder dat er een langlevend geheim voor je VPS in GitHub staat.
 
+De code staat in een publieke repo, de uitrol in een privé ops-repo (zoals GitLab met `ops.gitlab.net` en Sentry met `getsentry`). De publieke repo kent geen origin, VPS of Tailscale-gegevens; na een groene push op `main` start een job daar met een `workflow_dispatch` de deploy-workflow in de ops-repo, met de commit-SHA. Het token daarvoor zit in een environment die alleen vanaf `main` mag en mag alleen Actions starten in die ene repo. De ops-repo checkt de publieke repo uit op die SHA en weigert een commit die niet op `main` staat. De stappen hieronder draaien in de ops-repo; de opzet staat in docs/DEPLOY.md.
+
 1. **Bouwen.** Eén job bouwt het image één keer, maakt de SBOM en pusht naar GitHub Container Registry. Alleen deze job krijgt `packages: write`.
-2. **Registry.** Het package is privé en gekoppeld aan de privé-repo, waarvan het de rechten en zichtbaarheid overneemt ([GitHub Packages](https://docs.github.com/en/packages/learn-github-packages/about-permissions-for-github-packages)). Uitgerold wordt altijd op digest (`sha256:…`), nooit op een tag als `latest`. Pro bevat 2 GB Packages-opslag; een opruimstap houdt de laatste 10 images.
+2. **Registry.** Het package is privé en gekoppeld aan de ops-repo, waarvan het de rechten en zichtbaarheid overneemt ([GitHub Packages](https://docs.github.com/en/packages/learn-github-packages/about-permissions-for-github-packages)). Uitgerold wordt altijd op digest (`sha256:…`), nooit op een tag als `latest`. Pro bevat 2 GB Packages-opslag; een opruimstap houdt de laatste 10 images.
 3. **Verbinden.** De deploy-job draait in de `production`-environment (alleen vanaf `main`) en komt via de Tailscale GitHub Action als tijdelijke node op je tailnet. Met workload identity federation gebruikt die het OIDC-token van GitHub, dus er hoeft geen Tailscale-secret in GitHub ([Tailscale](https://tailscale.com/docs/integrations/github/github-action)). De node krijgt `tag:ci` en wordt na de job automatisch verwijderd.
 4. **Afschermen.** De Tailscale-ACL laat `tag:ci` alleen poort 22 van de VPS bereiken, als gebruiker `deploy`, via Tailscale SSH; er staat dus ook geen SSH-key in GitHub. Die gebruiker mag via sudo precies één script draaien: `deploy-budget <digest>`.
 5. **Uitrollen.** Het script logt in bij de registry met het kortlevende `GITHUB_TOKEN` van de job (alleen lezen, verloopt na de job), haalt het image op digest op en logt weer uit. Daarna een backup, migraties, de nieuwe container starten en een health check; mislukt die, dan gaat de vorige digest terug.
 
-**Wat nog gevoelig is.** Wie naar `main` kan pushen, kan uitrollen. Daarom staan branch protection en CODEOWNERS op `.github/`, en draait de Claude-review in een aparte workflow zonder toegang tot de `production`-environment. Lukt workload identity federation niet, dan is de terugval een Tailscale OAuth-client die alleen auth keys voor `tag:ci` mag aanmaken, als environment secret.
+**Wat nog gevoelig is.** Wie naar `main` van de publieke repo kan pushen, kan uitrollen. Daarom staan branch protection en CODEOWNERS op `.github/`, vragen workflows uit fork-PR's van externe bijdragers eerst goedkeuring, en draait de Claude-review in een aparte workflow zonder toegang tot de deploy-gegevens. De Tailscale trust credential hoort alleen bij de `production`-environment van de ops-repo, nooit bij de publieke repo. Lukt workload identity federation niet, dan is de terugval een Tailscale OAuth-client die alleen auth keys voor `tag:ci` mag aanmaken, als environment secret.
 
 ### Kosten van de Claude Code Action
 
@@ -961,7 +963,7 @@ Met Pro kan de repo privé blijven met branch protection en een beveiligde produ
 | CodeQL en secret scanning met push protection | Nee (vereist Team of Enterprise met GitHub Code Security / Secret Protection) | Semgrep CE voor statische analyse, gitleaks voor geheimen (ook als pre-commit hook), zizmor voor de workflows zelf |
 | Dependabot alerts | Ja | Aan, met een cooldown van 7 dagen op updates |
 
-De repo blijft privé. Publiek maken zou CodeQL, secret scanning en deploy-goedkeuring gratis opleveren, maar dan is je code zichtbaar; de tools hierboven dekken hetzelfde af.
+Deze tabel beschrijft de oorspronkelijke privé-repo, die nu de ops-repo is. De code staat sinds de splitsing in een publieke repo; daar zijn secret scanning met push protection, private vulnerability reporting en OpenSSF Scorecard gratis aan. Semgrep, gitleaks en zizmor blijven draaien, zodat de checks gelijk blijven als er iets aan de GitHub-kant verandert.
 
 **Extra afspraken voor de workflows** ([OWASP GitHub Actions Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/GitHub_Actions_Security_Cheat_Sheet.html)):
 

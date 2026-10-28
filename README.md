@@ -16,6 +16,10 @@ Persoonlijke budgetapp voor één gebruiker, op een eigen server. Snel uitgaven 
 - [docs/SPEC.md](docs/SPEC.md): de spec (architectuur, datamodel, beveiliging, design)
 - [docs/DEPLOY.md](docs/DEPLOY.md): Noahs eigen productie-opzet (nginx, GitHub Actions, Tailscale)
 
+## Uitrol
+
+Deze repo bevat geen deploy-workflow. Na een groene push op `main` start CI de uitrol in een privé ops-repo, die deze repo op die commit uitcheckt, het image bouwt en via Tailscale naar Noahs VPS uitrolt; zie [docs/DEPLOY.md](docs/DEPLOY.md#github). Wie zelf host, bouwt uit deze repo zoals in [docs/SELFHOST.md](docs/SELFHOST.md).
+
 ## Lokaal ontwikkelen
 
 Met Node 24 en pnpm:

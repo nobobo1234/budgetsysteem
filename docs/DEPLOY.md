@@ -4,13 +4,36 @@ Alles wat buiten de repo op de VPS en in GitHub ingesteld moet worden. Geheimen 
 
 ## GitHub
 
-- **Variables** (Settings → Secrets and variables → Actions → Variables):
-  - `APP_ORIGIN`: `https://budget.example.nl`. SvelteKit 3 legt de origin bij het bouwen vast (`paths.origin`); een `ORIGIN`-variabele bij het starten bestaat niet meer.
-  - `VPS_TAILNET_HOST`: naam van de VPS op je tailnet.
-  - `TS_OAUTH_CLIENT_ID` en `TS_AUDIENCE`: Tailscale workload identity federation.
-- **Environment** `production`: alleen vanaf `main`.
-- **Secrets**: `CLAUDE_CODE_OAUTH_TOKEN` voor de review-workflow (niet in `production`).
+De uitrol is gesplitst in twee repo's, naar het voorbeeld van GitLab (publiek `gitlab`, uitrol vanaf het interne `ops.gitlab.net`) en Sentry (publiek `sentry`, privé `getsentry`):
+
+- **Publieke repo** `nobobo1234/budgetsysteem`: code, CI, `selfhost/`, `deploy/` (de bestanden voor de VPS) en de docs. Geen deploy-workflow, en CI kent geen origin, VPS of Tailscale-gegevens.
+- **Privé ops-repo**: alleen de deploy-workflow en de secrets die naar de eigen infra wijzen. Het image is privé en gekoppeld aan die repo.
+
+### Hoe een uitrol loopt
+
+1. Een PR wordt gemerged naar `main` van de publieke repo. Na een groene `static` op die push (en alleen als er meer dan docs veranderde) start de job `dispatch-deploy` met een `workflow_dispatch` de workflow `deploy.yml` in de ops-repo, met de commit-SHA als invoer.
+2. De ops-repo checkt de publieke repo uit op die SHA en controleert dat de commit op `main` staat (`git merge-base --is-ancestor`). Een andere branch of een commit uit een fork wordt geweigerd.
+3. Het image wordt vers gebouwd voor arm64, met `ORIGIN` uit een secret, en gepusht naar het privé-package.
+4. De deploy-job komt via Tailscale binnen als `deploy` en draait `deploy-budget <digest>` (zie stap 2 en 3 hieronder).
+5. Tot slot controleert de job dat `/healthz` via het eigen domein `ok` geeft.
+
+Handmatig uitrollen of terugrollen: in de ops-repo Actions → Deploy → Run workflow, met de volledige SHA van een commit op `main` van de publieke repo.
+
+### Publieke repo
+
+- **Environment** `ops-dispatch`: alleen vanaf `main`, met twee secrets:
+  - `OPS_DISPATCH_TOKEN`: fine-grained personal access token met alleen toegang tot de ops-repo en alleen de permissie Actions: Read and write. Het mag dus geen code lezen, geen secrets zien en niets in de publieke repo doen. Verloopt na hooguit een jaar; zet een herinnering.
+  - `OPS_REPO`: `<eigenaar>/<naam>` van de ops-repo. Een secret, zodat de naam niet in de publieke logs staat.
+- **Secrets**: `CLAUDE_CODE_OAUTH_TOKEN` voor de review-workflow (niet in `ops-dispatch`).
 - **Ruleset** op `main`: PR verplicht, statuschecks `static`, `integration`, `e2e`, `guardrails`, `security`, `docker` verplicht.
+- **Actions**: goedkeuring vereist voor workflows uit fork-PR's van alle externe bijdragers; standaardrechten van `GITHUB_TOKEN` alleen lezen.
+- **Security**: secret scanning met push protection, private vulnerability reporting (zie `SECURITY.md`), Dependabot alerts.
+
+### Ops-repo
+
+De instellingen staan in de README van de ops-repo zelf. In het kort: de origin, de naam van de VPS op het tailnet en de Tailscale-gegevens staan daar als secrets, de Tailscale-gegevens alleen in een environment `production` die alleen vanaf `main` mag. De trust credential in Tailscale hoort bij die environment van de ops-repo, nooit bij de publieke repo.
+
+Ook wat geen geheim is staat als secret: GitHub maskeert secrets in de logs, maar alleen bij een exacte match. Afgeleide waarden (de host zonder `https://`) maskeert de workflow zelf met `::add-mask::`.
 
 ## VPS
 
@@ -206,7 +229,7 @@ sudo sshd -t && sudo systemctl reload ssh
 
 ### 10. Eerste uitrol
 
-Merge de PR naar `main`. De deploy-workflow bouwt het image, komt via Tailscale binnen als `deploy` en draait `deploy-budget`. Dat start de app en daarna Litestream. Controleer op de VPS:
+Merge de PR naar `main`. De deploy-workflow in de ops-repo bouwt het image, komt via Tailscale binnen als `deploy` en draait `deploy-budget`. Dat start de app en daarna Litestream. Controleer op de VPS:
 
 ```bash
 sudo docker ps --filter name=budget
@@ -317,7 +340,7 @@ Het bestand moet leesbaar zijn voor `node` (0644 is genoeg). Opnieuw ondertekene
 
 ## Wijzigingen in `deploy/`
 
-De deploy-workflow rolt alleen het image uit. De bestanden uit stap 4 staan als kopie op de VPS en worden niet automatisch bijgewerkt. Verandert een PR iets in `deploy/`, kopieer de bestanden dan na de merge opnieuw, vanaf je laptop:
+De deploy-workflow (in de ops-repo) rolt alleen het image uit. De bestanden uit stap 4 staan als kopie op de VPS en worden niet automatisch bijgewerkt. Verandert een PR iets in `deploy/`, kopieer de bestanden dan na de merge opnieuw, vanaf je laptop:
 
 ```bash
 scp deploy/docker-compose.yml deploy/litestream.yml deploy/backup.sh deploy/deploy-budget.sh vps:/tmp/
