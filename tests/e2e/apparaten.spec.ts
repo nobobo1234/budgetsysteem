@@ -2,9 +2,14 @@
 // POST /api/ingest bereiken en met één tik intrekken.
 import Database from 'better-sqlite3';
 import { createHash } from 'node:crypto';
+import { rmSync, writeFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 import sharp from 'sharp';
+import { fakeShortcutJson } from '../fixtures/shortcut.ts';
 import { count, login } from './helpers.ts';
+
+// De app zoekt de ondertekende opdracht naast de database (DATABASE_PATH in playwright.config)
+const SHORTCUT = '.e2e/shortcut-signed.json';
 
 function open() {
 	const db = new Database('.e2e/budget.db', { fileMustExist: true });
@@ -34,6 +39,7 @@ test.beforeEach(async ({ context }) => {
 });
 
 test.afterEach(() => {
+	rmSync(SHORTCUT, { force: true });
 	const db = open();
 	const restore = db.prepare('UPDATE passkeys SET revoked_at = NULL WHERE id = ?');
 	for (const id of revokedPasskeys) restore.run(id);
@@ -41,6 +47,8 @@ test.afterEach(() => {
 });
 
 test('upload-token aanmaken, gebruiken en intrekken', async ({ page, request, baseURL }) => {
+	// Een ondertekende opdracht in het datavolume, voor een ander domein dan deze app
+	writeFileSync(SHORTCUT, fakeShortcutJson('https://budget.example.test'));
 	await page.goto('/instellingen/apparaten');
 	await expect(page.getByRole('heading', { level: 1, name: 'Apparaten' })).toBeVisible();
 	await expect(page.getByText(/Nog geen telefoon die bonnetjes stuurt/)).toBeVisible();
@@ -54,9 +62,10 @@ test('upload-token aanmaken, gebruiken en intrekken', async ({ page, request, ba
 	await expect(shown).toHaveValue(/^bon_[A-Za-z0-9_-]{43}$/);
 	const token = await shown.inputValue();
 
-	// De meegeleverde opdracht stuurt naar budget.example.nl; deze app draait op localhost,
-	// dus geen download maar een melding (de download zelf staat in tests/integration/opdracht)
+	// De opdracht is voor een https-domein ondertekend; deze app draait op localhost, dus geen
+	// download maar een melding (de download zelf staat in tests/integration/opdracht)
 	await expect(page.getByRole('heading', { name: 'Opdracht voor een ander domein' })).toBeVisible();
+	await expect(page.getByText(/stuurt bonnen naar budget\.example\.test/)).toBeVisible();
 	const install = page.getByRole('group', { name: 'Opdracht voor het deelmenu' });
 	await expect(install.getByText(/nooit met het token erin/)).toBeVisible();
 	await expect(install.getByText(/niet te downloaden/)).toBeVisible();
@@ -147,6 +156,29 @@ test('upload-token aanmaken, gebruiken en intrekken', async ({ page, request, ba
 		data: jpeg
 	});
 	expect(after.status()).toBe(401);
+});
+
+test('zonder of met een ongeldig bestand: uitleg in plaats van een download', async ({ page }) => {
+	rmSync(SHORTCUT, { force: true });
+	await page.goto('/instellingen/apparaten');
+	const notice = page.getByRole('region', { name: 'Opdracht nog niet geïnstalleerd' });
+	await expect(notice).toBeVisible();
+	await expect(
+		notice.getByText(/node scripts\/sign-shortcut\.ts --origin http:\/\/localhost:4173/)
+	).toBeVisible();
+	await expect(notice.getByText(/datavolume op\s+\.e2e\/shortcut-signed\.json/)).toBeVisible();
+	expect((await page.request.get('/instellingen/apparaten/opdracht')).status()).toBe(404);
+
+	// Een bestand dat niet bij deze versie hoort, telt als ongeldig
+	writeFileSync(
+		SHORTCUT,
+		fakeShortcutJson('https://budget.example.test', { sourceHash: '0'.repeat(64) })
+	);
+	await page.reload();
+	const invalid = page.getByRole('region', { name: 'Opdracht ongeldig' });
+	await expect(invalid).toBeVisible();
+	await expect(invalid.getByText(/sign-shortcut\.ts --origin/)).toBeVisible();
+	expect((await page.request.get('/instellingen/apparaten/opdracht')).status()).toBe(409);
 });
 
 test('aanmaken zonder passkey-bevestiging wordt geweigerd', async ({ page }) => {

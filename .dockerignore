@@ -6,6 +6,8 @@ history/
 *.key
 secrets/
 data/
+# Ondertekende iOS-opdracht (scripts/sign-shortcut.ts): hoort in het datavolume, niet in het image
+shortcut-signed.json
 .e2e/
 *.db
 *.db-shm
@@ -18,3 +20,5 @@ playwright-report/
 .git/
 .github/
 .claude/
+# Zelf hosten: de compose-bestanden en vooral selfhost/.env met sleutels horen niet in het image
+selfhost/

@@ -234,7 +234,8 @@ jobs:
           platforms: linux/arm64
           load: true
           tags: budget:ci
-          build-args: ORIGIN=${{ vars.APP_ORIGIN }}
+          # Zonder APP_ORIGIN (fork of zelf gehoste kopie) een neutrale origin: dit image rolt niet uit
+          build-args: ORIGIN=${{ vars.APP_ORIGIN || 'https://budget.example.test' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max,ignore-error=true
       - name: Image-scan (Trivy)

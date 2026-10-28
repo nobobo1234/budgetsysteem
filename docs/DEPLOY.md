@@ -14,7 +14,7 @@ Alles wat buiten de repo op de VPS en in GitHub ingesteld moet worden. Geheimen 
 
 ## VPS
 
-De commando's op de VPS zijn voor bash (fish kent geen heredocs). Uitgaande van Debian of Ubuntu, met Docker (en de compose-plugin), nginx en Tailscale al geïnstalleerd en de VPS al op je tailnet. Domein: `budget.example.nl`. Geheimen vul je in met `sudoedit` op de server, nooit in een chat of in deze repo.
+De commando's op de VPS zijn voor bash (fish kent geen heredocs). Uitgaande van Debian of Ubuntu, met Docker (en de compose-plugin), nginx en Tailscale al geïnstalleerd en de VPS al op je tailnet. Overal hieronder staat `budget.example.nl`: vervang dat door je eigen domein. Geheimen vul je in met `sudoedit` op de server, nooit in een chat of in deze repo.
 
 ### 1. Pakketten
 
@@ -297,6 +297,23 @@ sudo BUDGET_IMAGE="ghcr.io/nobobo1234/budgetsysteem@$(cat /var/lib/budget/curren
 - Controleren: stuur een bon via de app of het deelmenu. Binnen een minuut staat hij op zeker, controleren of onzeker, en je krijgt een pushmelding. Op Meer → Status zie je per aanroep tokens, kosten en duur.
 - Een nieuwe sleutel: maak hem in de Console aan, zet hem in `app.env`, maak de app opnieuw aan, en trek daarna de oude in.
 - Identity federation (zonder vaste sleutel) vraagt een OIDC-identiteit van de workload; een losse VPS heeft die niet, dus hier blijft het een sleutel met uitgavenlimiet.
+
+### Opdracht voor het deelmenu
+
+De ondertekende iOS-opdracht staat niet in de repo maar in het datavolume (`/data/shortcut-signed.json`); de app leest hem zonder herstart. Ondertekenen kan alleen op een Mac (docs/ios-opdracht.md):
+
+```bash
+node scripts/sign-shortcut.ts --origin https://budget.example.nl --uit data/shortcut-signed.json
+scp data/shortcut-signed.json vps:/tmp/shortcut-signed.json
+```
+
+Op de VPS:
+
+```bash
+sudo docker cp /tmp/shortcut-signed.json budget:/data/shortcut-signed.json && rm /tmp/shortcut-signed.json
+```
+
+Het bestand moet leesbaar zijn voor `node` (0644 is genoeg). Opnieuw ondertekenen na een wijziging in `src/lib/server/receipts/shortcut.ts` (Apparaten meldt dan "Opdracht ongeldig") en vóór `validUntil`, ongeveer een jaar na ondertekenen.
 
 ## Wijzigingen in `deploy/`
 
