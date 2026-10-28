@@ -6,7 +6,7 @@ import { accounts, categories, recurring, transactions } from '#lib/server/db/sc
 import { confirmExpected } from '#lib/server/recurring.ts';
 import { isIsoDate, toIsoDate } from '#lib/dates.ts';
 import {
-	listTransactions,
+	listWholeDays,
 	spendingPerDay,
 	summarizeTransactions,
 	type ListFilter,
@@ -19,7 +19,9 @@ import {
 } from '#lib/server/transactions.ts';
 import type { Actions, PageServerLoad } from './$types';
 
-const PAGE = 50;
+// Bijladen per 50, tot 500 (spec: Schermen, Transacties)
+const STEP = 50;
+const MAX = 500;
 const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -44,10 +46,10 @@ export const load: PageServerLoad = ({ url }) => {
 	const chartMonth = month || today.slice(0, 7);
 	const dayParam = date('dag');
 	const day = dayParam.slice(0, 7) === chartMonth ? dayParam : '';
-	const page = Math.max(
-		0,
-		Math.min(10_000, Number.parseInt(url.searchParams.get('pagina') ?? '0', 10) || 0)
-	);
+	// Hoeveel rijen er staan, in stappen van STEP tot MAX. Het staat in de URL, zodat vegen, terug van
+	// de detailpagina en verversen dezelfde lijst geven.
+	const asked = Number.parseInt(url.searchParams.get('aantal') ?? '', 10) || STEP;
+	const count = Math.min(MAX, Math.max(STEP, Math.ceil(asked / STEP) * STEP));
 
 	const filter: ListFilter = {
 		q,
@@ -61,12 +63,7 @@ export const load: PageServerLoad = ({ url }) => {
 	// Interne overboekingen als één rij: de bijschrijving staat bij de afschrijving, en het paar
 	// telt niet als uitgave of inkomen
 	const transfers = transferPairs(db(), filter);
-	const rows = listTransactions(db(), {
-		...filter,
-		excludeIds: transfers.hidden,
-		limit: PAGE + 1,
-		offset: page * PAGE
-	});
+	const { rows, hasMore } = listWholeDays(db(), { ...filter, excludeIds: transfers.hidden }, count);
 	const summary = summarizeTransactions(db(), { ...filter, excludeIds: transfers.paired });
 
 	return {
@@ -84,9 +81,8 @@ export const load: PageServerLoad = ({ url }) => {
 			? (db().select({ name: accounts.name }).from(accounts).where(eq(accounts.id, accountId)).get()
 					?.name ?? null)
 			: null,
-		page,
-		hasMore: rows.length > PAGE,
-		transactions: withTransfers(withRefunds(db(), rows.slice(0, PAGE)), transfers.pairs),
+		list: { count, step: STEP, max: MAX, hasMore },
+		transactions: withTransfers(withRefunds(db(), rows), transfers.pairs),
 		summary: { ...summary, count: summary.count + transfers.pairs.size },
 		months: transactionMonths(db()),
 		today,

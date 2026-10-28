@@ -66,24 +66,15 @@ test.beforeEach(async ({ context }) => {
 const suffix = () => `${test.info().project.name} ${randomUUID().slice(0, 4)}`;
 
 /**
- * Te bevestigen op het startscherm, met alle posten zichtbaar. Andere tests laten soms een
- * verwachte post voor vandaag achter (een vaste last op de 28e, op de 28e); dan staat een nieuwe
- * post achter "Nog … meer".
+ * Te bevestigen op het startscherm, helemaal open. Het toont eerst drie posten, en posten van
+ * andere tests staan er soms voor (vanaf de 28e ook het voorstel hieronder, dat dan verloopt).
  */
-async function toConfirm(page: Page) {
+async function waitingSection(page: Page) {
 	await page.goto('/');
+	await page.waitForLoadState('networkidle');
 	const section = page.getByRole('region', { name: 'Te bevestigen' });
-	await expect(section).toBeVisible();
-	const more = section.getByRole('button', { name: /^Nog \d+ meer$/ });
-	if ((await more.count()) > 0) {
-		// Tot de pagina gehydrateerd is, doet de knop nog niets
-		await expect(async () => {
-			if ((await more.count()) > 0) await more.click();
-			await expect(section.getByRole('button', { name: 'Minder tonen' })).toBeVisible({
-				timeout: 1000
-			});
-		}).toPass();
-	}
+	const more = section.getByRole('button', { name: /^Nog \d+ meer/ });
+	if (await more.count()) await more.click();
 	return section;
 }
 
@@ -91,7 +82,7 @@ test('verwachte post bevestigen met één tik', async ({ page }) => {
 	const name = `Woonstichting ${suffix()}`;
 	const { transactionId } = expectedPost(name, 'vast', 85000);
 
-	const section = await toConfirm(page);
+	const section = await waitingSection(page);
 	await expect(section).toContainText(name);
 	await section.getByRole('button', { name: `Bevestig ${name}` }).click();
 	await expect(page.getByText(`${name} bevestigd.`)).toBeVisible();
@@ -113,7 +104,7 @@ test('wisselende vaste last: eerst het bedrag aanpassen', async ({ page }) => {
 	const name = `Energie ${suffix()}`;
 	const { transactionId } = expectedPost(name, 'wisselend', 10000);
 
-	const section = await toConfirm(page);
+	const section = await waitingSection(page);
 	await section.getByRole('button', { name: `Bedrag van ${name} invullen en bevestigen` }).click();
 	const amount = section.getByLabel(`Bedrag ${name}`);
 	await expect(amount).toBeFocused();

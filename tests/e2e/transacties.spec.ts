@@ -158,3 +158,73 @@ test('transacties: een interne overboeking staat als één rij', async ({ page }
 		`/transacties/${inc}`
 	);
 });
+
+/** `n` transacties met een eigen naam per project en poging, elk op een eigen dag in 2019. */
+function manyRows(n: number): { prefix: string; ids: string[] } {
+	const db = new Database('.e2e/budget.db', { fileMustExist: true });
+	db.pragma('busy_timeout = 5000');
+	const account = (
+		db.prepare("SELECT id FROM accounts WHERE alias = 'sns'").get() as { id: string }
+	).id;
+	const prefix = `Bijladen ${test.info().project.name} ${randomUUID().slice(0, 4)}`;
+	const insert = db.prepare(
+		`INSERT INTO transactions (id, amount_cents, date, counterparty, account_id, source, status)
+		 VALUES (?, -100, ?, ?, ?, 'import', ?)`
+	);
+	const ids = Array.from({ length: n }, (_, i) => {
+		const id = randomUUID();
+		const date = new Date(Date.UTC(2019, 11, 31 - i)).toISOString().slice(0, 10);
+		const status = i === 60 ? 'te_controleren' : 'bevestigd';
+		insert.run(id, date, `${prefix} ${String(i).padStart(3, '0')}`, account, status);
+		return id;
+	});
+	db.close();
+	return { prefix, ids };
+}
+
+test('transacties: laadt per 50 bij en houdt dat vast bij vegen en terug', async ({ page }) => {
+	const { prefix, ids } = manyRows(120);
+	await page.goto(`/transacties?q=${encodeURIComponent(prefix)}`);
+	await page.waitForLoadState('networkidle');
+	const rows = page.locator('[data-tx-row]');
+	await expect(rows).toHaveCount(50);
+	await expect(page.getByText('50 van 120')).toBeVisible();
+
+	// Naar beneden scrollen laadt automatisch de volgende 50, en het aantal komt in de URL
+	await page.getByRole('link', { name: 'Ouder · nog 70' }).scrollIntoViewIfNeeded();
+	await expect(rows).toHaveCount(100);
+	await expect(page).toHaveURL(/aantal=100/);
+
+	// Een veeg ververst de lijst, maar houdt de 100
+	const review = page.locator(`[data-tx-row="${ids[60]}"]`);
+	await review.scrollIntoViewIfNeeded();
+	await swipe(page, review, 140);
+	await expect(page.getByRole('status').filter({ hasText: 'bevestigd.' })).toBeVisible();
+	await expect(rows).toHaveCount(100);
+
+	// Naar de detailpagina en terug: dezelfde rijen, en de rij weer in beeld
+	const target = page.locator(`[data-tx-row="${ids[55]}"]`);
+	await target.getByRole('link').click();
+	await expect(page).toHaveURL(new RegExp(`/transacties/${ids[55]}`));
+	// Eerst de detailpagina helemaal laten staan; WebKit slaat een terug tijdens de overgang over
+	await expect(page.getByRole('heading', { level: 1, name: `${prefix} 055` })).toBeVisible();
+	await page.goBack();
+	await expect(page).toHaveURL(/aantal=100/);
+	await expect(rows).toHaveCount(100);
+	await expect(target).toBeInViewport();
+
+	// Een nieuwe zoekopdracht begint weer bij 50
+	const search = page.getByRole('searchbox', { name: 'Zoeken' });
+	await search.fill(prefix);
+	await search.press('Enter');
+	await expect(page).not.toHaveURL(/aantal=/);
+	await expect(rows).toHaveCount(50);
+
+	// Tot het einde: geen knop meer
+	await page.getByRole('link', { name: /Ouder/ }).scrollIntoViewIfNeeded();
+	await expect(rows).toHaveCount(100);
+	await page.getByRole('link', { name: /Ouder/ }).scrollIntoViewIfNeeded();
+	await expect(rows).toHaveCount(120);
+	await expect(page.getByRole('link', { name: /Ouder/ })).toHaveCount(0);
+	await expect(page.getByText('120 van 120')).toBeVisible();
+});
