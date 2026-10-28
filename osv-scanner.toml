@@ -1,0 +1,18 @@
+# Bewust genegeerde meldingen voor pnpm-lock.yaml (OSV-Scanner, ook gebruikt door OpenSSF
+# Scorecard). Alleen voor dev-dependencies zonder bruikbare fix die de app niet raken; elke regel
+# verloopt, zodat hij opnieuw beoordeeld wordt. Dependabot blijft ze los daarvan melden.
+
+[[IgnoredVulns]]
+# zod 3.25.76 via lighthouse > puppeteer-core > chromium-bidi 17.0.2 (alleen de Lighthouse-check
+# in CI). zod 3 krijgt geen fix; nieuwere chromium-bidi gebruikt zod 4, maar die versies worden
+# door `trustPolicy` geweigerd (zie de override in pnpm-workspace.yaml). De app zelf gebruikt
+# zod 4.6.7, die wel gepatcht is.
+id = "GHSA-mrhx-c7xc-m3w5"
+ignoreUntil = 2027-04-28
+reason = "Alleen in de Lighthouse-keten (devDependency, niet in het productie-image); valideert daar alleen CDP-berichten van de lokale Chrome. De app gebruikt de gepatchte zod 4.6.7."
+
+[[IgnoredVulns]]
+# deepmerge 4.3.1 via @sveltejs/vite-plugin-svelte; er is geen gepatchte versie.
+id = "GHSA-gcqx-w48m-w2h4"
+ignoreUntil = 2027-04-28
+reason = "Alleen in de build (vite-plugin-svelte, niet in het productie-image) en voegt daar alleen de eigen Vite- en Svelte-config samen, geen invoer van buiten. Geen gepatchte versie beschikbaar."
