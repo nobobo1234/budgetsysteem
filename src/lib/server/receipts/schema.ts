@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { PRODUCT_GROUPS } from '../../productGroups.ts';
+import { outputSchema } from '../ai/client.ts';
 
 // Het vaste JSON-schema dat Haiku teruggeeft (spec: Bonnetjes en koppelen, Verwerking). Haiku krijgt
 // geen tools en mag alleen dit schema invullen; de uitvoer blijft onbetrouwbare invoer en gaat
@@ -166,26 +167,12 @@ export const ReceiptOutputSchema = z.object({
 
 export type ReceiptOutput = z.infer<typeof ReceiptOutputSchema>;
 
-/** Sleutelwoorden die structured outputs weigert; de grenzen zelf controleert `safeParse`. */
-const UNSUPPORTED = new Set(['$schema', 'maxLength', 'minLength', 'maxItems', 'default']);
-
-function strip(node: unknown): unknown {
-	if (Array.isArray(node)) return node.map(strip);
-	if (node === null || typeof node !== 'object') return node;
-	return Object.fromEntries(
-		Object.entries(node)
-			.filter(([key]) => !UNSUPPORTED.has(key))
-			.map(([key, value]) => [key, strip(value)])
-	);
-}
-
 /**
- * JSON-schema voor `output_config.format`. Zelf gebouwd in plaats van met `zodOutputFormat` uit
- * de SDK: die zet ook `enum` alleen nog in de beschrijving, terwijl het model zich dan niet aan de
- * vaste waarden hoeft te houden.
+ * JSON-schema voor `output_config.format`, zonder de grenzen die structured outputs weigert;
+ * die handhaaft `safeParse` (zie `outputSchema`).
  */
 export function outputJsonSchema(): Record<string, unknown> {
-	return strip(z.toJSONSchema(ReceiptOutputSchema)) as Record<string, unknown>;
+	return outputSchema(ReceiptOutputSchema);
 }
 
 /**

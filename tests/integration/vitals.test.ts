@@ -163,13 +163,23 @@ describe('bewaartermijn en p75 per week', () => {
 			fakeEvent({ path: '/instellingen/status', routeId: '/(app)/instellingen/status' }) as never
 		)) as Exclude<Awaited<ReturnType<typeof statusLoad>>, void>;
 		expect(Object.keys(data).sort()).toEqual([
+			'aiBudget',
 			'attention',
 			'checkedAt',
 			'health',
 			'receipts',
+			'summaries',
 			'vitals'
 		]);
 		expect(data.receipts).toMatchObject({ days: 30, calls: 0, corrected: 0, correctedSure: 0 });
+		// Samenvattingen en AI-kosten: alleen tellingen en bedragen
+		expect(data.summaries).toMatchObject({ days: 30, calls: 0, wrongTaps: 0 });
+		expect(Object.keys(data.aiBudget).sort()).toEqual([
+			'available',
+			'budgetNanoUsd',
+			'month',
+			'spentNanoUsd'
+		]);
 		expect(data.health.database).toBe(true);
 		expect(data.vitals[0]!.metrics.LCP!.p75).toBe(1500);
 		expect(JSON.stringify(data.health)).not.toContain('/');

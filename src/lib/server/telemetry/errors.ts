@@ -2,7 +2,7 @@ import { lt } from 'drizzle-orm';
 import { sha256 } from '../auth/crypto.ts';
 import { log } from '../log.ts';
 import type { TelemetryDB } from './db.ts';
-import { errors, receiptReads, starts, usageEntries, webVitals } from './schema.ts';
+import { aiCalls, errors, receiptReads, starts, usageEntries, webVitals } from './schema.ts';
 
 export const RETENTION_DAYS = 90;
 const MAX_FRAMES = 10;
@@ -81,4 +81,5 @@ export function pruneTelemetry(db: TelemetryDB, now = new Date()): void {
 	db.delete(webVitals).where(lt(webVitals.at, cutoff)).run();
 	db.delete(receiptReads).where(lt(receiptReads.at, cutoff)).run();
 	db.delete(usageEntries).where(lt(usageEntries.at, cutoff)).run();
+	db.delete(aiCalls).where(lt(aiCalls.at, cutoff)).run();
 }

@@ -293,6 +293,7 @@ export function transactionTagChips(db: DB, transactionId: string) {
 
 type LineRow = {
 	tag_id: string;
+	date: string;
 	category_id: string | null;
 	category_name: string | null;
 	category_group: string | null;
@@ -306,41 +307,43 @@ type LineRow = {
  * retouren en storno's op die transacties, ook als die zelf buiten de periode vallen. Een
  * gedeelde uitgave telt via zijn verdeling. Een eigen tag op een retour telt niet apart.
  */
-function tagLines(db: DB, tagId?: string): Map<string, TagLine[]> {
+function tagLines(db: DB, tagId?: string): Map<string, (TagLine & { date: string })[]> {
 	const only = tagId === undefined ? sql`` : sql`AND tt.tag_id = ${tagId}`;
 	const rows = db.all<LineRow>(sql`
 		WITH tagged AS (
-			SELECT tt.tag_id, t.id
+			SELECT tt.tag_id, t.id, t.date
 			FROM transaction_tags tt
 			JOIN transactions t ON t.id = tt.transaction_id
 			WHERE tt.active = 1 AND t.correction_of IS NULL AND t.status != 'verwacht' ${only}
 		),
 		booked AS (
-			SELECT tag_id, id FROM tagged
+			SELECT tag_id, id, date FROM tagged
 			UNION ALL
-			SELECT g.tag_id, c.id
+			SELECT g.tag_id, c.id, g.date
 			FROM tagged g
 			JOIN transactions c ON c.correction_of = g.id
 			WHERE c.status != 'verwacht'
 		)
-		SELECT x.tag_id, x.category_id, c.name AS category_name, c."group" AS category_group,
+		SELECT x.tag_id, x.date, x.category_id, c.name AS category_name, c."group" AS category_group,
 			c.counts_for_budget, x.amount, x.advanced
 		FROM (
-			SELECT b.tag_id, t.category_id, t.amount_cents AS amount, 0 AS advanced
+			SELECT b.tag_id, b.date, t.category_id, t.amount_cents AS amount, 0 AS advanced
 			FROM booked b
 			JOIN transactions t ON t.id = b.id
 			WHERE NOT EXISTS (SELECT 1 FROM transaction_splits s WHERE s.transaction_id = b.id)
 			UNION ALL
-			SELECT b.tag_id, s.category_id, s.amount_cents AS amount, s.note = ${ADVANCED} AS advanced
+			SELECT b.tag_id, b.date, s.category_id, s.amount_cents AS amount, s.note = ${ADVANCED} AS advanced
 			FROM transaction_splits s
 			JOIN booked b ON b.id = s.transaction_id
 		) x
 		LEFT JOIN categories c ON c.id = x.category_id
 	`);
-	const out = new Map<string, TagLine[]>();
+	const out = new Map<string, (TagLine & { date: string })[]>();
 	for (const r of rows) {
 		const list = out.get(r.tag_id) ?? [];
 		list.push({
+			// De boekdatum; een retour telt op de datum van de uitgave die hij verrekent
+			date: r.date,
 			categoryId: r.category_id,
 			categoryName: r.category_name,
 			categoryGroup: r.category_group,
@@ -354,6 +357,35 @@ function tagLines(db: DB, tagId?: string): Map<string, TagLine[]> {
 }
 
 const STATE_ORDER = { loopt: 0, komt: 1, voorbij: 2 } as const;
+
+/**
+ * Wat elke tag die in `month` liep per maand kostte, van `from` tot en met `month`, zoals het
+ * totaal van een tag (`tagSpend`): voor de maandsamenvatting.
+ */
+export function tagSpendByMonth(db: DB, from: string, month: string) {
+	const last = `${month}-31`;
+	const running = db
+		.select({ id: tags.id, name: tags.name })
+		.from(tags)
+		.where(
+			and(
+				lte(tags.startDate, last),
+				or(sql`${tags.endDate} IS NULL`, gte(tags.endDate, `${month}-01`))
+			)
+		)
+		.orderBy(asc(tags.name))
+		.all();
+	if (running.length === 0) return [];
+	const lines = tagLines(db);
+	return running.map((t) => {
+		const byMonth = Map.groupBy(
+			(lines.get(t.id) ?? []).filter((l) => l.date >= `${from}-01` && l.date <= last),
+			(l) => l.date.slice(0, 7)
+		);
+		const cents = new Map([...byMonth].map(([m, list]) => [m, tagSpend(list).totalCents]));
+		return { id: t.id, name: t.name, cents };
+	});
+}
 
 /** Alle tags met hun totaal: lopende eerst, dan komende, dan de afgelopen van nieuw naar oud. */
 export function tagSummaries(db: DB, today: string) {

@@ -21,6 +21,11 @@
 	const failed = $derived(
 		bon.outcomes.weigering + bon.outcomes.afgekapt + bon.outcomes.ongeldig + bon.outcomes.fout
 	);
+	const sum = $derived(data.summaries);
+	const budget = $derived(data.aiBudget);
+	const budgetShare = $derived(
+		budget.budgetNanoUsd > 0 ? Math.min(1, budget.spentNanoUsd / budget.budgetNanoUsd) : 1
+	);
 	const time = new Intl.DateTimeFormat('nl-NL', { timeStyle: 'short' });
 	// FCP en TTFB worden ook opgeslagen, maar passen niet op een telefoonscherm
 	const VITALS = ['LCP', 'INP', 'CLS'] as const;
@@ -184,6 +189,78 @@
 		{/if}
 	</section>
 
+	<section aria-labelledby="ai-kosten">
+		<h2 id="ai-kosten">AI-kosten deze maand</h2>
+		<p class="muted">
+			Bonnen, samenvattingen en vragen samen, tegenover het maandbudget. Is het op, dan krijgt de
+			samenvatting de vaste tekst; bonnen gaan voor.
+		</p>
+		<div class="card budget">
+			<p>
+				<strong class="num">{formatUsd(budget.spentNanoUsd)}</strong>
+				<span class="muted">van <span class="num">{formatUsd(budget.budgetNanoUsd)}</span></span>
+				{#if !budget.available}<span class="warn-text">· op</span>{/if}
+			</p>
+			<span class="meter" aria-hidden="true"
+				><span class:full={!budget.available} style:--share={budgetShare}></span></span
+			>
+		</div>
+	</section>
+
+	<section aria-labelledby="samenvattingen">
+		<h2 id="samenvattingen">Samenvattingen</h2>
+		<p class="muted">
+			Elke keer dat Haiku de zinnen van een maandafsluiting schreef, in de laatste {sum.days} dagen. Klopt
+			niet hoort bij nul te blijven.
+		</p>
+		{#if sum.calls === 0}
+			<p class="card empty">Nog geen samenvattingen geschreven.</p>
+		{:else}
+			<dl class="card">
+				<div>
+					<dt>Geschreven</dt>
+					<dd class="num">{sum.calls} keer</dd>
+				</div>
+				<div>
+					<dt>Uitkomst</dt>
+					<dd class="num">
+						{sum.outcomes.geschreven} door de controle · {sum.fallback} vaste tekst{#if sum.outcomes.controle > 0}
+							<span class="muted">({sum.outcomes.controle} na de controle)</span>{/if}
+					</dd>
+				</div>
+				<div>
+					<dt>Klopt niet</dt>
+					<dd class="num">
+						{#if sum.wrongTaps > 0}
+							<span class="warn-text">{sum.wrongTaps} {sum.wrongTaps === 1 ? 'zin' : 'zinnen'}</span
+							>
+							<span class="muted"
+								>in {sum.wrongCalls}
+								{sum.wrongCalls === 1 ? 'samenvatting' : 'samenvattingen'}</span
+							>
+						{:else}
+							0
+						{/if}
+					</dd>
+				</div>
+				<div>
+					<dt>Kosten</dt>
+					<dd class="num">{formatUsd(sum.costNanoUsd)}</dd>
+				</div>
+				<div>
+					<dt>Tokens</dt>
+					<dd class="num">
+						{formatTokens(sum.inputTokens)} in · {formatTokens(sum.outputTokens)} uit
+					</dd>
+				</div>
+				<div>
+					<dt>Duur (mediaan)</dt>
+					<dd class="num">{sum.medianMs === null ? '–' : formatCallDuration(sum.medianMs)}</dd>
+				</div>
+			</dl>
+		{/if}
+	</section>
+
 	<section aria-labelledby="snelheid">
 		<h2 id="snelheid">Snelheid</h2>
 		<p class="muted">
@@ -313,6 +390,32 @@
 
 	.empty {
 		color: var(--muted);
+	}
+
+	.budget {
+		display: grid;
+		gap: 10px;
+	}
+
+	.meter {
+		display: block;
+		height: 8px;
+		border-radius: 999px;
+		background: var(--surface-2);
+		overflow: hidden;
+	}
+
+	.meter span {
+		display: block;
+		height: 100%;
+		border-radius: inherit;
+		background: var(--accent);
+		transform: scaleX(var(--share));
+		transform-origin: left center;
+	}
+
+	.meter .full {
+		background: var(--warn);
 	}
 
 	.table {
