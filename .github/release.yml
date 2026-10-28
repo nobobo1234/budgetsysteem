@@ -1,0 +1,25 @@
+# Indeling van automatisch gegenereerde release notes, op PR-labels
+changelog:
+  exclude:
+    labels:
+      - geen-release-notes
+  categories:
+    - title: Let op bij bijwerken
+      labels:
+        - breaking
+        - migratie
+    - title: Beveiliging
+      labels:
+        - beveiliging
+    - title: Nieuw
+      labels:
+        - enhancement
+    - title: Fixes
+      labels:
+        - bug
+    - title: Dependencies
+      labels:
+        - dependencies
+    - title: Overig
+      labels:
+        - '*'

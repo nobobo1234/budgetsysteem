@@ -9,7 +9,7 @@
 import Database from 'better-sqlite3';
 import { spawn } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
-import { mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { createServer, request } from 'node:http';
 import { createGzip } from 'node:zlib';
 
@@ -191,6 +191,9 @@ function lighthouse(url, name, extraArgs = []) {
 	});
 }
 
+/** Regels voor de job-samenvatting in GitHub Actions, gevuld door assertBudget. */
+const summary = [];
+
 /** Toetst de mediaan van de runs aan het budget; geeft het aantal overschrijdingen met `error`. */
 function assertBudget(page, lhrs) {
 	let errors = 0;
@@ -198,13 +201,17 @@ function assertBudget(page, lhrs) {
 		const values = lhrs.map(check.value).filter((v) => typeof v === 'number');
 		if (values.length === 0) {
 			console.error(`✗ ${page}: ${check.name} ontbreekt in het rapport`);
+			summary.push(`| ${page} | ${check.name} | – | | ✗ |`);
 			errors++;
 			continue;
 		}
 		const value = median(values);
 		const ok = check.max !== undefined ? value <= check.max : value >= check.min;
 		const limit = check.max !== undefined ? `max ${check.max}` : `min ${check.min}`;
-		const line = `${page}: ${check.name} ${Math.round(value * 1000) / 1000} (${limit})`;
+		const rounded = Math.round(value * 1000) / 1000;
+		const line = `${page}: ${check.name} ${rounded} (${limit})`;
+		const mark = ok ? '✓' : check.level === 'warn' ? '⚠' : '✗';
+		summary.push(`| ${page} | ${check.name} | ${rounded} | ${limit} | ${mark} |`);
 		if (ok) console.log(`✓ ${line}`);
 		else if (check.level === 'warn') console.warn(`⚠ ${line}`);
 		else {
@@ -213,6 +220,19 @@ function assertBudget(page, lhrs) {
 		}
 	}
 	return errors;
+}
+
+function writeSummary() {
+	if (!process.env.GITHUB_STEP_SUMMARY || summary.length === 0) return;
+	const table = [
+		`### Lighthouse (mediaan van ${RUNS} runs)`,
+		'',
+		'| pagina | meting | waarde | budget | |',
+		'| --- | --- | --: | --- | --- |',
+		...summary,
+		''
+	].join('\n');
+	appendFileSync(process.env.GITHUB_STEP_SUMMARY, table + '\n');
 }
 
 let code = 0;
@@ -240,4 +260,5 @@ try {
 	console.error(e instanceof Error ? e.message : e);
 	code = 1;
 }
+writeSummary();
 stop(code);
