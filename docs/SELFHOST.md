@@ -132,7 +132,20 @@ Bonnen worden gelezen door Claude Haiku via de Anthropic API. Zonder sleutel wer
 2. Zet `ANTHROPIC_API_KEY=...` in `.env` (met de editor, niet via `echo`, zodat hij niet in je shell-geschiedenis komt).
 3. `docker compose up -d`.
 
-Bonnen vanaf je iPhone versturen via het deelmenu: zie [ios-opdracht.md](ios-opdracht.md).
+## Bonnen via het deelmenu (optioneel)
+
+Op een iPhone deel je een bon vanuit Foto's met de opdracht "Bon naar Budget". iOS installeert alleen ondertekende opdrachten, en ondertekenen kan alleen op een Mac die met iCloud is ingelogd. De opdracht is per domein ondertekend en staat daarom niet in de repo; je maakt hem zelf en zet hem in het datavolume:
+
+```bash
+# Op je Mac, in een kopie van de repo met dezelfde versie als op de VPS
+node scripts/sign-shortcut.ts --origin https://budget.jouwdomein.nl
+scp shortcut-signed.json vps:budget/selfhost/
+
+# Op de VPS, in de map selfhost/
+docker compose cp shortcut-signed.json app:/data/shortcut-signed.json
+```
+
+Een herstart is niet nodig. Onder Instellingen → Apparaten staat daarna de download, direct nadat je een upload-token hebt aangemaakt. Zonder bestand werkt de rest gewoon; Apparaten legt dan uit hoe je hem maakt. Het certificaat is ongeveer een jaar geldig, en een update van de app kan de opdracht veranderen; Apparaten meldt wanneer je opnieuw moet ondertekenen. Details, ook over leesrechten: [ios-opdracht.md](ios-opdracht.md).
 
 ## Problemen
 

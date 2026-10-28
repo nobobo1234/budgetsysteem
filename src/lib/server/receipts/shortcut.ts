@@ -1,8 +1,10 @@
 import { createHash } from 'node:crypto';
+import { z } from 'zod';
 
 // De iOS-opdracht "Bon naar Budget" voor het deelmenu van Foto's (spec: Uploaden via het
 // deelmenu, stap 2). Dit is de leesbare bron; `scripts/sign-shortcut.ts` maakt er op een Mac
-// een ondertekend .shortcut-bestand van (shortcut-signed.ts), dat de app als download aanbiedt.
+// een ondertekend .shortcut-bestand van (als JSON, `shortcut-signed.json` in het datavolume),
+// dat de app als download aanbiedt. Het ondertekende bestand staat niet in de repo.
 //
 // Het token zit nooit in het bestand. De opdracht vraagt het bij installeren (importvraag op
 // de tekstactie) en bewaart het alleen in de opdracht op je eigen telefoon. Deelt iemand die
@@ -270,11 +272,13 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 export type ShortcutStatus =
 	| { state: 'ok' | 'expiring' | 'expired'; validUntil: string }
-	// `host`: waar het meegeleverde bestand heen stuurt; `origin`: deze app, om voor te ondertekenen
-	| { state: 'other-host'; validUntil: string; host: string; origin: string };
+	// `host`: waar het geïnstalleerde bestand heen stuurt; `origin`: deze app, om voor te ondertekenen
+	| { state: 'other-host'; validUntil: string; host: string; origin: string }
+	// Geen bestand in het datavolume, of een bestand dat de app weigert (zie parseSignedShortcut)
+	| { state: 'missing' | 'invalid'; origin: string };
 
 /**
- * Of de app de ondertekende opdracht kan aanbieden. Hij stuurt naar de URL waarvoor hij
+ * Of de app een geldig ondertekende opdracht kan aanbieden. Hij stuurt naar de URL waarvoor hij
  * ondertekend is; is dat niet precies het upload-endpoint van deze app (een eigen installatie,
  * lokaal), dan zou de download bonnen en tokens naar een andere host sturen, dus dan niet. Er is
  * dan geen alternatief bestand: iOS installeert alleen ondertekende opdrachten, en ondertekenen
@@ -298,7 +302,68 @@ export function shortcutStatus(
 	return { state: 'ok', validUntil };
 }
 
-/** Hash van de bron, zodat een test ziet dat het ondertekende bestand bij deze definitie hoort. */
+/** Hash van de bron, zodat de app ziet dat het ondertekende bestand bij deze definitie hoort. */
 export function shortcutSourceHash(ingestUrl: string): string {
 	return createHash('sha256').update(shortcutJson(ingestUrl)).digest('hex');
+}
+
+// Het ondertekende bestand zoals scripts/sign-shortcut.ts het schrijft. Een echt bestand is
+// zo'n 25 kB; ruim daarboven is het geen opdracht meer.
+export const MAX_SIGNED_BYTES = 192 * 1024;
+/** Het hele JSON-bestand: base64 (4/3 van de bytes) plus de andere velden. */
+export const MAX_SIGNED_FILE_BYTES = 264 * 1024;
+
+const signedSchema = z.strictObject({
+	url: z.string().max(2048),
+	sourceHash: z.string().regex(/^[0-9a-f]{64}$/),
+	signedAt: z.iso.date(),
+	validUntil: z.iso.date(),
+	base64: z
+		.string()
+		.min(8)
+		.max(Math.ceil(MAX_SIGNED_BYTES / 3) * 4)
+		.regex(/^[A-Za-z0-9+/]+={0,2}$/)
+});
+
+export type SignedShortcut = z.infer<typeof signedSchema>;
+
+export type ParsedShortcut =
+	| { ok: true; shortcut: SignedShortcut; bytes: Buffer<ArrayBuffer> }
+	// Alleen een soort reden, nooit de inhoud: die gaat zo de log in
+	| { ok: false; reason: 'size' | 'json' | 'schema' | 'url' | 'source' | 'dates' | 'signature' };
+
+/**
+ * Leest en controleert een ondertekend bestand. Bij elke twijfel geweigerd: het moet precies
+ * bij de huidige definitie horen (`sourceHash`), naar een https-upload-endpoint sturen en een
+ * ondertekend AEA-archief bevatten. Of het bij déze app hoort, beslist shortcutStatus.
+ */
+export function parseSignedShortcut(text: string): ParsedShortcut {
+	if (Buffer.byteLength(text) > MAX_SIGNED_FILE_BYTES) return { ok: false, reason: 'size' };
+	let raw: unknown;
+	try {
+		raw = JSON.parse(text);
+	} catch {
+		return { ok: false, reason: 'json' };
+	}
+	const parsed = signedSchema.safeParse(raw);
+	if (!parsed.success) return { ok: false, reason: 'schema' };
+	const shortcut = parsed.data;
+	let url: string;
+	try {
+		url = signingUrl(new URL(shortcut.url).origin);
+	} catch {
+		return { ok: false, reason: 'url' };
+	}
+	if (url !== shortcut.url) return { ok: false, reason: 'url' };
+	if (shortcut.sourceHash !== shortcutSourceHash(shortcut.url)) {
+		return { ok: false, reason: 'source' };
+	}
+	if (shortcut.validUntil <= shortcut.signedAt) return { ok: false, reason: 'dates' };
+	const bytes = Buffer.from(shortcut.base64, 'base64');
+	// Alleen canonieke base64: Buffer.from slaat ongeldige tekens anders stilletjes over
+	if (bytes.toString('base64') !== shortcut.base64 || bytes.length > MAX_SIGNED_BYTES) {
+		return { ok: false, reason: 'signature' };
+	}
+	if (bytes.subarray(0, 4).toString('latin1') !== 'AEA1') return { ok: false, reason: 'signature' };
+	return { ok: true, shortcut, bytes };
 }

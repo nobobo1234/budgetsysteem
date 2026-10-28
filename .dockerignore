@@ -6,6 +6,8 @@ history/
 *.key
 secrets/
 data/
+# Ondertekende iOS-opdracht (scripts/sign-shortcut.ts): hoort in het datavolume, niet in het image
+shortcut-signed.json
 .e2e/
 *.db
 *.db-shm

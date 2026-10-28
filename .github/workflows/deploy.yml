@@ -32,12 +32,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      # De ondertekende opdracht moet naar dit domein sturen, anders biedt de app hem niet aan
-      - name: Opdracht ondertekend voor APP_ORIGIN
-        env:
-          APP_ORIGIN: ${{ vars.APP_ORIGIN }}
-        run: |
-          grep -qF "url: '${APP_ORIGIN%/}/api/ingest'," src/lib/server/receipts/shortcut-signed.ts
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:

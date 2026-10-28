@@ -31,5 +31,7 @@ data/
 *.db-shm
 *.db-wal
 .e2e/
+# Ondertekende iOS-opdracht (scripts/sign-shortcut.ts): hoort in het datavolume, niet in de repo
+shortcut-signed.json
 .lhci/
 .lighthouseci/

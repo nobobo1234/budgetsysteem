@@ -4,7 +4,10 @@ import { activePasskeys } from '#lib/server/auth/passkey.ts';
 import { hasRecentReauth } from '#lib/server/auth/session.ts';
 import { db } from '#lib/server/db/index.ts';
 import { requireReauth, requireSession } from '#lib/server/http.ts';
-import { currentShortcutStatus } from '#lib/server/receipts/shortcut-download.ts';
+import {
+	currentShortcutStatus,
+	signedShortcutPath
+} from '#lib/server/receipts/shortcut-download.ts';
 import {
 	MAX_ACTIVE_TOKENS,
 	activeUploadTokens,
@@ -25,6 +28,8 @@ export const load: PageServerLoad = ({ locals }) => {
 		reauthFresh: hasRecentReauth(session),
 		passkeys: activePasskeys(db()).length,
 		shortcut: currentShortcutStatus(now),
+		// Waar het ondertekende bestand moet staan, voor de uitleg bij "geen of een ander bestand"
+		shortcutPath: signedShortcutPath(),
 		tokens: activeUploadTokens(db()).map((t) => ({
 			id: t.id,
 			name: t.name,

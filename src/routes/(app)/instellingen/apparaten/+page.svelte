@@ -31,10 +31,20 @@
 	const when = (iso: string) => dateTime.format(new Date(iso));
 	const longDate = new Intl.DateTimeFormat('nl-NL', { dateStyle: 'long', timeZone: 'UTC' });
 
-	// De meegeleverde iOS-opdracht: te downloaden, binnenkort opnieuw ondertekenen, verlopen,
-	// of ondertekend voor een ander domein (docs/ios-opdracht.md)
-	const until = $derived(longDate.format(new Date(`${data.shortcut.validUntil}T00:00:00Z`)));
+	// De geïnstalleerde iOS-opdracht: te downloaden, binnenkort opnieuw ondertekenen, verlopen,
+	// ondertekend voor een ander domein, ongeldig of nog niet geïnstalleerd (docs/ios-opdracht.md)
+	const until = $derived(
+		'validUntil' in data.shortcut
+			? longDate.format(new Date(`${data.shortcut.validUntil}T00:00:00Z`))
+			: ''
+	);
 	const downloadable = $derived(data.shortcut.state === 'ok' || data.shortcut.state === 'expiring');
+	// Geen, een ongeldig of een ander bestand: zo onderteken je er een voor deze app
+	const signCommand = $derived(
+		'origin' in data.shortcut
+			? `node scripts/sign-shortcut.ts --origin ${data.shortcut.origin}`
+			: ''
+	);
 
 	const create: SubmitFunction = async ({ cancel }) => {
 		message = '';
@@ -113,10 +123,26 @@
 			{:else if data.shortcut.state === 'other-host'}
 				<h2 id="notice-title">Opdracht voor een ander domein</h2>
 				<p>
-					De meegeleverde opdracht stuurt bonnen naar {data.shortcut.host}, niet naar deze app.
-					Daarom staat de download uit. Onderteken hem op een Mac voor {data.shortcut.origin} met “node
-					scripts/sign-shortcut.ts --origin {data.shortcut.origin}” en bouw de app opnieuw (zie
-					docs/ios-opdracht.md).
+					De geïnstalleerde opdracht stuurt bonnen naar {data.shortcut.host}, niet naar deze app.
+					Daarom staat de download uit.
+				</p>
+			{:else if data.shortcut.state === 'invalid'}
+				<h2 id="notice-title">Opdracht ongeldig</h2>
+				<p>
+					Het bestand met de opdracht klopt niet of hoort bij een andere versie van de app. Daarom
+					staat de download uit.
+				</p>
+			{:else if data.shortcut.state === 'missing'}
+				<h2 id="notice-title">Opdracht nog niet geïnstalleerd</h2>
+				<p>
+					Er staat nog geen ondertekende opdracht voor het deelmenu bij deze app. Uploaden met een
+					token werkt wel; alleen de download staat uit.
+				</p>
+			{/if}
+			{#if signCommand}
+				<p>
+					Onderteken hem op een Mac met “{signCommand}” en zet het JSON-bestand in het datavolume op
+					{data.shortcutPath} (zie docs/ios-opdracht.md).
 				</p>
 			{/if}
 		</section>

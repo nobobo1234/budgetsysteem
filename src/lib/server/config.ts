@@ -9,6 +9,9 @@ const schema = z.object({
 	MIGRATIONS_DIR: z.string().min(1).default('drizzle'),
 	// Bonnetjes, buiten de webroot; standaard `receipts/` naast DATABASE_PATH (het datavolume)
 	RECEIPTS_DIR: z.string().min(1).optional(),
+	// De ondertekende iOS-opdracht (docs/ios-opdracht.md); standaard `shortcut-signed.json` naast
+	// DATABASE_PATH. Staat niet in de repo: elke installatie ondertekent voor haar eigen domein.
+	SHORTCUT_PATH: z.string().min(1).optional(),
 	// Publieke origin, zoals https://finance.mijndomein.nl
 	ORIGIN: z.url().optional(),
 	// Relying party ID voor passkeys; standaard de host van ORIGIN

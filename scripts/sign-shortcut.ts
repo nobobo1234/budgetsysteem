@@ -1,13 +1,13 @@
 // Maakt de iOS-opdracht "Bon naar Budget" opnieuw en ondertekent hem (spec: Uploaden via het
 // deelmenu). Draait alleen op een Mac die met iCloud is ingelogd: `shortcuts sign` vraagt bij
-// Apple een certificaat aan. Daarom draait dit niet in CI; het resultaat wordt gecommit.
-// Uitleg: docs/ios-opdracht.md.
+// Apple een certificaat aan. Daarom draait dit niet in CI. Het resultaat is een JSON-bestand dat
+// je in het datavolume van de app zet; het hoort niet in de repo. Uitleg: docs/ios-opdracht.md.
 //
-//   node scripts/sign-shortcut.ts [--origin https://<jouw domein>] [--bewaar <map>]
+//   node scripts/sign-shortcut.ts --origin https://<jouw domein> [--uit <pad>] [--bewaar <map>]
 //
 // De opdracht stuurt naar <origin>/api/ingest. Zonder --origin geldt ORIGIN uit de omgeving
-// (dezelfde waarde als bij het bouwen), en zonder allebei de host van het huidige bestand
-// (opnieuw ondertekenen voor hetzelfde domein). Het script zegt welke het gebruikt.
+// (dezelfde waarde als bij het bouwen); zonder allebei stopt het script. Het schrijft naar
+// ./shortcut-signed.json, of naar --uit.
 //
 // Het bestand bevat geen token: dat vraagt de opdracht bij installeren.
 
@@ -19,24 +19,27 @@ import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import {
 	SHORTCUT_NAME,
+	parseSignedShortcut,
 	shortcutJson,
 	shortcutSourceHash,
 	signingUrl
 } from '../src/lib/server/receipts/shortcut.ts';
-import { SIGNED_SHORTCUT } from '../src/lib/server/receipts/shortcut-signed.ts';
-
-const OUT = resolve('src/lib/server/receipts/shortcut-signed.ts');
-// Enkele aanhalingstekens, zoals Prettier ze schrijft (geen van deze waarden bevat er een)
-const quote = (s: string) => `'${s}'`;
 
 const { values } = parseArgs({
-	options: { origin: { type: 'string' }, bewaar: { type: 'string' } }
+	options: { origin: { type: 'string' }, uit: { type: 'string' }, bewaar: { type: 'string' } }
 });
+const OUT = resolve(values.uit ?? 'shortcut-signed.json');
 const [origin, from] = values.origin
 	? [values.origin, '--origin']
 	: process.env.ORIGIN
 		? [process.env.ORIGIN, 'ORIGIN']
-		: [new URL(SIGNED_SHORTCUT.url).origin, 'het huidige bestand'];
+		: [undefined, undefined];
+if (origin === undefined) {
+	console.error(
+		'Geef de origin van je app: node scripts/sign-shortcut.ts --origin https://<jouw domein>'
+	);
+	process.exit(1);
+}
 let url: string;
 try {
 	url = signingUrl(origin);
@@ -84,26 +87,28 @@ try {
 		copyFileSync(source, join(resolve(values.bewaar), `${SHORTCUT_NAME}.json`));
 	}
 
-	writeFileSync(
-		OUT,
-		[
-			'// Gegenereerd door scripts/sign-shortcut.ts; niet met de hand wijzigen.',
-			'// Ondertekende iOS-opdracht zonder token (zie docs/ios-opdracht.md).',
-			'',
-			'export const SIGNED_SHORTCUT = {',
-			`\turl: ${quote(url)},`,
-			`\tsourceHash: ${quote(shortcutSourceHash(url))},`,
-			`\tsignedAt: ${quote(new Date().toISOString().slice(0, 10))},`,
-			`\tvalidUntil: ${quote(validUntil.toISOString().slice(0, 10))},`,
-			`\tbase64:\n\t\t${quote(bytes.toString('base64'))}`,
-			'} as const;',
-			''
-		].join('\n')
-	);
+	const json = `${JSON.stringify(
+		{
+			url,
+			sourceHash: shortcutSourceHash(url),
+			signedAt: new Date().toISOString().slice(0, 10),
+			validUntil: validUntil.toISOString().slice(0, 10),
+			base64: bytes.toString('base64')
+		},
+		null,
+		'\t'
+	)}\n`;
+	// Dezelfde controle als de app bij het inlezen: wat hier niet door komt, biedt de app niet aan
+	const check = parseSignedShortcut(json);
+	if (!check.ok) throw new Error(`De app zou dit bestand weigeren (${check.reason}).`);
+	writeFileSync(OUT, json, { mode: 0o644 });
 	console.log(
 		`Ondertekend (${bytes.length} bytes), certificaat geldig tot ${validUntil.toISOString().slice(0, 10)}.`
 	);
 	console.log(`Geschreven: ${OUT}`);
+	console.log(
+		'Zet dit bestand in het datavolume van de app (docs/ios-opdracht.md); niet committen.'
+	);
 } finally {
 	rmSync(dir, { recursive: true, force: true });
 }
