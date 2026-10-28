@@ -76,6 +76,14 @@ export default defineConfig({
 		client: { build: { rolldownOptions: { output: { codeSplitting } } } }
 	},
 	test: {
+		// Alleen met `--coverage` (CI, static-job); scripts/coverage-summary.mjs zet het totaal in
+		// de job-samenvatting. Geen drempel: dit is informatie, geen doel.
+		coverage: {
+			provider: 'v8',
+			include: ['src/**/*.ts'],
+			exclude: ['src/**/*.test.ts'],
+			reporter: ['text-summary', 'json-summary']
+		},
 		projects: [
 			{
 				extends: true,

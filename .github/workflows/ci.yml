@@ -1,7 +1,11 @@
 name: CI
 
+# Push alleen op main. Een push-run op een PR-branch slaat de PR-jobs over en zou dan een eigen,
+# te vroeg groene `ci-ok` op dezelfde commit zetten (overgeslagen telt als geslaagd), terwijl e2e
+# in de PR-run nog loopt.
 on:
   push:
+    branches: [main]
   pull_request:
 
 permissions: {}
@@ -51,7 +55,7 @@ jobs:
             echo "code=true" >> "$GITHUB_OUTPUT"
           fi
 
-  # Elke push: lint, typecheck, unit-tests en de repo-controles
+  # Elke PR en push op main: lint, typecheck, unit-tests en de repo-controles
   static:
     needs: changes
     if: ${{ !cancelled() }}
@@ -73,7 +77,10 @@ jobs:
       - if: needs.changes.outputs.code != 'false'
         run: pnpm check
       - if: needs.changes.outputs.code != 'false'
-        run: pnpm test:unit
+        run: pnpm test:unit --coverage
+      - name: Coverage in de samenvatting
+        if: needs.changes.outputs.code != 'false'
+        run: node scripts/coverage-summary.mjs
       - name: Onzichtbare tekens
         run: pnpm check:invisible
       - name: Geen echte IBANs
@@ -212,6 +219,13 @@ jobs:
         uses: zizmorcore/zizmor-action@85b2b9fb8e3325e7a23d7d0a9d7ba5ae0f999e3e # v0.7.1
         with:
           advanced-security: false
+      # Naast zizmor: syntax, expressies en shellcheck op de run-blokken
+      - name: Workflows (actionlint 1.7.12)
+        if: needs.changes.outputs.code != 'false'
+        run: |
+          docker run --rm -v "$PWD:/repo" --workdir /repo \
+            rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 \
+            -color
 
   docker:
     needs: changes
