@@ -1,0 +1,14 @@
+# Litestream 0.5 voor zelf hosten, gelijk aan deploy/litestream.yml. Alleen in gebruik met
+# `docker compose --profile backup up -d`. Bucket, endpoint, regio, sleutels en heartbeat komen
+# uit selfhost/.env (zie env.example); een lege LITESTREAM_HEARTBEAT_URL betekent geen heartbeat.
+heartbeat-url: ${LITESTREAM_HEARTBEAT_URL}
+heartbeat-interval: 5m
+
+dbs:
+  - path: /data/budget.db
+    replica:
+      type: s3
+      bucket: ${LITESTREAM_BUCKET}
+      path: budget.db
+      endpoint: ${LITESTREAM_ENDPOINT}
+      region: ${LITESTREAM_REGION}

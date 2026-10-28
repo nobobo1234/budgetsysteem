@@ -1,0 +1,47 @@
+# Caddy voor zelf hosten (docs/SELFHOST.md). Haalt zelf een certificaat op bij Let's Encrypt
+# voor {$DOMAIN} en stuurt alles door naar de app. Overgenomen uit deploy/nginx/finance.conf;
+# wat de app zelf zet (CSP, nosniff, referrer-policy, frame-opties, COOP/CORP,
+# permissions-policy, cache-control) zet Caddy niet nog een keer.
+#
+# Niet overgenomen: de rate limiting van nginx op /login, /api/auth/ en /api/ingest. Die zit
+# niet in het standaard Caddy-image; de app remt zelf per IP-adres (src/lib/server/ratelimit.ts).
+
+{$DOMAIN} {
+	header {
+		Strict-Transport-Security "max-age=63072000; includeSubDomains"
+		# Zoals `server_tokens off` in nginx
+		-Server
+		-Via
+	}
+
+	# Compressie in Caddy in plaats van in Node, zoals nginx: alleen gzip, niveau 5
+	# (gzip_comp_level). De standaardlijst van Caddy dekt de gzip_types van nginx.
+	encode {
+		gzip 5
+	}
+
+	# Zoals client_max_body_size: 12 MiB, alleen de import tot 25 MiB (BODY_SIZE_LIMIT in het image)
+	@import path /import
+	@niet_import not path /import
+	request_body @niet_import {
+		max_size 12MiB
+	}
+	request_body @import {
+		max_size 25MiB
+	}
+
+	reverse_proxy app:3000 {
+		# De app leest het IP-adres van de client uit X-Real-IP (ADDRESS_HEADER in het image).
+		# header_up vervangt een waarde die de client zelf meestuurt; alleen daardoor is dat
+		# veilig. Host, X-Forwarded-For, -Proto en -Host zet Caddy zelf, en een meegestuurde
+		# X-Forwarded-For van de client negeert hij (er zijn geen trusted_proxies).
+		header_up X-Real-IP {remote_host}
+	}
+}
+
+# Onbekende hostnamen (scanners op het IP-adres) direct afkappen, zoals `return 444` in nginx.
+# De doorverwijzing van http naar https voor {$DOMAIN} zet Caddy hier zelf voor.
+# Over https krijgt een onbekende naam geen certificaat, dus daar mislukt de handshake al.
+http:// {
+	abort
+}

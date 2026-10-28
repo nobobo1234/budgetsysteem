@@ -1,19 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import {
-	INGEST_URL,
+	INGEST_PATH,
 	JPEG_QUALITY,
 	MAX_EDGE,
 	RENEW_DAYS,
+	ingestUrlFor,
 	shortcutDefinition,
 	shortcutJson,
 	shortcutSourceHash,
-	shortcutStatus
+	shortcutStatus,
+	signingUrl
 } from './shortcut.ts';
 import { SIGNED_SHORTCUT } from './shortcut-signed.ts';
 
 type Dict = Record<string, unknown>;
 
-const definition = shortcutDefinition() as Dict;
+// Een neutrale installatie; het meegeleverde bestand kan voor elk domein ondertekend zijn
+const ORIGIN = 'https://budget.example.test';
+const INGEST_URL = `${ORIGIN}/api/ingest`;
+const definition = shortcutDefinition(INGEST_URL) as Dict;
 const actions = definition.WFWorkflowActions as Dict[];
 const id = (a: Dict) => a.WFWorkflowActionIdentifier as string;
 const params = (a: Dict) => a.WFWorkflowActionParameters as Dict;
@@ -35,7 +40,7 @@ describe('iOS-opdracht', () => {
 	});
 
 	it('bevat geen token', () => {
-		expect(shortcutJson()).not.toMatch(/bon_[A-Za-z0-9_-]{20,}/);
+		expect(shortcutJson(INGEST_URL)).not.toMatch(/bon_[A-Za-z0-9_-]{20,}/);
 	});
 
 	it('stuurt elke afbeelding als ruwe JPEG-body met het token als Bearer', () => {
@@ -95,10 +100,25 @@ describe('iOS-opdracht', () => {
 		expect([...open.keys()]).toEqual([]);
 	});
 
+	it('stuurt alleen naar het upload-endpoint en bevat verder geen domein', () => {
+		const json = shortcutJson(INGEST_URL);
+		expect(json.match(/[a-z][a-z0-9+.-]*:\/\/[^\s"]*/gi)).toEqual([INGEST_URL]);
+		const other = 'https://ander.example.test/api/ingest';
+		const [upload] = find('downloadurl');
+		expect(params(upload!).WFURL).not.toBe(other);
+		const otherDefinition = shortcutDefinition(other) as Dict;
+		const otherUpload = (otherDefinition.WFWorkflowActions as Dict[]).find(
+			(a) => id(a) === 'is.workflow.actions.downloadurl'
+		)!;
+		expect(params(otherUpload).WFURL).toBe(other);
+		expect(shortcutSourceHash(other)).not.toBe(shortcutSourceHash(INGEST_URL));
+	});
+
 	it('het ondertekende bestand hoort bij deze definitie', () => {
 		// Faalt dit, draai dan `node scripts/sign-shortcut.ts` op een Mac (docs/ios-opdracht.md)
-		expect(SIGNED_SHORTCUT.url).toBe(INGEST_URL);
-		expect(SIGNED_SHORTCUT.sourceHash).toBe(shortcutSourceHash());
+		expect(SIGNED_SHORTCUT.url).toMatch(/^https:\/\/[^/]+\/api\/ingest$/);
+		expect(SIGNED_SHORTCUT.url).toBe(signingUrl(new URL(SIGNED_SHORTCUT.url).origin));
+		expect(SIGNED_SHORTCUT.sourceHash).toBe(shortcutSourceHash(SIGNED_SHORTCUT.url));
 		const bytes = Buffer.from(SIGNED_SHORTCUT.base64, 'base64');
 		expect(bytes.subarray(0, 4).toString('latin1')).toBe('AEA1');
 	});
@@ -106,7 +126,7 @@ describe('iOS-opdracht', () => {
 
 describe('status van de opdracht', () => {
 	const signed = { url: INGEST_URL, validUntil: '2027-11-16' };
-	const origin = 'https://budget.example.nl';
+	const origin = ORIGIN;
 	const at = (iso: string) => new Date(iso);
 
 	it('geldig tot een maand voor het verlopen', () => {
@@ -132,16 +152,61 @@ describe('status van de opdracht', () => {
 		for (const other of [
 			'http://localhost:5173',
 			'https://budget.example.org',
-			'http://budget.example.nl',
-			'https://budget.example.nl:8443'
+			'http://budget.example.test',
+			'https://budget.example.test:8443',
+			'https://ander.budget.example.test'
 		]) {
 			expect(shortcutStatus(signed, other, now)).toEqual({
 				state: 'other-host',
 				validUntil: '2027-11-16',
-				host: 'budget.example.nl'
+				host: 'budget.example.test',
+				origin: new URL(other).origin
 			});
 		}
 		// Een pad of slash aan het eind van ORIGIN maakt niet uit
 		expect(shortcutStatus(signed, `${origin}/`, now).state).toBe('ok');
+		expect(shortcutStatus(signed, `${origin}/een/pad`, now).state).toBe('ok');
+	});
+
+	it('alleen voor precies het upload-endpoint van deze app', () => {
+		const now = at('2026-11-01T12:00:00Z');
+		// Zelfde host, ander pad: ook geen download
+		for (const url of [`${origin}/api/receipts`, `${origin}/api/ingest/`, `${origin}/`]) {
+			expect(shortcutStatus({ ...signed, url }, origin, now).state).toBe('other-host');
+		}
+		// Hoofdletters en de standaardpoort maken niet uit
+		expect(shortcutStatus(signed, 'https://Budget.Example.TEST:443', now).state).toBe('ok');
+	});
+});
+
+describe('URL van de opdracht uit de origin', () => {
+	it('volgt uit de geconfigureerde origin', () => {
+		expect(INGEST_PATH).toBe('/api/ingest');
+		expect(ingestUrlFor(ORIGIN)).toBe(INGEST_URL);
+		expect(ingestUrlFor(`${ORIGIN}/`)).toBe(INGEST_URL);
+		expect(ingestUrlFor(`${ORIGIN}/een/pad?x=1#y`)).toBe(INGEST_URL);
+		expect(ingestUrlFor('http://localhost:5173')).toBe('http://localhost:5173/api/ingest');
+		expect(ingestUrlFor('https://ander.example.test:8443')).toBe(
+			'https://ander.example.test:8443/api/ingest'
+		);
+	});
+
+	it('ondertekenen alleen voor een https-origin zonder pad', () => {
+		expect(signingUrl(ORIGIN)).toBe(INGEST_URL);
+		expect(signingUrl(`${ORIGIN}/`)).toBe(INGEST_URL);
+		expect(signingUrl('https://BUDGET.example.test:443')).toBe(INGEST_URL);
+		for (const bad of [
+			'http://budget.example.test',
+			'http://localhost:5173',
+			`${ORIGIN}/api/ingest`,
+			`${ORIGIN}/budget`,
+			`${ORIGIN}?x=1`,
+			`${ORIGIN}#x`,
+			'https://iemand:geheim@budget.example.test',
+			'budget.example.test',
+			''
+		]) {
+			expect(() => signingUrl(bad), bad).toThrow();
+		}
 	});
 });

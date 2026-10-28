@@ -10,11 +10,33 @@ import { createHash } from 'node:crypto';
 //
 // Per afbeelding: hooguit 2576 px aan de lange kant (nooit vergroten), JPEG met kwaliteit 0,9
 // zonder metadata, en als ruwe body naar POST /api/ingest met `Authorization: Bearer <token>`.
+//
+// Er staat hier geen domein in: de URL volgt uit de origin waarvoor je ondertekent. Elke
+// installatie ondertekent voor haar eigen domein (docs/ios-opdracht.md).
 
 export const SHORTCUT_NAME = 'Bon naar Budget';
-export const INGEST_URL = 'https://budget.example.nl/api/ingest';
+export const INGEST_PATH = '/api/ingest';
 export const MAX_EDGE = 2576;
 export const JPEG_QUALITY = 0.9;
+
+/** Het upload-endpoint van de app op `origin`; een pad of slash in de origin telt niet mee. */
+export function ingestUrlFor(origin: string): string {
+	return new URL(INGEST_PATH, new URL(origin).origin).href;
+}
+
+/**
+ * De URL waarvoor je ondertekent: alleen een https-origin zonder pad, query of fragment. Een
+ * ondertekend bestand is een jaar te installeren, dus liever weigeren dan gokken.
+ */
+export function signingUrl(origin: string): string {
+	const url = new URL(origin);
+	if (url.protocol !== 'https:') throw new Error('De origin moet met https:// beginnen.');
+	if (url.username || url.password) throw new Error('De origin mag geen inloggegevens bevatten.');
+	if ((url.pathname !== '/' && url.pathname !== '') || url.search || url.hash) {
+		throw new Error('Geef alleen de origin, zoals https://budget.example.nl, zonder pad.');
+	}
+	return ingestUrlFor(url.origin);
+}
 
 type Plist = string | number | boolean | Plist[] | { [key: string]: Plist };
 
@@ -107,7 +129,7 @@ function resize(uuid: string): Plist[] {
 	];
 }
 
-export function shortcutActions(ingestUrl = INGEST_URL): Plist[] {
+export function shortcutActions(ingestUrl: string): Plist[] {
 	return [
 		action('comment', {
 			WFCommentActionText:
@@ -211,7 +233,7 @@ export function shortcutActions(ingestUrl = INGEST_URL): Plist[] {
 }
 
 /** De volledige opdracht, zoals hij in het (nog niet ondertekende) bestand komt. */
-export function shortcutDefinition(ingestUrl = INGEST_URL): Plist {
+export function shortcutDefinition(ingestUrl: string): Plist {
 	return {
 		WFWorkflowClientVersion: '4711',
 		WFWorkflowMinimumClientVersion: 900,
@@ -238,7 +260,7 @@ export function shortcutDefinition(ingestUrl = INGEST_URL): Plist {
  * De bron als JSON; `plutil` maakt er bij het ondertekenen een binaire plist van. Zo hoeft er
  * niets met de hand naar XML ge-escapet te worden.
  */
-export function shortcutJson(ingestUrl = INGEST_URL): string {
+export function shortcutJson(ingestUrl: string): string {
 	return `${JSON.stringify(shortcutDefinition(ingestUrl), null, '\t')}\n`;
 }
 
@@ -248,14 +270,16 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 export type ShortcutStatus =
 	| { state: 'ok' | 'expiring' | 'expired'; validUntil: string }
-	| { state: 'other-host'; validUntil: string; host: string };
+	// `host`: waar het meegeleverde bestand heen stuurt; `origin`: deze app, om voor te ondertekenen
+	| { state: 'other-host'; validUntil: string; host: string; origin: string };
 
 /**
- * Of de app de ondertekende opdracht kan aanbieden. Hij stuurt naar de host waarvoor hij
- * ondertekend is; draait de app ergens anders (een eigen installatie, lokaal), dan zou de
- * download bonnen en tokens naar die andere host sturen, dus dan niet. Na `validUntil`
- * installeert iOS hem (waarschijnlijk) niet meer; een opdracht die al op een telefoon staat,
- * blijft werken.
+ * Of de app de ondertekende opdracht kan aanbieden. Hij stuurt naar de URL waarvoor hij
+ * ondertekend is; is dat niet precies het upload-endpoint van deze app (een eigen installatie,
+ * lokaal), dan zou de download bonnen en tokens naar een andere host sturen, dus dan niet. Er is
+ * dan geen alternatief bestand: iOS installeert alleen ondertekende opdrachten, en ondertekenen
+ * kan alleen op een Mac (scripts/sign-shortcut.ts). Na `validUntil` installeert iOS hem
+ * (waarschijnlijk) niet meer; een opdracht die al op een telefoon staat, blijft werken.
  */
 export function shortcutStatus(
 	signed: { url: string; validUntil: string },
@@ -264,8 +288,8 @@ export function shortcutStatus(
 ): ShortcutStatus {
 	const { validUntil } = signed;
 	const target = new URL(signed.url);
-	if (target.origin !== new URL(origin).origin) {
-		return { state: 'other-host', validUntil, host: target.host };
+	if (target.href !== ingestUrlFor(origin)) {
+		return { state: 'other-host', validUntil, host: target.host, origin: new URL(origin).origin };
 	}
 	// Vanaf het begin van de dag (UTC) als verlopen rekenen: liever een dag te vroeg
 	const expires = Date.parse(`${validUntil}T00:00:00Z`);
@@ -275,6 +299,6 @@ export function shortcutStatus(
 }
 
 /** Hash van de bron, zodat een test ziet dat het ondertekende bestand bij deze definitie hoort. */
-export function shortcutSourceHash(ingestUrl = INGEST_URL): string {
+export function shortcutSourceHash(ingestUrl: string): string {
 	return createHash('sha256').update(shortcutJson(ingestUrl)).digest('hex');
 }

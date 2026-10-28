@@ -88,6 +88,33 @@ describe('GET /instellingen/apparaten/opdracht', () => {
 		expect(await status(() => download(session))).toBe(409);
 	});
 
+	it('ook niet op dezelfde host via http of een andere poort', async () => {
+		const signed = new URL(signedOrigin);
+		for (const other of [`http://${signed.host}`, `https://${signed.hostname}:8443`]) {
+			useOrigin(other);
+			expect(await status(() => download(session)), other).toBe(409);
+		}
+	});
+
+	it('de weigering noemt waar het bestand heen stuurt', async () => {
+		useOrigin('https://budget.example.test');
+		try {
+			await download(session);
+			expect.unreachable('geen weigering');
+		} catch (e) {
+			const { status, body } = e as { status: number; body: { message: string } };
+			expect(status).toBe(409);
+			expect(body.message).toContain(new URL(SIGNED_SHORTCUT.url).host);
+		}
+	});
+
+	it('een slash of pad aan het eind van ORIGIN maakt niet uit', async () => {
+		for (const origin of [`${signedOrigin}/`, `${signedOrigin}/een/pad`]) {
+			useOrigin(origin);
+			expect(await status(() => download(session)), origin).toBe(200);
+		}
+	});
+
 	it('in de laatste maand nog wel, na het verlopen niet meer', async () => {
 		vi.setSystemTime(expires - DAY);
 		expect(await status(() => download(session))).toBe(200);

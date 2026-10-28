@@ -1,0 +1,119 @@
+# Zelf hosten met Docker Compose en Caddy (docs/SELFHOST.md). Draai alles vanuit deze map:
+#   cp env.example .env   # en vul DOMAIN in
+#   docker compose up -d --build
+# Noahs eigen productie staat los hiervan in deploy/.
+name: budgetapp
+
+services:
+  app:
+    build:
+      context: ..
+      args:
+        # SvelteKit legt de publieke origin bij het bouwen vast
+        ORIGIN: https://${DOMAIN:?DOMAIN ontbreekt in .env}
+    image: budgetapp:local
+    restart: unless-stopped
+    # Alleen de variabelen die de app gebruikt. Een naam zonder waarde neemt die uit .env;
+    # staat hij daar niet (of met # ervoor), dan krijgt de app hem niet. Een lege waarde in
+    # .env (KEY=) komt wel door, en dan weigert de app te starten.
+    environment:
+      - ORIGIN=https://${DOMAIN:?DOMAIN ontbreekt in .env}
+      # Een kale naam zou de TZ uit het image wissen; daarom hier de standaard erbij
+      - TZ=${TZ:-Europe/Amsterdam}
+      - RP_ID
+      - LOG_LEVEL
+      - HEALTHCHECK_PING_URL
+      - VAPID_PUBLIC_KEY
+      - VAPID_PRIVATE_KEY
+      - VAPID_SUBJECT
+      - ANTHROPIC_API_KEY
+      - AI_MONTHLY_BUDGET_USD_CENTS
+    volumes:
+      - data:/data
+    # Geen poorten op de host: alleen Caddy bereikt de app, via het interne netwerk
+    networks:
+      - proxy
+      - egress
+    read_only: true
+    tmpfs:
+      - /tmp
+    user: node
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+    pids_limit: 200
+    mem_limit: 512m
+
+  caddy:
+    # Officieel image, vastgezet op de digest van caddy:2-alpine (2.11.7) van 21 oktober 2026
+    image: caddy:2-alpine@sha256:eb4d35b7452d1ab6171fbdbe8d9275b2301dad6dad92115d91e19fb9b24d510f
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'
+    environment:
+      - DOMAIN=${DOMAIN:?DOMAIN ontbreekt in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Certificaten en ACME-account: bewaren, anders vraagt Caddy bij elke start nieuwe aan
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - web
+      - proxy
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    # Poort 80 en 443 binden zonder root-rechten verder
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: ['no-new-privileges:true']
+    pids_limit: 200
+    mem_limit: 256m
+    depends_on:
+      app:
+        condition: service_healthy
+
+  litestream:
+    # Optioneel: doorlopende replicatie naar S3-compatibele opslag buiten de VPS.
+    # Aanzetten met `docker compose --profile backup up -d`.
+    profiles: [backup]
+    image: litestream/litestream:0.5@sha256:4b02b9859a6b6b4087d8b8944e15f7e984bd7957cba322bbeee38b0e27b9656a
+    restart: unless-stopped
+    command: replicate
+    environment:
+      - LITESTREAM_BUCKET
+      - LITESTREAM_ENDPOINT
+      - LITESTREAM_REGION
+      - LITESTREAM_HEARTBEAT_URL
+      - AWS_ACCESS_KEY_ID
+      - AWS_SECRET_ACCESS_KEY
+    volumes:
+      - data:/data
+      - ./litestream.yml:/etc/litestream.yml:ro
+    networks:
+      - egress
+    read_only: true
+    tmpfs:
+      - /tmp
+    # Zelfde uid als `node` in de app-container: Litestream schrijft in de database
+    # (eigen tabel en WAL-checkpoints)
+    user: '1000:1000'
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+    depends_on:
+      - app
+
+networks:
+  # Caddy naar internet (poort 80/443, Let's Encrypt)
+  web: {}
+  # Caddy naar de app; geen verkeer naar buiten
+  proxy:
+    internal: true
+  # De app en Litestream naar buiten: Anthropic, push-diensten, health-ping, S3
+  egress: {}
+
+volumes:
+  data:
+  caddy-data:
+  caddy-config:

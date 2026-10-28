@@ -114,7 +114,8 @@
 				<h2 id="notice-title">Opdracht voor een ander domein</h2>
 				<p>
 					De meegeleverde opdracht stuurt bonnen naar {data.shortcut.host}, niet naar deze app.
-					Daarom staat de download uit. Onderteken hem voor je eigen domein (zie
+					Daarom staat de download uit. Onderteken hem op een Mac voor {data.shortcut.origin} met “node
+					scripts/sign-shortcut.ts --origin {data.shortcut.origin}” en bouw de app opnieuw (zie
 					docs/ios-opdracht.md).
 				</p>
 			{/if}

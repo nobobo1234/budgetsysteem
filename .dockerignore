@@ -18,3 +18,5 @@ playwright-report/
 .git/
 .github/
 .claude/
+# Zelf hosten: de compose-bestanden en vooral selfhost/.env met sleutels horen niet in het image
+selfhost/

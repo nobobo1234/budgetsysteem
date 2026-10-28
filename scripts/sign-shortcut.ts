@@ -3,7 +3,11 @@
 // Apple een certificaat aan. Daarom draait dit niet in CI; het resultaat wordt gecommit.
 // Uitleg: docs/ios-opdracht.md.
 //
-//   node scripts/sign-shortcut.ts [--url https://budget.example.nl/api/ingest] [--bewaar <map>]
+//   node scripts/sign-shortcut.ts [--origin https://<jouw domein>] [--bewaar <map>]
+//
+// De opdracht stuurt naar <origin>/api/ingest. Zonder --origin geldt ORIGIN uit de omgeving
+// (dezelfde waarde als bij het bouwen), en zonder allebei de host van het huidige bestand
+// (opnieuw ondertekenen voor hetzelfde domein). Het script zegt welke het gebruikt.
 //
 // Het bestand bevat geen token: dat vraagt de opdracht bij installeren.
 
@@ -14,24 +18,33 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import {
-	INGEST_URL,
 	SHORTCUT_NAME,
 	shortcutJson,
-	shortcutSourceHash
+	shortcutSourceHash,
+	signingUrl
 } from '../src/lib/server/receipts/shortcut.ts';
+import { SIGNED_SHORTCUT } from '../src/lib/server/receipts/shortcut-signed.ts';
 
 const OUT = resolve('src/lib/server/receipts/shortcut-signed.ts');
 // Enkele aanhalingstekens, zoals Prettier ze schrijft (geen van deze waarden bevat er een)
 const quote = (s: string) => `'${s}'`;
 
 const { values } = parseArgs({
-	options: { url: { type: 'string', default: INGEST_URL }, bewaar: { type: 'string' } }
+	options: { origin: { type: 'string' }, bewaar: { type: 'string' } }
 });
-const url = values.url;
-if (!/^https:\/\/[^/]+\/api\/ingest$/.test(url)) {
-	console.error('De URL moet https://<host>/api/ingest zijn.');
+const [origin, from] = values.origin
+	? [values.origin, '--origin']
+	: process.env.ORIGIN
+		? [process.env.ORIGIN, 'ORIGIN']
+		: [new URL(SIGNED_SHORTCUT.url).origin, 'het huidige bestand'];
+let url: string;
+try {
+	url = signingUrl(origin);
+} catch (e) {
+	console.error(`Ongeldige origin (${from}): ${(e as Error).message}`);
 	process.exit(1);
 }
+console.log(`Ondertekenen voor ${url} (origin uit ${from}).`);
 if (process.platform !== 'darwin') {
 	console.error('Ondertekenen kan alleen op macOS (shortcuts sign).');
 	process.exit(1);
