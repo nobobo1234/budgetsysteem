@@ -1,7 +1,11 @@
 name: CI
 
+# Push alleen op main. Een push-run op een PR-branch slaat de PR-jobs over en zou dan een eigen,
+# te vroeg groene `ci-ok` op dezelfde commit zetten (overgeslagen telt als geslaagd), terwijl e2e
+# in de PR-run nog loopt.
 on:
   push:
+    branches: [main]
   pull_request:
 
 permissions: {}
@@ -51,7 +55,7 @@ jobs:
             echo "code=true" >> "$GITHUB_OUTPUT"
           fi
 
-  # Elke push: lint, typecheck, unit-tests en de repo-controles
+  # Elke PR en push op main: lint, typecheck, unit-tests en de repo-controles
   static:
     needs: changes
     if: ${{ !cancelled() }}
