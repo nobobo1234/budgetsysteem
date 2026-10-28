@@ -245,15 +245,24 @@ export type CheckFailure =
 	| 'teken'
 	| 'te_lang';
 
-const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/** De woorden van een tekst, zonder hoofdletters, accenten of leestekens. */
+const wordsOf = (text: string) =>
+	normalize(text)
+		.split(/[^\p{L}\p{N}]+/u)
+		.filter(Boolean);
 
-/** Of `name` als los woord (of woordgroep) in `text` staat, zonder hoofdletters of accenten. */
+/**
+ * Of `name` als los woord (of woordgroep) in `text` staat, zonder hoofdletters of accenten.
+ * Woord voor woord vergeleken in plaats van met een regex uit de naam: een naam is data.
+ */
 function mentions(text: string, name: string): boolean {
-	const n = normalize(name);
-	if (n.length < 2) return false;
-	return new RegExp(`(^|[^\\p{L}\\p{N}])${escape(n)}($|[^\\p{L}\\p{N}])`, 'u').test(
-		normalize(text)
-	);
+	const wanted = wordsOf(name);
+	if (wanted.join('').length < 2) return false;
+	const words = wordsOf(text);
+	for (let i = 0; i + wanted.length <= words.length; i++) {
+		if (wanted.every((w, j) => words[i + j] === w)) return true;
+	}
+	return false;
 }
 
 /**
