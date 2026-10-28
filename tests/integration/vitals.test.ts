@@ -167,13 +167,15 @@ describe('bewaartermijn en p75 per week', () => {
 			'attention',
 			'checkedAt',
 			'health',
+			'questions',
 			'receipts',
 			'summaries',
 			'vitals'
 		]);
 		expect(data.receipts).toMatchObject({ days: 30, calls: 0, corrected: 0, correctedSure: 0 });
-		// Samenvattingen en AI-kosten: alleen tellingen en bedragen
+		// Samenvattingen, vragen en AI-kosten: alleen tellingen en bedragen
 		expect(data.summaries).toMatchObject({ days: 30, calls: 0, wrongTaps: 0 });
+		expect(data.questions).toMatchObject({ days: 30, calls: 0, wrongTaps: 0 });
 		expect(Object.keys(data.aiBudget).sort()).toEqual([
 			'available',
 			'budgetNanoUsd',

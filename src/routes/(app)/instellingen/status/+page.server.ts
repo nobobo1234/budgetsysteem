@@ -9,8 +9,8 @@ import { recentVitals } from '#lib/server/telemetry/vitals.ts';
 import type { PageServerLoad } from './$types';
 
 // Statuspagina achter de login: de uitgebreide health check, web-vitals p75 per week, hoe
-// Haiku de bonnen leest en de samenvattingen schrijft, en de AI-kosten tegenover het maandbudget.
-// Alleen cijfers en tijden, geen persoonsgegevens.
+// Haiku de bonnen leest, de samenvattingen schrijft en vragen vertaalt, en de AI-kosten
+// tegenover het maandbudget. Alleen cijfers en tijden, geen persoonsgegevens.
 export const load: PageServerLoad = () => {
 	const telemetry = telemetryDb();
 	const health = collectHealth({ db, telemetry, paths: healthPaths(config().DATABASE_PATH) });
@@ -21,6 +21,7 @@ export const load: PageServerLoad = () => {
 		vitals: recentVitals(telemetry),
 		receipts: receiptReadSummary(telemetry),
 		summaries: aiCallSummary(telemetry, 'samenvatting'),
+		questions: aiCallSummary(telemetry, 'vraag'),
 		aiBudget: aiBudget(telemetry)
 	};
 };

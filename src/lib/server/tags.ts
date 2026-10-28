@@ -307,7 +307,7 @@ type LineRow = {
  * retouren en storno's op die transacties, ook als die zelf buiten de periode vallen. Een
  * gedeelde uitgave telt via zijn verdeling. Een eigen tag op een retour telt niet apart.
  */
-function tagLines(db: DB, tagId?: string): Map<string, (TagLine & { date: string })[]> {
+export function tagLines(db: DB, tagId?: string): Map<string, (TagLine & { date: string })[]> {
 	const only = tagId === undefined ? sql`` : sql`AND tt.tag_id = ${tagId}`;
 	const rows = db.all<LineRow>(sql`
 		WITH tagged AS (

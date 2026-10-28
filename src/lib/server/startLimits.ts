@@ -64,18 +64,37 @@ function monthlySpending(db: DB, months: readonly string[]): Map<string, Map<str
 	return out;
 }
 
+/** Eén inkomende transactie, zonder wat anderen ermee terugbetaalden. */
+export interface IncomeRow {
+	id: string;
+	date: string;
+	counterparty: string;
+	categoryId: string | null;
+	accountId: string;
+	cents: number;
+}
+
 /**
- * Inkomen per maand: inkomend geld zonder interne overboekingen, terugboekingen en wat anderen
- * terugbetaalden (`owed_payments`, en de categorie Terugbetaling). Inkomend geld in een
- * categorie die meetelt voor budget telt ook niet: dat verlaagt de uitgaven daar al.
+ * Inkomen tussen twee datums, per transactie: inkomend geld zonder interne overboekingen,
+ * terugboekingen en wat anderen terugbetaalden (`owed_payments`, en de categorie Terugbetaling).
+ * Inkomend geld in een categorie die meetelt voor budget telt ook niet: dat verlaagt de uitgaven
+ * daar al. Gedeeld met de semantische laag, zodat inkomen overal hetzelfde telt.
  */
-export function monthlyIncome(db: DB, months: readonly string[]): number[] {
-	const [from, to] = range(months);
-	const rows = db.all<{ month: string; income: number }>(sql`
-		SELECT substr(t.date, 1, 7) AS month,
-			SUM(MAX(0, t.amount_cents - COALESCE(
+export function incomeRows(db: Conn, from: string, to: string): IncomeRow[] {
+	return db
+		.all<{
+			id: string;
+			date: string;
+			counterparty: string;
+			category_id: string | null;
+			account_id: string;
+			income: number;
+		}>(
+			sql`
+		SELECT t.id, t.date, t.counterparty, t.category_id, t.account_id,
+			MAX(0, t.amount_cents - COALESCE(
 				(SELECT SUM(p.amount_cents) FROM owed_payments p WHERE p.transaction_id = t.id), 0
-			))) AS income
+			)) AS income
 		FROM transactions t
 		LEFT JOIN categories c ON c.id = t.category_id
 		WHERE t.date BETWEEN ${from} AND ${to}
@@ -84,9 +103,30 @@ export function monthlyIncome(db: DB, months: readonly string[]): number[] {
 			AND t.correction_of IS NULL
 			AND (t.category_source IS NULL OR t.category_source != 'intern')
 			AND (c.id IS NULL OR (c.counts_for_budget = 0 AND c.name NOT IN (${INTERNAL_TRANSFER}, ${REFUND_CATEGORY})))
-		GROUP BY month
-	`);
-	const byMonth = new Map(rows.map((r) => [r.month, r.income]));
+	`
+		)
+		.map((r) => ({
+			id: r.id,
+			date: r.date,
+			counterparty: r.counterparty,
+			categoryId: r.category_id,
+			accountId: r.account_id,
+			cents: r.income
+		}));
+}
+
+/** Of inkomend geld in deze categorie als inkomen telt (zie `incomeRows`). */
+export const isIncomeCategory = (c: { name: string; countsForBudget: boolean }) =>
+	!c.countsForBudget && c.name !== INTERNAL_TRANSFER && c.name !== REFUND_CATEGORY;
+
+/** Inkomen per maand (zie `incomeRows`). */
+export function monthlyIncome(db: DB, months: readonly string[]): number[] {
+	const [from, to] = range(months);
+	const byMonth = new Map<string, number>();
+	for (const r of incomeRows(db, from, to)) {
+		const m = r.date.slice(0, 7);
+		byMonth.set(m, (byMonth.get(m) ?? 0) + r.cents);
+	}
 	return months.map((m) => byMonth.get(m) ?? 0);
 }
 

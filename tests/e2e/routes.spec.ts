@@ -12,6 +12,8 @@ const closed = [
 	['GET', '/analyses'],
 	['GET', '/analyses/trend'],
 	['GET', '/analyses/jaar'],
+	['GET', '/analyses/vraag'],
+	['POST', '/analyses/vraag?/ask'],
 	['GET', '/categorieen'],
 	['GET', '/regels'],
 	['GET', '/instellingen'],
