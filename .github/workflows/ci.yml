@@ -234,8 +234,8 @@ jobs:
           platforms: linux/arm64
           load: true
           tags: budget:ci
-          # Zonder APP_ORIGIN (fork of zelf gehoste kopie) een neutrale origin: dit image rolt niet uit
-          build-args: ORIGIN=${{ vars.APP_ORIGIN || 'https://budget.example.test' }}
+          # Neutrale origin: dit image rolt nooit uit, en CI kent de productie-origin niet
+          build-args: ORIGIN=https://budget.example.test
           cache-from: type=gha
           cache-to: type=gha,mode=max,ignore-error=true
       - name: Image-scan (Trivy)
@@ -252,3 +252,28 @@ jobs:
           format: cyclonedx-json
           output-file: sbom.cdx.json
           upload-artifact: true
+
+  # Uitrol (docs/DEPLOY.md): na een groene push op main krijgt de privé ops-repo een
+  # workflow_dispatch met deze commit. De ops-repo controleert zelf dat de commit op main staat,
+  # bouwt en rolt uit; deze repo heeft geen toegang tot de VPS, de registry of de origin.
+  # Alleen in de echte publieke repo: in een fork of de oude privé-repo slaat deze job over.
+  dispatch-deploy:
+    needs: [changes, static]
+    if: >-
+      github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+      github.repository == 'nobobo1234/budgetsysteem' && github.event.repository.private == false &&
+      needs.changes.outputs.code != 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Alleen vanaf main; het token mag alleen workflows starten in die ene ops-repo
+    environment: ops-dispatch
+    permissions: {}
+    steps:
+      - name: Ops-repo starten
+        env:
+          GH_TOKEN: ${{ secrets.OPS_DISPATCH_TOKEN }}
+          OPS_REPO: ${{ secrets.OPS_REPO }}
+          SHA: ${{ github.sha }}
+        run: |
+          gh api --method POST "repos/${OPS_REPO}/actions/workflows/deploy.yml/dispatches" \
+            -f ref=main -f "inputs[sha]=${SHA}" --silent

@@ -1,0 +1,36 @@
+name: Scorecard
+
+# OpenSSF Scorecard: wekelijks en na elke push op main een score voor de beveiligingspraktijken
+# van de repo (branch protection, gepinde actions, tokenrechten), als code scanning-melding.
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 5 * * 1'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  analysis:
+    # Alleen in de publieke repo: Scorecard publiceert de uitslag en werkt niet op een privé-repo
+    if: github.event.repository.private == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      security-events: write
+      # Voor het publiceren van de uitslag naar api.scorecard.dev
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ossf/scorecard-action@fa7117db83c52d787ae5a89f350999701505d78e # v2.5.0
+        with:
+          results_file: scorecard.sarif
+          results_format: sarif
+          publish_results: true
+      - uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
+        with:
+          sarif_file: scorecard.sarif
