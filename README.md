@@ -1,4 +1,9 @@
-# Budgetapp
+<h1 align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/logo-dark.svg">
+    <img src="docs/logo-light.svg" alt="Budgetapp" width="560">
+  </picture>
+</h1>
 
 Persoonlijke budgetapp voor één gebruiker, op een eigen server. Snel uitgaven invoeren (ook offline), eenmalig de bankhistorie importeren (CAMT.053 of CSV), budgetten per categorie en vaste lasten als verwachte posten. Bonnetjes kunnen optioneel worden gelezen met Claude Haiku.
 
