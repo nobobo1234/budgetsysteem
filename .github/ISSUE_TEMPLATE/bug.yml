@@ -1,0 +1,54 @@
+name: Fout melden
+description: Iets werkt niet zoals verwacht
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Zet geen echte bankgegevens, IBANs, bedragen of bonnetjes in dit issue; het is publiek.
+        Een beveiligingsprobleem meld je privé (zie SECURITY.md).
+  - type: textarea
+    id: wat
+    attributes:
+      label: Wat gebeurt er?
+      description: Wat zag je, en wat had je verwacht?
+    validations:
+      required: true
+  - type: textarea
+    id: stappen
+    attributes:
+      label: Stappen om het te reproduceren
+      placeholder: |
+        1. Ga naar …
+        2. Tik op …
+        3. Zie …
+    validations:
+      required: true
+  - type: input
+    id: versie
+    attributes:
+      label: Versie (commit)
+      description: De commit die je draait, bijvoorbeeld uit `git rev-parse --short HEAD`.
+    validations:
+      required: true
+  - type: dropdown
+    id: omgeving
+    attributes:
+      label: Waar draait het?
+      options:
+        - Zelf gehost met Docker Compose (docs/SELFHOST.md)
+        - Lokaal met pnpm dev
+        - Anders
+    validations:
+      required: true
+  - type: input
+    id: apparaat
+    attributes:
+      label: Apparaat en browser
+      placeholder: bijvoorbeeld iPhone 16, Safari, als PWA geïnstalleerd
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logregels
+      description: Alleen als ze helpen, en zonder tokens, sessie-ID's of persoonlijke gegevens.
+      render: text

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Kwetsbaarheid melden
+    url: https://github.com/nobobo1234/budgetsysteem/security/advisories/new
+    about: Meld beveiligingsproblemen privé, nooit in een publiek issue (zie SECURITY.md).
+  - name: Zelf hosten
+    url: https://github.com/nobobo1234/budgetsysteem/blob/main/docs/SELFHOST.md
+    about: Installatie op je eigen VPS met Docker Compose en Caddy.

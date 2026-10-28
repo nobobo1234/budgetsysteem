@@ -27,7 +27,7 @@ Deze repo bevat geen deploy-workflow. Na een groene push op `main` start CI de u
 
 ## Lokaal ontwikkelen
 
-Met Node 24 en pnpm:
+Met Node 24 (versie in `.nvmrc`) en pnpm:
 
 ```bash
 pnpm install

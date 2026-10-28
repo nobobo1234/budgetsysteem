@@ -1,0 +1,26 @@
+name: Wens of idee
+description: Een voorstel voor nieuwe of andere functionaliteit
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Dit is een persoonlijk project met één gebruiker als uitgangspunt; niet elke wens past erin.
+        Kijk eerst in docs/SPEC.md of het al gepland of bewust weggelaten is.
+  - type: textarea
+    id: probleem
+    attributes:
+      label: Welk probleem lost het op?
+      description: Beschrijf de situatie, niet meteen de oplossing.
+    validations:
+      required: true
+  - type: textarea
+    id: voorstel
+    attributes:
+      label: Voorstel
+    validations:
+      required: true
+  - type: textarea
+    id: alternatieven
+    attributes:
+      label: Alternatieven die je overwogen hebt
