@@ -90,6 +90,78 @@ test('transacties: tik op een dag in het staafdiagram filtert op die dag', async
 	await expect(page).not.toHaveURL(/dag=/);
 });
 
+/** Genoeg uitgaven op één dag met een eigen naam, zodat de lijst ook gefilterd langer is dan het scherm. */
+function longDay(date: string): string {
+	const db = new Database('.e2e/budget.db', { fileMustExist: true });
+	db.pragma('busy_timeout = 5000');
+	const account = (
+		db.prepare("SELECT id FROM accounts WHERE alias = 'sns'").get() as { id: string }
+	).id;
+	const name = `Blijf ${test.info().project.name} ${randomUUID().slice(0, 4)}`;
+	const insert = db.prepare(
+		`INSERT INTO transactions (id, amount_cents, date, counterparty, account_id, source)
+		 VALUES (?, -350, ?, ?, ?, 'handmatig')`
+	);
+	for (let i = 0; i < 30; i++) insert.run(randomUUID(), date, name, account);
+	db.close();
+	return name;
+}
+
+/** Scrollpositie nadat de navigatie klaar is en SvelteKit scroll en focus had kunnen herstellen. */
+const settledScroll = (page: Page) =>
+	page.evaluate(
+		() =>
+			new Promise<number>((resolve) =>
+				requestAnimationFrame(() => requestAnimationFrame(() => resolve(Math.round(scrollY))))
+			)
+	);
+
+test('transacties: zoeken laat scroll en focus staan', async ({ page }) => {
+	const name = longDay(day(-2));
+	await page.goto('/transacties');
+	await page.waitForLoadState('networkidle');
+	await page.evaluate(() => scrollTo(0, 60));
+	const before = await settledScroll(page);
+	expect(before).toBe(60);
+
+	const search = page.getByRole('searchbox', { name: 'Zoeken' });
+	await search.fill(name);
+	await search.press('Enter');
+	await expect(page).toHaveURL(new RegExp(`q=${encodeURIComponent(name).replace(/%20/g, '\\+')}`));
+	await expect(page.locator('.summary')).toContainText('30 transacties');
+
+	expect(await settledScroll(page)).toBe(before);
+	await expect(search).toBeFocused();
+});
+
+test('staafdiagram: een tik op een dag laat scroll en focus staan', async ({ page }) => {
+	const date = day(-2);
+	longDay(date);
+	await page.goto(`/transacties?maand=${date.slice(0, 7)}`);
+	await page.waitForLoadState('networkidle');
+	const chart = page.getByRole('group', { name: /Uitgaven per dag/ });
+	await page.evaluate(() =>
+		scrollTo(0, scrollY + document.querySelector('.chart')!.getBoundingClientRect().top - 40)
+	);
+	const before = await settledScroll(page);
+	expect(before).toBeGreaterThan(0);
+
+	// Een tik: de scroll blijft staan
+	const bar = chart.getByRole('link', { name: new RegExp(`^${Number(date.slice(8))} `) });
+	await bar.tap();
+	await expect(page).toHaveURL(new RegExp(`dag=${date}`));
+	await expect(bar).toHaveAttribute('aria-current', 'true');
+	expect(await settledScroll(page)).toBe(before);
+
+	// Met het toetsenbord: de focus blijft op de staaf (een tik geeft in Safari geen focus)
+	await bar.focus();
+	await bar.press('Enter');
+	await expect(page).not.toHaveURL(/dag=/);
+	await expect(bar).not.toHaveAttribute('aria-current');
+	expect(await settledScroll(page)).toBe(before);
+	await expect(bar).toBeFocused();
+});
+
 test('staafdiagram: elke staaf even breed en op dezelfde lijn, ook met een label', async ({
 	page
 }) => {

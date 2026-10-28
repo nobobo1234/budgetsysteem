@@ -3,7 +3,7 @@
 	import { recordEntry } from '#lib/usage.ts';
 	import { tick } from 'svelte';
 	import { deserialize } from '$app/forms';
-	import { invalidateAll } from '$app/navigation';
+	import { refreshAll } from '$app/navigation';
 	import { navigating } from '$app/state';
 	import Bars from '#lib/components/Bars.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
@@ -202,7 +202,7 @@
 			});
 			const result = deserialize(await response.text());
 			if (result.type === 'success') {
-				await invalidateAll();
+				await refreshAll();
 				return true;
 			}
 			const message = result.type === 'failure' ? result.data?.message : undefined;
@@ -260,9 +260,8 @@
 		method="GET"
 		class="filters"
 		role="search"
-		data-sveltekit-keepfocus
 		data-sveltekit-replacestate
-		data-sveltekit-noscroll
+		data-sveltekit-reset="false"
 	>
 		<div class="searchfield">
 			<svg class="icon" viewBox="0 0 20 20" aria-hidden="true">
@@ -364,7 +363,7 @@
 					class="tag"
 					href={filterHref([])}
 					aria-label="Filter {formatDayMonth(data.filter.day)} weghalen"
-					data-sveltekit-noscroll
+					data-sveltekit-reset="false"
 				>
 					{formatDayMonth(data.filter.day)}
 					<svg viewBox="0 0 16 16" aria-hidden="true">

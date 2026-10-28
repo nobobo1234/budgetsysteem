@@ -2,7 +2,7 @@
 	import * as icons from '#lib/icons.ts';
 	import { onMount } from 'svelte';
 	import { enhance, type SubmitFunction } from '$app/forms';
-	import { invalidateAll } from '$app/navigation';
+	import { refreshAll } from '$app/navigation';
 	import { postJson, sendJson } from '#lib/api.ts';
 	import { currentSubscription, pushSupported, syncSubscription } from '#lib/push.ts';
 	import BackLink from '#lib/components/BackLink.svelte';
@@ -68,7 +68,7 @@
 				if (id) {
 					thisDevice = id;
 					deviceState = 'aan';
-					if (!data.devices.some((d) => d.id === thisDevice)) await invalidateAll();
+					if (!data.devices.some((d) => d.id === thisDevice)) await refreshAll();
 					return;
 				}
 			}
@@ -105,7 +105,7 @@
 			thisDevice = result.data.id;
 			deviceState = 'aan';
 			say('Meldingen staan aan op dit apparaat.');
-			await invalidateAll();
+			await refreshAll();
 		} catch {
 			say('Meldingen aanzetten lukte niet. Probeer het opnieuw.', true);
 		} finally {
@@ -130,7 +130,7 @@
 			thisDevice = null;
 			deviceState = 'uit';
 			say('Meldingen staan uit op dit apparaat.');
-			await invalidateAll();
+			await refreshAll();
 		} catch {
 			say('Meldingen uitzetten lukte niet. Probeer het opnieuw.', true);
 		} finally {

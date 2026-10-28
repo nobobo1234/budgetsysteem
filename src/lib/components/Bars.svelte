@@ -65,7 +65,7 @@
 			aria-current={b.active ? 'true' : undefined}
 			aria-label={linked ? b.title : undefined}
 			title={b.title}
-			data-sveltekit-noscroll={b.href ? '' : undefined}
+			data-sveltekit-reset={b.href ? 'false' : undefined}
 			data-sveltekit-replacestate={b.href ? '' : undefined}
 		>
 			{#if noted}<span class="note num" aria-hidden="true">{b.note ?? ''}</span>{/if}

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import BackLink from '#lib/components/BackLink.svelte';
-	import { invalidateAll } from '$app/navigation';
+	import { refreshAll } from '$app/navigation';
 	import { formatShortDate } from '#lib/dates.ts';
 	import {
 		formatAge,
@@ -28,7 +28,7 @@
 	async function refresh() {
 		refreshing = true;
 		try {
-			await invalidateAll();
+			await refreshAll();
 		} finally {
 			refreshing = false;
 		}
