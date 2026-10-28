@@ -7,7 +7,7 @@ Alles wat buiten de repo op de VPS en in GitHub ingesteld moet worden. Geheimen 
 De uitrol is gesplitst in twee repo's, naar het voorbeeld van GitLab (publiek `gitlab`, uitrol vanaf het interne `ops.gitlab.net`) en Sentry (publiek `sentry`, privé `getsentry`):
 
 - **Publieke repo** `nobobo1234/budgetsysteem`: code, CI, `selfhost/`, `deploy/` (de bestanden voor de VPS) en de docs. Geen deploy-workflow, en CI kent geen origin, VPS of Tailscale-gegevens.
-- **Privé ops-repo** `<eigenaar>/<ops-repo>`: alleen `.github/workflows/deploy.yml` en de secrets die naar de eigen infra wijzen. Het image `ghcr.io/nobobo1234/budgetsysteem` is privé en gekoppeld aan deze repo.
+- **Privé ops-repo**: alleen de deploy-workflow en de secrets die naar de eigen infra wijzen. Het image is privé en gekoppeld aan die repo.
 
 ### Hoe een uitrol loopt
 
@@ -23,7 +23,7 @@ Handmatig uitrollen of terugrollen: in de ops-repo Actions → Deploy → Run wo
 
 - **Environment** `ops-dispatch`: alleen vanaf `main`, met twee secrets:
   - `OPS_DISPATCH_TOKEN`: fine-grained personal access token met alleen toegang tot de ops-repo en alleen de permissie Actions: Read and write. Het mag dus geen code lezen, geen secrets zien en niets in de publieke repo doen. Verloopt na hooguit een jaar; zet een herinnering.
-  - `OPS_REPO`: `<eigenaar>/<ops-repo>`.
+  - `OPS_REPO`: `<eigenaar>/<naam>` van de ops-repo. Een secret, zodat de naam niet in de publieke logs staat.
 - **Secrets**: `CLAUDE_CODE_OAUTH_TOKEN` voor de review-workflow (niet in `ops-dispatch`).
 - **Ruleset** op `main`: PR verplicht, statuschecks `static`, `integration`, `e2e`, `guardrails`, `security`, `docker` verplicht.
 - **Actions**: goedkeuring vereist voor workflows uit fork-PR's van alle externe bijdragers; standaardrechten van `GITHUB_TOKEN` alleen lezen.
@@ -31,11 +31,7 @@ Handmatig uitrollen of terugrollen: in de ops-repo Actions → Deploy → Run wo
 
 ### Ops-repo
 
-- **Repo-secret** `APP_ORIGIN`: `https://budget.example.nl`. SvelteKit 3 legt de origin bij het bouwen vast (`paths.origin`); een `ORIGIN`-variabele bij het starten bestaat niet meer.
-- **Environment** `production`: alleen vanaf `main`, met de secrets:
-  - `VPS_TAILNET_HOST`: naam van de VPS op je tailnet.
-  - `TS_OAUTH_CLIENT_ID` en `TS_AUDIENCE`: Tailscale workload identity federation. De trust credential in Tailscale hoort bij subject `repo:<eigenaar>/<ops-repo>:environment:production`, nooit bij de publieke repo.
-- **Ruleset** op `main`: PR verplicht, statuscheck `zizmor` verplicht.
+De instellingen staan in de README van de ops-repo zelf. In het kort: de origin, de naam van de VPS op het tailnet en de Tailscale-gegevens staan daar als secrets, de Tailscale-gegevens alleen in een environment `production` die alleen vanaf `main` mag. De trust credential in Tailscale hoort bij die environment van de ops-repo, nooit bij de publieke repo.
 
 Ook wat geen geheim is staat als secret: GitHub maskeert secrets in de logs, maar alleen bij een exacte match. Afgeleide waarden (de host zonder `https://`) maskeert de workflow zelf met `::add-mask::`.
 
