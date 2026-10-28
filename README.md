@@ -26,3 +26,11 @@ COOKIE_SECURE=false pnpm dev
 ```
 
 Daarna een setup-token maken met `DATABASE_PATH=data/budget.db pnpm setup-token` en `/setup` openen.
+
+## Beveiliging
+
+Kwetsbaarheden privé melden: zie [SECURITY.md](SECURITY.md).
+
+## Licentie
+
+[AGPL-3.0](LICENSE). Vrij te gebruiken, aan te passen en zelf te hosten. Bied je een aangepaste versie aan anderen aan via het netwerk, dan moet je hun ook de broncode van die versie aanbieden.

@@ -19,7 +19,8 @@ concurrency:
 jobs:
   build:
     # Alleen waar de uitrol is ingesteld: in een fork of zelf gehoste kopie doet deze workflow niets
-    if: vars.APP_ORIGIN != '' && vars.VPS_TAILNET_HOST != ''
+    # (APP_ORIGIN is een repo-variabele; die van de environment zijn hier nog niet zichtbaar)
+    if: vars.APP_ORIGIN != ''
     # De VPS is arm64; native bouwen op een arm64-runner in plaats van via QEMU-emulatie
     runs-on: ubuntu-24.04-arm
     permissions:
@@ -69,8 +70,9 @@ jobs:
       # Tijdelijke node op het tailnet via workload identity federation (OIDC), met tag:ci
       - uses: tailscale/github-action@d1b6cd204f8dceda5b3eaad7f1f767be390056cd # v4.2.0
         with:
-          oauth-client-id: ${{ vars.TS_OAUTH_CLIENT_ID }}
-          audience: ${{ vars.TS_AUDIENCE }}
+          # Secrets in plaats van variabelen: dan maskeert GitHub ze in de (publieke) logs
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          audience: ${{ secrets.TS_AUDIENCE }}
           tags: tag:ci
       - name: Uitrollen op digest
         env:
