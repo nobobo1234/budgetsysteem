@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { count, login } from './helpers.ts';
 
 // Vandaag in de tijdzone van de server (playwright.config: TZ Europe/Amsterdam)
@@ -65,12 +65,33 @@ test.beforeEach(async ({ context }) => {
 // De projecten (en herhalingen bij een retry) delen één database: elke test een eigen tegenpartij
 const suffix = () => `${test.info().project.name} ${randomUUID().slice(0, 4)}`;
 
+/**
+ * Te bevestigen op het startscherm, met alle posten zichtbaar. Andere tests laten soms een
+ * verwachte post voor vandaag achter (een vaste last op de 28e, op de 28e); dan staat een nieuwe
+ * post achter "Nog … meer".
+ */
+async function toConfirm(page: Page) {
+	await page.goto('/');
+	const section = page.getByRole('region', { name: 'Te bevestigen' });
+	await expect(section).toBeVisible();
+	const more = section.getByRole('button', { name: /^Nog \d+ meer$/ });
+	if ((await more.count()) > 0) {
+		// Tot de pagina gehydrateerd is, doet de knop nog niets
+		await expect(async () => {
+			if ((await more.count()) > 0) await more.click();
+			await expect(section.getByRole('button', { name: 'Minder tonen' })).toBeVisible({
+				timeout: 1000
+			});
+		}).toPass();
+	}
+	return section;
+}
+
 test('verwachte post bevestigen met één tik', async ({ page }) => {
 	const name = `Woonstichting ${suffix()}`;
 	const { transactionId } = expectedPost(name, 'vast', 85000);
 
-	await page.goto('/');
-	const section = page.getByRole('region', { name: 'Te bevestigen' });
+	const section = await toConfirm(page);
 	await expect(section).toContainText(name);
 	await section.getByRole('button', { name: `Bevestig ${name}` }).click();
 	await expect(page.getByText(`${name} bevestigd.`)).toBeVisible();
@@ -92,8 +113,7 @@ test('wisselende vaste last: eerst het bedrag aanpassen', async ({ page }) => {
 	const name = `Energie ${suffix()}`;
 	const { transactionId } = expectedPost(name, 'wisselend', 10000);
 
-	await page.goto('/');
-	const section = page.getByRole('region', { name: 'Te bevestigen' });
+	const section = await toConfirm(page);
 	await section.getByRole('button', { name: `Bedrag van ${name} invullen en bevestigen` }).click();
 	const amount = section.getByLabel(`Bedrag ${name}`);
 	await expect(amount).toBeFocused();
