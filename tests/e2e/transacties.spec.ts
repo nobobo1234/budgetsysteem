@@ -172,27 +172,40 @@ test('staafdiagram: elke staaf even breed en op dezelfde lijn, ook met een label
 		db.prepare("SELECT id FROM accounts WHERE alias = 'sns'").get() as { id: string }
 	).id;
 	// Uitgaven op dagen met een label (1, 15, 22) en zonder (2, 16)
-	for (const d of ['01', '02', '15', '16', '22'])
+	const ids = ['01', '02', '15', '16', '22'].map((d) => {
+		const id = randomUUID();
 		db.prepare(
 			`INSERT INTO transactions (id, amount_cents, date, counterparty, account_id, source)
 			 VALUES (?, -1500, ?, 'Staaf', ?, 'handmatig')`
-		).run(randomUUID(), `${month}-${d}`, account);
+		).run(id, `${month}-${d}`, account);
+		return id;
+	});
 	db.close();
 
-	await page.goto(`/transacties?maand=${month}`);
-	await page.waitForLoadState('networkidle');
-	const tracks = await page
-		.getByRole('group', { name: /Uitgaven per dag/ })
-		.locator('.track')
-		.evaluateAll((els) =>
-			els.map((el) => {
-				const r = el.getBoundingClientRect();
-				return { width: Math.round(r.width * 10) / 10, bottom: Math.round(r.bottom * 10) / 10 };
-			})
-		);
-	expect(tracks.length).toBeGreaterThanOrEqual(28);
-	expect(new Set(tracks.map((t) => t.width)).size).toBe(1);
-	expect(new Set(tracks.map((t) => t.bottom)).size).toBe(1);
+	try {
+		await page.goto(`/transacties?maand=${month}`);
+		await page.waitForLoadState('networkidle');
+		const tracks = await page
+			.getByRole('group', { name: /Uitgaven per dag/ })
+			.locator('.track')
+			.evaluateAll((els) =>
+				els.map((el) => {
+					const r = el.getBoundingClientRect();
+					return { width: Math.round(r.width * 10) / 10, bottom: Math.round(r.bottom * 10) / 10 };
+				})
+			);
+		expect(tracks.length).toBeGreaterThanOrEqual(28);
+		expect(new Set(tracks.map((t) => t.width)).size).toBe(1);
+		expect(new Set(tracks.map((t) => t.bottom)).size).toBe(1);
+	} finally {
+		// De rijen delen de database met de andere tests, en vroeg in de maand liggen ze in de
+		// toekomst: ze zouden dan bovenaan elke lijst op datum blijven staan.
+		const cleanup = new Database('.e2e/budget.db', { fileMustExist: true });
+		cleanup.pragma('busy_timeout = 5000');
+		const remove = cleanup.prepare('DELETE FROM transactions WHERE id = ?');
+		for (const id of ids) remove.run(id);
+		cleanup.close();
+	}
 });
 
 test('transacties: een interne overboeking staat als één rij', async ({ page }) => {
